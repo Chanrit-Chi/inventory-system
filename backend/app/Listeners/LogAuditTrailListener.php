@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\InvoicePaymentRecorded;
+use App\Events\OrderCancelled;
 use App\Events\OrderPlaced;
 use App\Events\OrderStatusChanged;
 use App\Events\StockAdjusted;
@@ -29,6 +30,18 @@ class LogAuditTrailListener
                         'order_number' => $event->order->order_number,
                         'total_amount' => $event->order->total_amount,
                         'status'       => $event->order->status,
+                    ],
+                ]);
+            } elseif ($event instanceof OrderCancelled) {
+                AuditLog::create([
+                    'action'        => 'ORDER_CANCELLED',
+                    'module'        => 'orders',
+                    'record_id'     => (string) $event->order->id,
+                    'user_id'       => $userId ?: $event->cancelledByUserId ?: $event->order->user_id,
+                    'payload_after' => [
+                        'order_number' => $event->order->order_number,
+                        'reason'       => $event->reason,
+                        'status'       => 'CANCELLED',
                     ],
                 ]);
             } elseif ($event instanceof OrderStatusChanged) {

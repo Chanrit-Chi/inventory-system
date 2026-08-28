@@ -213,4 +213,23 @@ class MigrationAndSchemaTest extends TestCase
         $this->assertNull(User::find($user->id));
         $this->assertNotNull(User::withTrashed()->find($user->id));
     }
+
+    /**
+     * Test composite indexes exist on high-frequency query tables.
+     */
+    public function test_composite_indexes_exist(): void
+    {
+        $indexes = \Illuminate\Support\Facades\Schema::getIndexes('product_variants');
+        $hasCompositeIndex = false;
+
+        foreach ($indexes as $index) {
+            $cols = $index['columns'] ?? [];
+            if ($cols === ['product_id', 'is_active']) {
+                $hasCompositeIndex = true;
+                break;
+            }
+        }
+
+        $this->assertTrue($hasCompositeIndex, 'Composite index on product_variants(product_id, is_active) must exist.');
+    }
 }

@@ -2,10 +2,12 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { uploadMedia } from '../../../api/endpoints'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { useCollapsibleHeader } from '../../../hooks/useCollapsibleHeader'
-import { useProducts, useCategories, useAttributes } from '../../../hooks/queries/useProductsQuery'
+import { useProducts, useCategories, useAttributes, ProductFilters } from '../../../hooks/queries/useProductsQuery'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../../../api/queryKeys'
 import type { Product, ProductCategory, AttributeTaxonomy } from '../../../types'
+
+const CATALOG_PRODUCT_FILTERS: ProductFilters = { include_inactive: true }
 
 export function useProductCatalog() {
   const queryClient = useQueryClient()
@@ -16,20 +18,22 @@ export function useProductCatalog() {
   const [refreshing, setRefreshing] = useState(false)
 
   const {
-    data: rawProducts = [],
+    data: rawProducts,
     isLoading: productsLoading,
     error: productsError,
     refetch: refetchProducts,
-  } = useProducts({ include_inactive: true })
+  } = useProducts(CATALOG_PRODUCT_FILTERS)
 
-  const { data: rawCategories = [], refetch: refetchCategories } = useCategories()
-  const { data: rawAttributes = [], refetch: refetchAttributes } = useAttributes()
+  const { data: rawCategories, refetch: refetchCategories } = useCategories()
+  const { data: rawAttributes, refetch: refetchAttributes } = useAttributes()
 
   const [products, setProducts] = useState<Product[]>([])
 
   // Keep local products state synced with TanStack query data
+  const prevRawProductsRef = useRef<Product[] | undefined>(undefined)
   useEffect(() => {
-    if (rawProducts) {
+    if (rawProducts && rawProducts !== prevRawProductsRef.current) {
+      prevRawProductsRef.current = rawProducts
       setProducts(rawProducts)
     }
   }, [rawProducts])
@@ -37,10 +41,12 @@ export function useProductCatalog() {
   const [managedCategories, setManagedCategories] = useState<ProductCategory[]>([])
   const [managedAttributes, setManagedAttributes] = useState<AttributeTaxonomy[]>([])
 
+  const prevRawCategoriesRef = useRef<any[] | undefined>(undefined)
   useEffect(() => {
-    if (Array.isArray(rawCategories) && rawCategories.length > 0) {
+    if (Array.isArray(rawCategories) && rawCategories !== prevRawCategoriesRef.current) {
+      prevRawCategoriesRef.current = rawCategories
       const mappedCats: ProductCategory[] = rawCategories.map((item: any) => ({
-        id: item.id || `cat-${Date.now()}`,
+        id: item.id || `cat-${item.name}`,
         name: item.name,
         code: item.code || item.name.substring(0, 3).toUpperCase(),
         description: item.description || '',
@@ -50,8 +56,10 @@ export function useProductCatalog() {
     }
   }, [rawCategories])
 
+  const prevRawAttributesRef = useRef<any[] | undefined>(undefined)
   useEffect(() => {
-    if (Array.isArray(rawAttributes) && rawAttributes.length > 0) {
+    if (Array.isArray(rawAttributes) && rawAttributes !== prevRawAttributesRef.current) {
+      prevRawAttributesRef.current = rawAttributes
       const formatted: AttributeTaxonomy[] = rawAttributes.map((attr: any) => ({
         id: attr.id,
         name: attr.name,

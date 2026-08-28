@@ -92,11 +92,11 @@ export function ProductCatalogTab({
                     placeholderTextColor={tokens.colors.secondary}
                   />
                 </View>
-                {Boolean(can('products:create')) && (
+                {can('products:create') ? (
                   <TouchableOpacity style={styles.addProdBtn} onPress={handleOpenCreateProduct}>
                     <Ionicons name="add" size={20} color={tokens.colors.onPrimary} />
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
 
               {/* Category Filter Chips inline */}

@@ -322,7 +322,7 @@ export const BankAccountsScreen: React.FC<BankAccountsScreenProps> = ({ onNaviga
                         <Image
                           source={{ uri: acc.qrImageUrl }}
                           style={styles.qrThumbnail}
-                          resizeMode="cover"
+                          contentFit="cover"
                         />
                         <View style={styles.qrZoomHint}>
                           <Ionicons name="expand" size={12} color="#FFFFFF" />
@@ -474,7 +474,7 @@ export const BankAccountsScreen: React.FC<BankAccountsScreenProps> = ({ onNaviga
                 </Text>
               </TouchableOpacity>
               {qrImageUrl ? (
-                <Image source={{ uri: qrImageUrl }} style={styles.selectedQrImage} resizeMode="contain" />
+                <Image source={{ uri: qrImageUrl }} style={styles.selectedQrImage} contentFit="contain" />
               ) : null}
 
               {/* Default Switch */}
@@ -525,7 +525,7 @@ export const BankAccountsScreen: React.FC<BankAccountsScreenProps> = ({ onNaviga
                 <Image
                   source={{ uri: previewQrModal.qrImageUrl }}
                   style={styles.qrFullImage}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
               </View>
             ) : null}

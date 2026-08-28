@@ -504,7 +504,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           style={styles.subTabsScroll}
           contentContainerStyle={styles.subTabs}
         >
-          {Boolean(can('products:read')) && (
+          {can('products:read') ? (
             <TouchableOpacity
               style={[styles.subTabBtn, activeSubTab === 'catalog' && styles.subTabBtnActive]}
               onPress={() => setActiveSubTab('catalog')}
@@ -521,7 +521,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                 Catalog
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={[styles.subTabBtn, activeSubTab === 'movements' && styles.subTabBtnActive]}
@@ -540,7 +540,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
             </Text>
           </TouchableOpacity>
 
-          {Boolean(can('purchase-orders:*') || can('purchase-orders:create') || can('suppliers:view') || can('suppliers:manage')) && (
+          {(can('purchase-orders:*') || can('purchase-orders:create') || can('suppliers:view') || can('suppliers:manage')) ? (
             <TouchableOpacity
               style={[styles.subTabBtn, activeSubTab === 'purchaseOrders' && styles.subTabBtnActive]}
               onPress={() => {
@@ -563,12 +563,12 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                 Purchase Orders
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </ScrollView>
       </View>
 
       {/* TAB 1: PRODUCT CATALOG */}
-      {Boolean(activeSubTab === 'catalog') && (
+      {activeSubTab === 'catalog' ? (
         <ProductCatalogTab
           filteredProducts={filteredProducts}
           filterCategoryOptions={filterCategoryOptions}
@@ -593,10 +593,10 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           handleOpenProductDetail={handleOpenProductDetail}
           handleQuickScanFromCard={handleQuickScanFromCard}
         />
-      )}
+      ) : null}
 
       {/* TAB 2: STOCK MOVEMENTS LOG */}
-      {Boolean(activeSubTab === 'movements') && (
+      {activeSubTab === 'movements' ? (
         <StockMovementsTab
           movements={movements}
           loading={movementsLoading}
@@ -607,10 +607,10 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           onOpenStockIn={can('inventory:restock') ? onOpenStockIn : undefined}
           onOpenStockAdjustment={can('inventory:adjust') || can('inventory:*') ? onOpenStockAdjustment : undefined}
         />
-      )}
+      ) : null}
 
       {/* TAB 3: PURCHASE ORDERS & SUPPLIERS */}
-      {Boolean(activeSubTab === 'purchaseOrders') && (
+      {activeSubTab === 'purchaseOrders' ? (
         <PurchaseOrdersTab
           purchaseOrders={purchaseOrders}
           suppliers={suppliers}
@@ -627,7 +627,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           handleMarkPoReceived={handleMarkPoReceived}
           handleOpenCreatePoForSupplier={handleOpenCreatePoForSupplier}
         />
-      )}
+      ) : null}
 
       {/* Product Creation / Edit Modal */}
       <ProductFormModal

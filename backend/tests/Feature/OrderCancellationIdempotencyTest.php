@@ -128,4 +128,38 @@ class OrderCancellationIdempotencyTest extends TestCase
         ]);
         $res5->assertStatus(422);
     }
+
+    public function test_order_cancellation_dispatches_order_cancelled_event(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\OrderCancelled::class]);
+        Sanctum::actingAs($this->user);
+
+        $checkoutService = app(CheckoutService::class);
+        $order = $checkoutService->checkout([
+            'client_mutation_id' => 'test-mutation-evt-002',
+            'channel_id'     => $this->channel->id,
+            'user_id'        => $this->user->id,
+            'payment_method' => 'Cash',
+            'payment_amount' => 15.0,
+            'status'         => 'completed',
+            'items'          => [
+                [
+                    'variant_id' => $this->variant->id,
+                    'quantity'   => 1,
+                    'unit_price' => 3.0,
+                ],
+            ],
+        ]);
+
+        $res = $this->patchJson("/api/v1/orders/{$order->id}/status", [
+            'status' => 'cancelled',
+            'reason' => 'Customer changed mind',
+        ]);
+
+        $res->assertStatus(200);
+
+        \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\OrderCancelled::class, function ($event) use ($order) {
+            return $event->order->id === $order->id && $event->reason === 'Customer changed mind';
+        });
+    }
 }

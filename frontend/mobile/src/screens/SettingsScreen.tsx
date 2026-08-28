@@ -359,9 +359,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         <View style={styles.storeCardLeft}>
           <View style={styles.storeLogoBox}>
             {branding.logo_url ? (
-              <Image source={{ uri: branding.logo_url }} style={{ width: 44, height: 44, borderRadius: 8 }} resizeMode="contain" />
+              <Image source={{ uri: branding.logo_url }} style={{ width: 44, height: 44, borderRadius: 8 }} contentFit="contain" />
             ) : (
-              <Image source={require('../../assets/KC SHOP-No BG.png')} style={{ width: 44, height: 44 }} resizeMode="contain" />
+              <Image source={require('../../assets/KC SHOP-No BG.png')} style={{ width: 44, height: 44 }} contentFit="contain" />
             )}
           </View>
           <View style={styles.storeInfo}>
@@ -576,11 +576,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         <View style={styles.brandingLogoRow}>
           <View style={styles.brandingLogoPreviewBox}>
             {selectedLogoUri ? (
-              <Image source={{ uri: selectedLogoUri }} style={styles.brandingLogoImg} resizeMode="contain" />
+              <Image source={{ uri: selectedLogoUri }} style={styles.brandingLogoImg} contentFit="contain" />
             ) : branding.logo_url && !removeLogoFlag ? (
-              <Image source={{ uri: branding.logo_url }} style={styles.brandingLogoImg} resizeMode="contain" />
+              <Image source={{ uri: branding.logo_url }} style={styles.brandingLogoImg} contentFit="contain" />
             ) : (
-              <Image source={require('../../assets/KC SHOP-No BG.png')} style={styles.brandingLogoImg} resizeMode="contain" />
+              <Image source={require('../../assets/KC SHOP-No BG.png')} style={styles.brandingLogoImg} contentFit="contain" />
             )}
           </View>
           <View style={{ flex: 1, gap: 6 }}>

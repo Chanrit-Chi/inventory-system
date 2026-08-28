@@ -50,19 +50,19 @@ export function PurchaseOrdersTab({
               placeholder={poSubTab === 'orders' ? 'Search PO #, vendor, status, products...' : 'Search supplier name, rep, phone...'}
               containerStyle={styles.poSearchBar}
               rightAction={
-                poSubTab === 'orders'
-                  ? Boolean(can('purchase-orders:create')) && (
-                      <TouchableOpacity style={styles.poActionBtn} onPress={() => setPoModalOpen(true)}>
-                        <Ionicons name="add" size={16} color={tokens.colors.onPrimary} />
-                        <Text style={styles.poActionBtnText}>New PO</Text>
-                      </TouchableOpacity>
-                    )
-                  : Boolean(can('suppliers:manage')) && (
-                      <TouchableOpacity style={styles.poActionBtn} onPress={() => setNewSupModalOpen(true)}>
-                        <Ionicons name="person-add" size={15} color={tokens.colors.onPrimary} />
-                        <Text style={styles.poActionBtnText}>Add Vendor</Text>
-                      </TouchableOpacity>
-                    )
+                poSubTab === 'orders' ? (
+                  can('purchase-orders:create') ? (
+                    <TouchableOpacity style={styles.poActionBtn} onPress={() => setPoModalOpen(true)}>
+                      <Ionicons name="add" size={16} color={tokens.colors.onPrimary} />
+                      <Text style={styles.poActionBtnText}>New PO</Text>
+                    </TouchableOpacity>
+                  ) : null
+                ) : can('suppliers:manage') ? (
+                  <TouchableOpacity style={styles.poActionBtn} onPress={() => setNewSupModalOpen(true)}>
+                    <Ionicons name="person-add" size={15} color={tokens.colors.onPrimary} />
+                    <Text style={styles.poActionBtnText}>Add Vendor</Text>
+                  </TouchableOpacity>
+                ) : null
               }
             />
           </View>
@@ -158,18 +158,18 @@ export function PurchaseOrdersTab({
                         {firstItem?.productName || 'Restock Inventory Pack'}
                       </Text>
                       <Text style={styles.poItemSummaryMeta}>
-                        {po.items.reduce((s, it) => s + it.quantity, 0)} units total • Ordered: {po.orderDate}
+                        {(po.items || []).reduce((s, it) => s + (it.quantity || 0), 0)} units total • Ordered: {po.orderDate}
                       </Text>
                     </View>
 
                     <View style={styles.poCardModernFooter}>
                       <View>
                         <Text style={styles.poCostLabel}>Total PO Amount</Text>
-                        <Text style={styles.poCostValue}>${po.totalCost.toFixed(2)}</Text>
+                        <Text style={styles.poCostValue}>${Number(po.totalCost || 0).toFixed(2)}</Text>
                       </View>
 
                       <View style={styles.poCardActions}>
-                        {Boolean(!isReceived) && (
+                        {!isReceived ? (
                           <TouchableOpacity
                             style={styles.poReceiveBtn}
                             onPress={() => handleMarkPoReceived(po.id)}
@@ -177,7 +177,7 @@ export function PurchaseOrdersTab({
                             <Ionicons name="checkmark-circle-outline" size={14} color="#16A34A" />
                             <Text style={styles.poReceiveBtnText}>Receive</Text>
                           </TouchableOpacity>
-                        )}
+                        ) : null}
                         <View style={styles.poViewDetailsBtn}>
                           <Text style={styles.poViewDetailsText}>Details</Text>
                           <Ionicons name="chevron-forward" size={12} color={tokens.colors.secondary} />

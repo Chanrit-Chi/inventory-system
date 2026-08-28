@@ -233,6 +233,10 @@ class OrderController extends BaseApiController
             $order->save();
 
             \App\Events\OrderStatusChanged::dispatch($order, $currentStatus, $newStatus);
+            if ($newStatus === 'cancelled') {
+                $reason = $request->input('reason') ?? $request->input('notes');
+                \App\Events\OrderCancelled::dispatch($order, $reason, $request->user()?->id);
+            }
 
             return $this->successResponse(
                 $order->loadMissing(['customer', 'channel', 'items.variant.attributeValues.attribute', 'payments', 'user:id,name']),

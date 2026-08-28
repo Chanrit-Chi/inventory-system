@@ -40,7 +40,7 @@ import { useCustomerLookup } from '../hooks/useCustomerLookup'
 import { useOfflineQueue } from '../hooks/useOfflineQueue'
 import { useDebounce } from '../hooks/useDebounce'
 import { useCollapsibleHeader } from '../hooks/useCollapsibleHeader'
-import { useProducts, useCategories } from '../hooks/queries/useProductsQuery'
+import { useProducts, useCategories, ProductFilters } from '../hooks/queries/useProductsQuery'
 import { ProductCard } from '../components/ProductCard'
 import { CartList } from '../components/CartList'
 import { CustomerLookupRow } from '../components/CustomerLookupRow'
@@ -72,6 +72,7 @@ import type {
 } from '../types'
 
 const SAMPLE_PRODUCTS: Product[] = []
+const POS_PRODUCT_FILTERS: ProductFilters = { per_page: 200 }
 
 export interface PosScreenProps {
   onNavigate?: (tab: import('../types').TabType) => void
@@ -335,17 +336,21 @@ export default function PosScreen({
     }
   }, [cartHook.checkoutPreset, setValue, setName, setPhone])
 
-  const { data: queryProducts, isLoading: isQueryProductsLoading } = useProducts({ per_page: 200 })
+  const { data: queryProducts, isLoading: isQueryProductsLoading } = useProducts(POS_PRODUCT_FILTERS)
   const { data: queryCategories } = useCategories()
 
+  const prevQueryProductsRef = useRef<Product[] | undefined>(undefined)
   useEffect(() => {
-    if (queryProducts && queryProducts.length > 0) {
+    if (queryProducts && queryProducts.length > 0 && queryProducts !== prevQueryProductsRef.current) {
+      prevQueryProductsRef.current = queryProducts
       setProducts(queryProducts)
     }
   }, [queryProducts])
 
+  const prevQueryCategoriesRef = useRef<any[] | undefined>(undefined)
   useEffect(() => {
-    if (queryCategories && Array.isArray(queryCategories)) {
+    if (queryCategories && Array.isArray(queryCategories) && queryCategories !== prevQueryCategoriesRef.current) {
+      prevQueryCategoriesRef.current = queryCategories
       const names = queryCategories.map((c: any) => c.name).filter(Boolean)
       if (names.length > 0) {
         setCategories(names)
