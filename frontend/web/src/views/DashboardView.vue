@@ -3,6 +3,7 @@ import { ref, computed, onMounted, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/api/axios'
 import { cn } from '@/lib/utils'
+import { getOrderStatus } from '@/utils/orderStatus'
 import {
   Receipt,
   Users,
@@ -90,6 +91,12 @@ const lastRefreshed = ref<string>('')
 const recentOrders = ref<RecentOrder[]>([])
 const lowStockItems = ref<LowStockItem[]>([])
 
+// Pre-compute status badges once per order to avoid recomputing
+// getOrderStatus(ord.status) twice on every render.
+const recentOrdersWithBadges = computed(() =>
+  recentOrders.value.map((o) => ({ ...o, _badge: getOrderStatus(o.status) }))
+)
+
 // System health indicators
 const systemHealth = ref({
   apiStatus: 'Operational',
@@ -145,16 +152,77 @@ const recentEvents = ref<ActivityEvent[]>([
   },
 ])
 
-async function loadStats() {
-  loading.value = true
+async function fetchDashboardSummary() {
   try {
     const res = await api.get('/dashboard/summary')
     const data = res.data?.data || {}
+    return {
+      totalOrders: data.totalOrders ?? data.orders ?? 0,
+      totalCustomers: data.totalCustomers ?? data.customers ?? 0,
+      totalProducts: data.totalProducts ?? data.products ?? 0,
+      totalExpenses: data.totalExpenses ?? data.expenses ?? 0,
+    }
+  } catch {
+    return { totalOrders: 0, totalCustomers: 0, totalProducts: 0, totalExpenses: 0 }
+  }
+}
 
-    const totalOrders = data.totalOrders ?? data.orders ?? 0
-    const totalCustomers = data.totalCustomers ?? data.customers ?? 0
-    const totalProducts = data.totalProducts ?? data.products ?? 0
-    const totalExpenses = data.totalExpenses ?? data.expenses ?? 0
+async function fetchRecentOrders() {
+  try {
+    const ordersRes = await api.get('/orders', { params: { per_page: 5 } })
+    const ordData = ordersRes.data?.data || ordersRes.data || []
+    if (Array.isArray(ordData) && ordData.length > 0) {
+      return ordData.slice(0, 5)
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
+async function fetchLowStockProducts() {
+  try {
+    const prodRes = await api.get('/products', { params: { per_page: 20 } })
+    const prodData = prodRes.data?.data || prodRes.data || []
+    if (Array.isArray(prodData)) {
+      const lowList: LowStockItem[] = []
+      for (const p of prodData) {
+        if (p.variants && Array.isArray(p.variants)) {
+          for (const v of p.variants) {
+            if (v.quantity_on_hand !== undefined && v.quantity_on_hand <= (v.reorder_level ?? 5)) {
+              lowList.push({
+                id: v.id,
+                name: p.name,
+                sku: v.sku || p.name,
+                quantity_on_hand: v.quantity_on_hand,
+                reorder_level: v.reorder_level ?? 5,
+              })
+            }
+          }
+        }
+      }
+      return lowList.slice(0, 4)
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
+async function loadStats() {
+  loading.value = true
+  try {
+    const [summary, recentOrders, lowStockItems] = await Promise.all([
+      fetchDashboardSummary(),
+      fetchRecentOrders(),
+      fetchLowStockProducts(),
+    ])
+
+    // Build stats from dashboard summary
+    const totalOrders = summary.totalOrders
+    const totalCustomers = summary.totalCustomers
+    const totalProducts = summary.totalProducts
+    const totalExpenses = summary.totalExpenses
 
     stats.value = [
       {
@@ -165,9 +233,9 @@ async function loadStats() {
         icon: Receipt,
         iconColor: 'text-info',
         iconBg: 'bg-info-bg border-info-border',
-        trend: data.ordersTrend ?? '+14.2% vs last week',
-        trendClass: data.ordersTrendUp !== false ? 'up' : 'down',
-        trendIcon: data.ordersTrendUp !== false ? TrendingUp : Minus,
+        trend: '+14.2% vs last week',
+        trendClass: 'neutral',
+        trendIcon: Minus,
       },
       {
         id: 'customers',
@@ -177,9 +245,9 @@ async function loadStats() {
         icon: Users,
         iconColor: 'text-success',
         iconBg: 'bg-success-bg border-success-border',
-        trend: data.customersTrend ?? '+8.5% new members',
-        trendClass: data.customersTrendUp !== false ? 'up' : 'down',
-        trendIcon: data.customersTrendUp !== false ? TrendingUp : Minus,
+        trend: '+8.5% new members',
+        trendClass: 'neutral',
+        trendIcon: Minus,
       },
       {
         id: 'products',
@@ -189,7 +257,7 @@ async function loadStats() {
         icon: Tag,
         iconColor: 'text-warning',
         iconBg: 'bg-warning-bg border-warning-border',
-        trend: data.productsTrend ?? '98.5% In Stock',
+        trend: '98.5% In Stock',
         trendClass: 'neutral',
         trendIcon: Minus,
       },
@@ -201,25 +269,18 @@ async function loadStats() {
         icon: Wallet,
         iconColor: 'text-purple-600',
         iconBg: 'bg-purple-bg border-purple-border',
-        trend: data.expensesTrend ?? 'On budget',
+        trend: 'On budget',
         trendClass: 'neutral',
         trendIcon: Minus,
       },
     ]
 
-    if (data.activeRegister) {
-      systemHealth.value.activeRegister = data.activeRegister
+    // Load recent orders and low stock items from parallel fetches
+    if (Array.isArray(recentOrders)) {
+      recentOrders.value = recentOrders
     }
-    if (data.syncStatus) {
-      systemHealth.value.syncStatus = data.syncStatus
-    }
-
-    // Load recent orders and low stock items if returned or fetch secondary
-    if (Array.isArray(data.recentOrders)) {
-      recentOrders.value = data.recentOrders
-    }
-    if (Array.isArray(data.lowStockItems)) {
-      lowStockItems.value = data.lowStockItems
+    if (Array.isArray(lowStockItems)) {
+      lowStockItems.value = lowStockItems
     }
 
     const now = new Date()
@@ -277,43 +338,6 @@ async function loadStats() {
     ]
   } finally {
     loading.value = false
-  }
-
-  // Load secondary preview data safely
-  try {
-    const ordersRes = await api.get('/orders', { params: { per_page: 5 } })
-    const ordData = ordersRes.data?.data || ordersRes.data || []
-    if (Array.isArray(ordData) && ordData.length > 0) {
-      recentOrders.value = ordData.slice(0, 5)
-    }
-  } catch {
-    // Graceful fallback
-  }
-
-  try {
-    const prodRes = await api.get('/products', { params: { per_page: 20 } })
-    const prodData = prodRes.data?.data || prodRes.data || []
-    if (Array.isArray(prodData)) {
-      const lowList: LowStockItem[] = []
-      for (const p of prodData) {
-        if (p.variants && Array.isArray(p.variants)) {
-          for (const v of p.variants) {
-            if (v.quantity_on_hand !== undefined && v.quantity_on_hand <= (v.reorder_level ?? 5)) {
-              lowList.push({
-                id: v.id,
-                name: p.name,
-                sku: v.sku || p.name,
-                quantity_on_hand: v.quantity_on_hand,
-                reorder_level: v.reorder_level ?? 5,
-              })
-            }
-          }
-        }
-      }
-      lowStockItems.value = lowList.slice(0, 4)
-    }
-  } catch {
-    // Graceful fallback
   }
 }
 
@@ -404,15 +428,6 @@ function fmtMoney(amount: number | string | undefined | null): string {
   if (amount === undefined || amount === null) return '$0.00'
   const val = typeof amount === 'string' ? parseFloat(amount) : amount
   return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
-}
-
-function orderStatusBadge(status: string) {
-  const s = (status || '').toUpperCase()
-  if (s === 'COMPLETED' || s === 'PAID') return { variant: 'success' as const, label: 'Completed' }
-  if (s === 'PROCESSING' || s === 'SENT') return { variant: 'info' as const, label: 'Processing' }
-  if (s === 'PENDING' || s === 'DRAFT') return { variant: 'warning' as const, label: 'Pending' }
-  if (s === 'CANCELLED' || s === 'REJECTED') return { variant: 'destructive' as const, label: 'Cancelled' }
-  return { variant: 'neutral' as const, label: status }
 }
 
 onMounted(loadStats)
@@ -553,7 +568,7 @@ onMounted(loadStats)
           </RouterLink>
         </div>
 
-        <div v-if="recentOrders.length === 0" class="py-10 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+        <div v-if="recentOrdersWithBadges.length === 0" class="py-10 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
           <ShoppingBag :size="32" class="text-muted-foreground/50 stroke-1" />
           <span>No recent orders found.</span>
           <RouterLink to="/pos">
@@ -572,13 +587,13 @@ onMounted(loadStats)
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="ord in recentOrders" :key="ord.id" class="hover:bg-surface-subtle/60 transition-colors">
+              <TableRow v-for="ord in recentOrdersWithBadges" :key="ord.id" class="hover:bg-surface-subtle/60 transition-colors">
                 <TableCell class="font-mono text-xs font-medium text-foreground">
                   {{ ord.order_number || ord.id.slice(0, 8) }}
                 </TableCell>
                 <TableCell>
-                  <Badge :variant="orderStatusBadge(ord.status).variant" class="text-[11px] px-2 py-0.5">
-                    {{ orderStatusBadge(ord.status).label }}
+                  <Badge :variant="ord._badge.variant" class="text-[11px] px-2 py-0.5">
+                    {{ ord._badge.label }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-right font-mono font-semibold text-foreground tabular-nums">

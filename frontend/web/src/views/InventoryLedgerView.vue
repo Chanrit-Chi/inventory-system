@@ -29,6 +29,14 @@ import {
   EmptyState,
   Skeleton,
 } from '@/components/ui'
+import { ChevronDown, ChevronUp } from 'lucide-vue-next'
+
+interface Product {
+  id: string
+  name: string
+  category?: { name: string }
+  variants: Variant[]
+}
 
 interface Variant {
   id: string
@@ -53,7 +61,7 @@ interface PaginationMeta {
   per_page: number
 }
 
-const variants = ref<Variant[]>([])
+const products = ref<Product[]>([])
 const meta = ref<PaginationMeta | null>(null)
 const page = ref(1)
 const search = ref('')
@@ -61,23 +69,91 @@ const stockFilter = ref<string>('all')
 const loading = ref(false)
 const error = ref<string | null>(null)
 
+// Track which product groups are expanded (by product id)
+const expandedGroups = ref<Set<string>>(new Set())
+
+// Flatten helper for stats
+const allVariants = computed<Variant[]>(() =>
+  products.value.flatMap(p =>
+    (p.variants ?? []).map(v => ({
+      ...v,
+      product: { id: p.id, name: p.name, category: p.category },
+    }))
+  )
+)
+
 // Summary stats across loaded variants
-const totalSkus = computed(() => meta.value?.total ?? variants.value.length)
+const totalSkus = computed(() => meta.value?.total ?? allVariants.value.length)
 const lowStockCount = computed(() =>
-  variants.value.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level).length
+  allVariants.value.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level).length
 )
 const outOfStockCount = computed(() =>
-  variants.value.filter(v => v.quantity_on_hand === 0).length
+  allVariants.value.filter(v => v.quantity_on_hand === 0).length
 )
 const totalInventoryUnits = computed(() =>
-  variants.value.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
+  allVariants.value.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
 )
 const estimatedStockCost = computed(() =>
-  variants.value.reduce(
+  allVariants.value.reduce(
     (sum, v) => sum + (v.quantity_on_hand || 0) * (parseFloat(String(v.cost_price)) || 0),
     0
   )
 )
+
+// Filter products by stock status; group survives even if a child variant is filtered out,
+// as long as at least one child matches the active filter.
+const filteredProducts = computed<Product[]>(() => {
+  if (stockFilter.value === 'all') return products.value
+  return products.value
+    .map(p => {
+      const variants = (p.variants ?? []).filter(v => {
+        if (stockFilter.value === 'low')
+          return v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level
+        if (stockFilter.value === 'out') return v.quantity_on_hand === 0
+        if (stockFilter.value === 'in') return v.quantity_on_hand > v.reorder_level
+        return true
+      })
+      return { ...p, variants }
+    })
+    .filter(p => p.variants.length > 0)
+})
+
+// Per-group rollups for the product header row
+function productStats(p: Product) {
+  const variants = p.variants ?? []
+  const units = variants.reduce((s, v) => s + (v.quantity_on_hand || 0), 0)
+  const cost = variants.reduce(
+    (s, v) => s + (v.quantity_on_hand || 0) * (parseFloat(String(v.cost_price)) || 0),
+    0
+  )
+  const low = variants.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level).length
+  const out = variants.filter(v => v.quantity_on_hand === 0).length
+  const worstStatus: 'out' | 'low' | 'ok' = out
+    ? 'out'
+    : low
+      ? 'low'
+      : 'ok'
+  return { units, cost, low, out, worstStatus, variantCount: variants.length }
+}
+
+function isExpanded(productId: string) {
+  return expandedGroups.value.has(productId)
+}
+
+function toggleGroup(productId: string) {
+  const next = new Set(expandedGroups.value)
+  if (next.has(productId)) next.delete(productId)
+  else next.add(productId)
+  expandedGroups.value = next
+}
+
+function expandAll() {
+  expandedGroups.value = new Set(filteredProducts.value.map(p => p.id))
+}
+
+function collapseAll() {
+  expandedGroups.value = new Set()
+}
 
 async function loadInventory() {
   loading.value = true
@@ -89,38 +165,7 @@ async function loadInventory() {
     }
 
     const res = await api.get('/products', { params })
-    const products = res.data.data as Array<{
-      id: string
-      name: string
-      category?: { name: string }
-      variants: Variant[]
-    }>
-
-    let flat: Variant[] = []
-    for (const p of products) {
-      if (p.variants && Array.isArray(p.variants)) {
-        for (const v of p.variants) {
-          flat.push({
-            ...v,
-            product: {
-              id: p.id,
-              name: p.name,
-              category: p.category,
-            },
-          })
-        }
-      }
-    }
-
-    if (stockFilter.value === 'low') {
-      flat = flat.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level)
-    } else if (stockFilter.value === 'out') {
-      flat = flat.filter(v => v.quantity_on_hand === 0)
-    } else if (stockFilter.value === 'in') {
-      flat = flat.filter(v => v.quantity_on_hand > v.reorder_level)
-    }
-
-    variants.value = flat
+    products.value = (res.data.data ?? []) as Product[]
     meta.value = res.data.meta ?? null
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Failed to load inventory ledger.'
@@ -140,7 +185,15 @@ function onSearchInput() {
 
 function onFilterChange() {
   page.value = 1
-  loadInventory()
+  // Filtering is client-side via filteredProducts computed; no API reload needed
+}
+
+function toggleAllExpanded() {
+  if (filteredProducts.value.every(p => isExpanded(p.id))) {
+    collapseAll()
+  } else {
+    expandAll()
+  }
 }
 
 function stockBadge(v: Variant) {
@@ -248,6 +301,15 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-8 px-2 text-xs gap-1"
+          @click="toggleAllExpanded"
+        >
+          <template v-if="filteredProducts.every(p => isExpanded(p.id))">Collapse All</template>
+          <template v-else>Expand All</template>
+        </Button>
         <select
           id="inventory-stock-filter"
           v-model="stockFilter"
@@ -278,7 +340,7 @@ onMounted(() => {
       </div>
 
       <EmptyState
-        v-else-if="variants.length === 0"
+        v-else-if="allVariants.length === 0"
         :icon="Package"
         title="No inventory items found"
         description="No product variants match your search and filter criteria."
@@ -307,59 +369,155 @@ onMounted(() => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow
-              v-for="v in variants"
-              :key="v.id"
-              class="hover:bg-surface-subtle/80 transition-colors"
-              :class="{ 'bg-warning/5': isRowLowStock(v) }"
-            >
-              <TableCell>
-                <div class="font-semibold text-foreground">{{ v.product?.name ?? '—' }}</div>
-                <div v-if="v.product?.category" class="mt-0.5">
-                  <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
-                    {{ v.product.category.name }}
-                  </Badge>
-                </div>
-              </TableCell>
+            <template v-for="product in filteredProducts">
+              <template v-if="isExpanded(product.id)">
+                <!-- Product group header -->
+                <TableRow class="bg-muted/20">
+                  <TableCell class="flex items-center gap-3 cursor-pointer" @click="toggleGroup(product.id)">
+                    <div class="flex items-center gap-2">
+                      <ChevronUp class="size-4 text-muted-foreground transition-transform duration-200" :class="{ '-rotate-180': !isExpanded(product.id) }" />
+                      <div class="font-semibold text-foreground">{{ product.name }}</div>
+                      <div v-if="product.category" class="mt-0.5">
+                        <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
+                          {{ product.category.name }}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                      {{ product.variants.length }} variants
+                    </div>
+                  </TableCell>
+                  <TableCell></TableCell>
+                  <TableCell></TableCell>
+                  <TableCell class="text-center">
+                    {{ productStats(product).units }}
+                  </TableCell>
+                  <TableCell class="text-center">
+                    {{ productStats(product).low + productStats(product).out }} units
+                  </TableCell>
+                  <TableCell class="flex items-center justify-center gap-2">
+                    <Badge v-if="productStats(product).worstStatus === 'out'" variant="destructive" class="text-[10px]">
+                      Out of Stock
+                    </Badge>
+                    <Badge v-else-if="productStats(product).worstStatus === 'low'" variant="warning" class="text-[10px]">
+                      Low Stock
+                    </Badge>
+                    <Badge v-else variant="success" class="text-[10px]">
+                      In Stock
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Button
+                      v-if="productStats(product).low > 0 || productStats(product).out > 0"
+                      variant="outline"
+                      size="sm"
+                      class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10"
+                      to="/restock"
+                    >
+                      + Restock
+                    </Button>
+                    <span v-else class="text-xs text-muted-foreground">Healthy</span>
+                  </TableCell>
+                </TableRow>
 
-              <TableCell class="font-mono text-xs font-semibold text-primary">
-                {{ v.sku }}
-              </TableCell>
+                <!-- Product variants -->
+                <template v-for="variant in product.variants">
+                  <TableRow
+                    :key="variant.id"
+                    class="hover:bg-surface-subtle/80 transition-colors pl-10"
+                    :class="{ 'bg-warning/5': isRowLowStock(variant) }"
+                  >
+                    <TableCell class="pl-4">
+                      <div class="text-sm text-foreground/80">{{ variant.sku }}</div>
+                    </TableCell>
 
-              <TableCell class="font-mono text-xs">
-                <span v-if="v.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
-                  {{ v.barcode }}
-                </span>
-                <span v-else class="text-muted-foreground">—</span>
-              </TableCell>
+                    <TableCell class="font-mono text-xs">
+                      <span v-if="variant.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
+                        {{ variant.barcode }}
+                      </span>
+                      <span v-else class="text-muted-foreground">—</span>
+                    </TableCell>
 
-              <TableCell class="font-mono text-base font-bold text-foreground tabular-nums">
-                {{ v.quantity_on_hand }}
-                <span class="text-xs font-normal text-muted-foreground ml-1">units</span>
-              </TableCell>
+                    <TableCell class="font-mono text-base font-bold text-foreground tabular-nums">
+                      {{ variant.quantity_on_hand }}
+                      <span class="text-xs font-normal text-muted-foreground ml-1">units</span>
+                    </TableCell>
 
-              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                {{ v.reorder_level }} units
-              </TableCell>
+                    <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                      {{ variant.reorder_level }} units
+                    </TableCell>
 
-              <TableCell>
-                <Badge :variant="stockBadge(v)" class="text-[11px] px-2 py-0.5">
-                  {{ stockLabel(v) }}
-                </Badge>
-              </TableCell>
+                    <TableCell>
+                      <Badge :variant="stockBadge(variant)" class="text-[11px] px-2 py-0.5">
+                        {{ stockLabel(variant) }}
+                      </Badge>
+                    </TableCell>
 
-              <TableCell class="text-right">
-                <RouterLink
-                  v-if="v.quantity_on_hand <= v.reorder_level"
-                  to="/restock"
-                >
-                  <Button variant="outline" size="sm" class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10">
-                    + Restock
-                  </Button>
-                </RouterLink>
-                <span v-else class="text-xs text-muted-foreground">Healthy</span>
-              </TableCell>
-            </TableRow>
+                    <TableCell class="text-right">
+                      <RouterLink
+                        v-if="variant.quantity_on_hand <= variant.reorder_level"
+                        to="/restock"
+                      >
+                        <Button variant="outline" size="sm" class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10">
+                          + Restock
+                        </Button>
+                      </RouterLink>
+                      <span v-else class="text-xs text-muted-foreground">Healthy</span>
+                    </TableCell>
+                  </TableRow>
+                </template>
+              </template>
+              <template v-else>
+                <!-- Collapsed product group -->
+                <TableRow class="bg-muted/20 cursor-pointer" @click="toggleGroup(product.id)">
+                  <TableCell class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                      <ChevronDown class="size-4 text-muted-foreground transition-transform duration-200" />
+                      <div class="font-semibold text-foreground">{{ product.name }}</div>
+                      <div v-if="product.category" class="mt-0.5">
+                        <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
+                          {{ product.category.name }}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                      {{ product.variants.length }} variants
+                    </div>
+                  </TableCell>
+                  <TableCell></TableCell>
+                  <TableCell></TableCell>
+                  <TableCell class="text-center">
+                    {{ productStats(product).units }}
+                  </TableCell>
+                  <TableCell class="text-center">
+                    {{ productStats(product).low + productStats(product).out }} units
+                  </TableCell>
+                  <TableCell class="flex items-center justify-center gap-2">
+                    <Badge v-if="productStats(product).worstStatus === 'out'" variant="destructive" class="text-[10px]">
+                      Out of Stock
+                    </Badge>
+                    <Badge v-else-if="productStats(product).worstStatus === 'low'" variant="warning" class="text-[10px]">
+                      Low Stock
+                    </Badge>
+                    <Badge v-else variant="success" class="text-[10px]">
+                      In Stock
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Button
+                      v-if="productStats(product).low > 0 || productStats(product).out > 0"
+                      variant="outline"
+                      size="sm"
+                      class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10"
+                      to="/restock"
+                    >
+                      + Restock
+                    </Button>
+                    <span v-else class="text-xs text-muted-foreground">Healthy</span>
+                  </TableCell>
+                </TableRow>
+              </template>
+            </template>
           </TableBody>
         </Table>
       </div>

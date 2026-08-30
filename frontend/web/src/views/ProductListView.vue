@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+
+function totalStock(p: Product): number {
+  return (p.variants || []).reduce((sum: number, v: any) => sum + (v.quantity_on_hand || 0), 0)
+}
+
+function getStockClass(stock: number, reorderLevel = 5): string {
+  if (stock <= 0) return 'text-red-600 font-semibold'
+  if (stock <= reorderLevel) return 'text-amber-600 font-semibold'
+  return 'text-emerald-600'
+}
 import { RouterLink, useRouter } from 'vue-router'
 import { useProductStore, type Product } from '@/stores/productStore'
 import {
@@ -310,6 +320,7 @@ onMounted(() => {
               <TableHead>Product Name</TableHead>
               <TableHead>Barcode</TableHead>
               <TableHead>Variants</TableHead>
+              <TableHead>Stock</TableHead>
               <TableHead>Cost Price</TableHead>
               <TableHead>Selling Price</TableHead>
               <TableHead>Active</TableHead>
@@ -357,6 +368,24 @@ onMounted(() => {
                 <Badge variant="info" class="font-mono text-[11px] px-2 py-0.5">
                   {{ p.variants ? p.variants.length : 0 }} variants
                 </Badge>
+              </TableCell>
+
+              <TableCell class="font-mono text-xs tabular-nums">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    v-if="totalStock(p) > 0"
+                    :class="getStockClass(totalStock(p))"
+                    class="px-2 py-0.5 rounded bg-surface-subtle border border-border"
+                  >
+                    {{ totalStock(p) }}
+                  </span>
+                  <span
+                    v-else
+                    class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-red-600 font-semibold"
+                  >
+                    Out of stock
+                  </span>
+                </div>
               </TableCell>
 
               <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
@@ -438,6 +467,10 @@ onMounted(() => {
             </h3>
             <div v-if="p.barcode" class="text-xs font-mono text-muted-foreground mt-0.5">
               Barcode: {{ p.barcode }}
+            </div>
+            <div class="text-xs mt-1" :class="getStockClass(totalStock(p))">
+              <span v-if="totalStock(p) > 0">{{ totalStock(p) }} units in stock</span>
+              <span v-else>Out of stock</span>
             </div>
           </div>
 

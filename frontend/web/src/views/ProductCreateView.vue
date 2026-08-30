@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useAttributeStore, type Attribute } from '@/stores/attributeStore'
 import { useProductStore } from '@/stores/productStore'
 import { useCategoryStore } from '@/stores/categoryStore'
+import { useToast } from '@/composables/useToast'
 import {
   ArrowLeft,
   Check,
@@ -11,6 +12,7 @@ import {
   Layers,
   AlertCircle,
   TrendingUp,
+  Upload,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -31,23 +33,45 @@ const router = useRouter()
 const attrStore = useAttributeStore()
 const productStore = useProductStore()
 const categoryStore = useCategoryStore()
+const toast = useToast()
+
+const imagePreviewUrl = ref<string>('')
 
 onMounted(() => {
   attrStore.fetchAttributes()
   categoryStore.fetchCategories()
 })
 
+function handleImageFile(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0] ?? null
+  form.value.image_file = file
+
+  if (file) {
+    imagePreviewUrl.value = URL.createObjectURL(file)
+  } else {
+    imagePreviewUrl.value = ''
+  }
+}
+
+function removeImage() {
+  form.value.image_file = null
+  imagePreviewUrl.value = ''
+}
+
 // Active Step in Stepper Navigation
 const currentStep = ref<number>(1)
 
 // --- Base product form ---
 const form = ref({
+  product_type: 'SIMPLE' as 'SIMPLE' | 'VARIABLE',
   name: '',
   barcode: '',
   purchase_price: '',
   selling_price: '',
+  initial_stock: 0,
   default_reorder_level: '5',
-  image_url: '',
+  image_file: null as File | null,
   description: '',
   is_active: true,
 })
@@ -193,26 +217,59 @@ async function submit() {
       value_ids: [...vals],
     }))
 
-  const payload = {
-    name: form.value.name.trim(),
-    barcode: form.value.barcode.trim() || undefined,
-    purchase_price: pPrice,
-    selling_price: sPrice,
-    default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
-    image_url: form.value.image_url.trim() || undefined,
-    description: form.value.description.trim() || undefined,
-    is_active: form.value.is_active,
-    attributes: attributes.length > 0 ? attributes : undefined,
-  }
+  // Use FormData when we have an image file to upload
+  if (form.value.image_file) {
+    const formData = new FormData()
+    formData.append('name', form.value.name.trim())
+    formData.append('barcode', form.value.barcode.trim() || '')
+    formData.append('purchase_price', pPrice.toString())
+    formData.append('selling_price', sPrice.toString())
+    formData.append('default_reorder_level', (parseInt(form.value.default_reorder_level) || 5).toString())
+    formData.append('description', form.value.description.trim() || '')
+    formData.append('is_active', form.value.is_active.toString())
+    formData.append('product_type', form.value.product_type)
+    formData.append('initial_stock', form.value.initial_stock.toString())
+    formData.append('image_file', form.value.image_file)
 
-  try {
-    await productStore.createProduct(payload)
-    successMessage.value = 'Product created successfully! Redirecting to catalog…'
-    setTimeout(() => {
-      router.push('/products')
-    }, 1000)
-  } catch (e: unknown) {
-    submitError.value = e instanceof Error ? e.message : 'Failed to create product.'
+    // Append attributes as JSON string
+    if (attributes.length > 0) {
+      formData.append('attributes', JSON.stringify(attributes))
+    }
+
+    try {
+      await productStore.createProduct(formData)
+      successMessage.value = 'Product created successfully! Redirecting to catalog…'
+      setTimeout(() => {
+        router.push('/products')
+      }, 1000)
+    } catch (e: unknown) {
+      submitError.value = e instanceof Error ? e.message : 'Failed to create product.'
+    }
+  } else {
+    // Original JSON payload when no image
+    const payload = {
+      name: form.value.name.trim(),
+      barcode: form.value.barcode.trim() || undefined,
+      purchase_price: pPrice,
+      selling_price: sPrice,
+      default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
+      image_url: form.value.image_url.trim() || undefined,
+      description: form.value.description.trim() || undefined,
+      is_active: form.value.is_active,
+      product_type: form.value.product_type,
+      initial_stock: form.value.initial_stock,
+      attributes: attributes.length > 0 ? attributes : undefined,
+    }
+
+    try {
+      await productStore.createProduct(payload)
+      successMessage.value = 'Product created successfully! Redirecting to catalog…'
+      setTimeout(() => {
+        router.push('/products')
+      }, 1000)
+    } catch (e: unknown) {
+      submitError.value = e instanceof Error ? e.message : 'Failed to create product.'
+    }
   }
 }
 
@@ -273,13 +330,14 @@ function fmtMoney(num: number): string {
 
         <button
           type="button"
+          :disabled="form.product_type !== 'VARIABLE'"
           class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
-          :class="currentStep === 2 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
-          @click="currentStep = 2"
+          :class="form.product_type !== 'VARIABLE' ? 'opacity-50 cursor-not-allowed text-muted-foreground' : (currentStep === 2 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle')"
+          @click="form.product_type === 'VARIABLE' && (currentStep = 2)"
         >
           <div
             class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
-            :class="matrixPreview.length > 0 ? 'bg-success text-success-foreground' : currentStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+            :class="matrixPreview.length > 0 ? 'bg-success text-success-foreground' : currentStep === 2 ? 'bg-primary text-primary-foreground' : (form.product_type !== 'VARIABLE' ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground')"
           >
             <Check v-if="matrixPreview.length > 0" :size="14" />
             <span v-else>2</span>
@@ -341,15 +399,33 @@ function fmtMoney(num: number): string {
 
         <div class="flex flex-col gap-4">
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Product Name *</label>
-            <Input
-              id="product-name"
-              v-model="form.name"
-              type="text"
-              placeholder="e.g. Classic Oxford Cotton Shirt"
-              class="h-9 bg-surface text-sm"
-              :error="!!productStore.fieldErrors?.name"
-            />
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Type *</label>
+            <div class="flex items-center gap-2">
+              <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <input
+                  type="radio"
+                  name="product_type"
+                  :value="'SIMPLE'"
+                  :class="form.product_type === 'SIMPLE' ? 'h-4 w-4 text-primary-600 rounded-full' : 'h-4 w-4 text-muted-foreground rounded-full'"
+                  @change="form.product_type = 'SIMPLE'"
+                />
+                <span>Simple</span>
+              </label>
+              <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <input
+                  type="radio"
+                  name="product_type"
+                  :value="'VARIABLE'"
+                  :class="form.product_type === 'VARIABLE' ? 'h-4 w-4 text-primary-600 rounded-full' : 'h-4 w-4 text-muted-foreground rounded-full'"
+                  @change="form.product_type = 'VARIABLE'"
+                />
+                <span>Variable</span>
+              </label>
+            </div>
+            <span v-if="form.product_type === 'VARIABLE'" class="text-xs text-muted-foreground font-mono mt-1 block">
+              Select attributes to generate variant combinations
+            </span>
+          </div>
             <span v-if="productStore.fieldErrors?.name" class="text-xs text-destructive mt-1 block">
               {{ productStore.fieldErrors.name[0] }}
             </span>
@@ -368,13 +444,13 @@ function fmtMoney(num: number): string {
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Default Reorder Level</label>
+              <label class="block text-xs font-semibold text-foreground mb-1">Initial Stock</label>
               <Input
-                id="product-reorder"
-                v-model="form.default_reorder_level"
+                id="product-initial-stock"
+                v-model.number="form.initial_stock"
                 type="number"
                 min="0"
-                placeholder="5"
+                placeholder="0"
                 class="h-9 bg-surface text-sm font-mono"
               />
             </div>
@@ -436,14 +512,31 @@ function fmtMoney(num: number): string {
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Product Image URL</label>
-            <Input
-              id="product-image"
-              v-model="form.image_url"
-              type="url"
-              placeholder="https://images.unsplash.com/photo-..."
-              class="h-9 bg-surface text-sm"
-            />
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Image</label>
+            <div class="flex flex-col items-start gap-2">
+              <div
+                class="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-surface px-3 text-sm text-muted-foreground file:mr-4 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
+              >
+                <Upload :size="14" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  @change="handleImageFile"
+                  class="file:cursor-pointer w-full cursor-pointer"
+                />
+              </div>
+              <div v-if="form.image_file && imagePreviewUrl" class="flex items-center gap-3 mt-2">
+                <img :src="imagePreviewUrl" alt="Product preview" class="w-24 h-20 object-cover rounded border" />
+                <span class="text-xs text-muted-foreground truncate max-w-[100px]" title="form.image_file.name">{{ form.image_file.name }}</span>
+                <button
+                  type="button"
+                  @click="removeImage"
+                  class="text-xs text-destructive underline hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -470,8 +563,8 @@ function fmtMoney(num: number): string {
         </div>
       </Card>
 
-      <!-- Right: Variant Attributes Selector -->
-      <Card class="p-5 flex flex-col gap-4">
+      <!-- Right: Variant Attributes Selector (only for VARIABLE products) -->
+      <Card v-if="form.product_type === 'VARIABLE'" class="p-5 flex flex-col gap-4">
         <div class="flex items-center justify-between pb-2 border-b border-border/60">
           <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded-md bg-warning text-warning-foreground flex items-center justify-center text-xs font-bold font-mono">2</div>

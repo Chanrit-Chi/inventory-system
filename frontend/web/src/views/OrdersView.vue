@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useOrderStore } from '@/stores/orderStore'
+import { getOrderStatus } from '@/utils/orderStatus'
 import { usePrintStore } from '@/stores/printStore'
 import { useToast } from '@/composables/useToast'
 import {
@@ -141,14 +142,6 @@ function copyOrderNumber(orderNumber: string) {
   }, 2000)
 }
 
-function statusBadge(status: string) {
-  const s = (status || '').toUpperCase()
-  if (s === 'COMPLETED') return { variant: 'success' as const, label: 'Completed' }
-  if (s === 'PENDING') return { variant: 'warning' as const, label: 'Pending' }
-  if (s === 'PROCESSING') return { variant: 'info' as const, label: 'Processing' }
-  if (s === 'CANCELLED') return { variant: 'destructive' as const, label: 'Cancelled' }
-  return { variant: 'neutral' as const, label: status }
-}
 
 function fmtDate(d: string | undefined): string {
   if (!d) return '—'
@@ -370,8 +363,8 @@ onMounted(() => {
                 {{ fmtMoney(o.total_amount) }}
               </TableCell>
               <TableCell>
-                <Badge :variant="statusBadge(o.status).variant" class="text-[11px] px-2 py-0.5">
-                  {{ statusBadge(o.status).label }}
+                <Badge :variant="getOrderStatus(o.status).variant" class="text-[11px] px-2 py-0.5">
+                  {{ getOrderStatus(o.status).label }}
                 </Badge>
               </TableCell>
               <TableCell class="font-mono text-xs text-muted-foreground">
@@ -455,8 +448,8 @@ onMounted(() => {
                 <Badge variant="neutral" class="text-xs">
                   {{ orderStore.selectedOrder.channel?.name ?? 'POS Register' }}
                 </Badge>
-                <Badge :variant="statusBadge(orderStore.selectedOrder.status).variant" class="text-xs">
-                  {{ statusBadge(orderStore.selectedOrder.status).label }}
+                <Badge :variant="getOrderStatus(orderStore.selectedOrder.status).variant" class="text-xs">
+                  {{ getOrderStatus(orderStore.selectedOrder.status).label }}
                 </Badge>
               </div>
             </div>

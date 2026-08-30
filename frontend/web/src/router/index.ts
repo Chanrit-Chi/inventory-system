@@ -62,11 +62,9 @@ export const router = createRouter({
 
 // Navigation guard to enforce authentication
 router.beforeEach((to, _from, next) => {
-  // Initialize auth from localStorage on first guard call
+  // initAuth is cached (no-op after first call), safe to call on every navigation
   const authStore = useAuthStore()
-  if (authStore.token === null) {
-    authStore.initAuth()
-  }
+  authStore.initAuth()
 
   // Routes that don't require auth
   if (!to.meta.requiresAuth || to.name === 'login') {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import {
   Search,
   X,
@@ -19,6 +19,7 @@ import {
 import { useToast } from '@/composables/useToast'
 import { useDeliveryZoneStore } from '@/stores/deliveryZoneStore'
 import { usePosStore, type CartItem, type StaffMember } from '@/stores/posStore'
+import { useOfflineQueue } from '@/hooks/useOfflineQueue'
 import api from '@/api/axios'
 
 // POS Modals
@@ -37,6 +38,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Input,
 } from '@/components/ui'
 
 // ============================================================================
@@ -138,6 +140,21 @@ const showVariantModal = ref(false)
 const selectedVariantProduct = ref<Product | null>(null)
 
 const showCheckoutModal = ref(false)
+const showScannerInput = ref(false)
+const barcodeInput = ref('')
+
+const barcodeInputRef = ref<HTMLInputElement | null>(null)
+
+watch(
+  () => showScannerInput.value,
+  (open) => {
+    if (open) {
+      barcodeInput.value = ''
+      nextTick(() => barcodeInputRef.value?.focus())
+    }
+  }
+)
+
 const checkoutLoading = ref(false)
 
 const showReceiptModal = ref(false)
@@ -253,10 +270,18 @@ function clearSearch() {
 }
 
 function handleOpenScannerPrompt() {
-  const code = window.prompt('Enter / Scan Barcode (F2):')
-  if (code) {
-    processBarcode(code)
+  showScannerInput.value = true
+}
+
+async function handleManualBarcodeSubmit() {
+  const code = barcodeInput.value
+  if (!code || !code.trim()) {
+    showScannerInput.value = false
+    return
   }
+  barcodeInput.value = ''
+  showScannerInput.value = false
+  await processBarcode(code)
 }
 
 function handleProductClick(product: Product) {
@@ -364,7 +389,7 @@ function handleOpenCheckout() {
   showCheckoutModal.value = true
 }
 
-// Checkout submission to backend
+// Checkout submission to backend with offline queue fallback
 async function handleCompleteCheckout() {
   if (posStore.items.length === 0) return
 
@@ -409,7 +434,24 @@ async function handleCompleteCheckout() {
       notes: posStore.orderNotes || null,
     }
 
-    const res = await api.post<any>('/orders/checkout', payload)
+    // Try API first; if network fails, fall back to offline queue
+    let res: any
+    try {
+      res = await api.post<any>('/orders/checkout', payload)
+    } catch (apiError) {
+      // Enqueue mutation for offline retry and notify user
+      const { enqueueMutation } = useOfflineQueue()
+      const mutationId = crypto.randomUUID()
+      enqueueMutation({
+        id: mutationId,
+        type: 'checkout',
+        endpoint: '/orders/checkout',
+        payload,
+      })
+      toast.error('Network unavailable. Sale saved offline — will sync when back online.')
+      checkoutLoading.value = false
+      return
+    }
     const orderData = res.data?.data || res.data
 
     if (orderData) {
@@ -531,8 +573,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   }
   if (e.key === 'F2') {
     e.preventDefault()
-    const code = prompt('Enter Barcode or Scan Item:')
-    if (code) processBarcode(code)
+    showScannerInput.value = true
     return
   }
   if (e.key === 'F3') {
@@ -1287,6 +1328,26 @@ onUnmounted(() => {
           <Button variant="destructive" @click="confirmClearCart">
             Clear Cart
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 9. Barcode Scanner Input Modal -->
+    <Dialog v-model:open="showScannerInput">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Scan / Enter Barcode</DialogTitle>
+        </DialogHeader>
+        <Input
+          v-model="barcodeInput"
+          ref="barcodeInputRef"
+          placeholder="Type or scan barcode…"
+          autofocus
+          @keydown.enter="handleManualBarcodeSubmit"
+        />
+        <DialogFooter>
+          <Button variant="outline" @click="showScannerInput = false">Cancel</Button>
+          <Button @click="handleManualBarcodeSubmit">Add to Cart</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

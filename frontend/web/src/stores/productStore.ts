@@ -66,7 +66,11 @@ export interface CreateProductPayload {
     attribute_id: string
     value_ids: string[]
   }>
+  product_type?: string
+  initial_stock?: number
 }
+
+export type CreateProductRequest = CreateProductPayload | FormData
 
 export interface UpdateProductPayload {
   name?: string
@@ -132,12 +136,15 @@ export const useProductStore = defineStore('products', () => {
     }
   }
 
-  async function createProduct(payload: CreateProductPayload) {
+  async function createProduct(payload: CreateProductRequest) {
     mutating.value = true
     error.value = null
     fieldErrors.value = null
     try {
-      const res = await api.post('/products', payload)
+      const config = payload instanceof FormData
+        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        : undefined
+      const res = await api.post('/products', payload, config)
       return res.data.data
     } catch (e: unknown) {
       if (e instanceof ApiError) {

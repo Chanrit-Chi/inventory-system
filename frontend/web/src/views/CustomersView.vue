@@ -34,6 +34,7 @@ import {
   EmptyState,
   Skeleton,
 } from '@/components/ui'
+import { getTier as computeTier, type Tier } from '@/utils/loyalty'
 
 const customerStore = useCustomerStore()
 
@@ -41,17 +42,20 @@ const search = ref('')
 const page = ref(1)
 const sortBy = ref('total_spent')
 
-// Tier thresholds
-const TIER_THRESHOLDS = {
-  BRONZE: 0,
-  SILVER: 100,
-  GOLD: 250,
-  PLATINUM: 500,
+// Tier thresholds (aligned with mobile reference: dual-criteria spent OR orders)
+const TIER_THRESHOLDS: Record<Exclude<Tier, 'BRONZE'>, { spent: number; orders: number }> = {
+  SILVER:   { spent: 200,  orders: 3 },
+  GOLD:     { spent: 500,  orders: 10 },
+  PLATINUM: { spent: 1000, orders: 20 },
 }
 
-// VIP counts
+// VIP counts — Gold & Platinum tier members (dual-criteria)
 const vipCount = computed(() =>
-  customerStore.customers.filter(c => (parseFloat(String(c.total_spent)) || 0) >= TIER_THRESHOLDS.GOLD).length
+  customerStore.customers.filter(c => {
+    const spent = parseFloat(String(c.total_spent)) || 0
+    const orders = c.total_purchased ?? 0
+    return getTier(spent, orders) === 'GOLD' || getTier(spent, orders) === 'PLATINUM'
+  }).length
 )
 
 async function loadCustomers() {
@@ -98,7 +102,7 @@ function closeModal() {
   expandedOrders.value = {}
 }
 
-function getTier(totalSpent: number | string | undefined): {
+function getTier(totalSpent: number | string | undefined, totalPurchased: number = 0): {
   name: string
   variant: 'purple' | 'warning' | 'info' | 'neutral'
   nextTier: string | null
@@ -107,50 +111,61 @@ function getTier(totalSpent: number | string | undefined): {
   remainingToNext: number
 } {
   const spent = typeof totalSpent === 'string' ? parseFloat(totalSpent) : (totalSpent || 0)
+  const orders = totalPurchased
 
-  if (spent >= TIER_THRESHOLDS.PLATINUM) {
-    return {
-      name: 'Platinum',
-      variant: 'purple',
-      nextTier: null,
-      nextThreshold: TIER_THRESHOLDS.PLATINUM,
-      progressPercent: 100,
-      remainingToNext: 0,
+  // Get tier from shared utility (dual-criteria)
+  const tier = computeTier(spent, orders)
+
+  switch (tier) {
+    case 'PLATINUM': {
+      return {
+        name: 'Platinum',
+        variant: 'purple',
+        nextTier: null,
+        nextThreshold: TIER_THRESHOLDS.PLATINUM.spent,
+        progressPercent: 100,
+        remainingToNext: 0,
+      }
     }
-  }
-  if (spent >= TIER_THRESHOLDS.GOLD) {
-    const range = TIER_THRESHOLDS.PLATINUM - TIER_THRESHOLDS.GOLD
-    const progress = ((spent - TIER_THRESHOLDS.GOLD) / range) * 100
-    return {
-      name: 'Gold',
-      variant: 'warning',
-      nextTier: 'Platinum',
-      nextThreshold: TIER_THRESHOLDS.PLATINUM,
-      progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
-      remainingToNext: TIER_THRESHOLDS.PLATINUM - spent,
+    case 'GOLD': {
+      const nextThreshold = TIER_THRESHOLDS.PLATINUM.spent
+      const range = nextThreshold - TIER_THRESHOLDS.GOLD.spent
+      const progress = ((spent - TIER_THRESHOLDS.GOLD.spent) / range) * 100
+      return {
+        name: 'Gold',
+        variant: 'warning',
+        nextTier: 'Platinum',
+        nextThreshold,
+        progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
+        remainingToNext: Math.max(0, nextThreshold - spent),
+      }
     }
-  }
-  if (spent >= TIER_THRESHOLDS.SILVER) {
-    const range = TIER_THRESHOLDS.GOLD - TIER_THRESHOLDS.SILVER
-    const progress = ((spent - TIER_THRESHOLDS.SILVER) / range) * 100
-    return {
-      name: 'Silver',
-      variant: 'info',
-      nextTier: 'Gold',
-      nextThreshold: TIER_THRESHOLDS.GOLD,
-      progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
-      remainingToNext: TIER_THRESHOLDS.GOLD - spent,
+    case 'SILVER': {
+      const nextThreshold = TIER_THRESHOLDS.GOLD.spent
+      const range = nextThreshold - TIER_THRESHOLDS.SILVER.spent
+      const progress = ((spent - TIER_THRESHOLDS.SILVER.spent) / range) * 100
+      return {
+        name: 'Silver',
+        variant: 'info',
+        nextTier: 'Gold',
+        nextThreshold,
+        progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
+        remainingToNext: Math.max(0, nextThreshold - spent),
+      }
     }
-  }
-  // Bronze
-  const progress = (spent / TIER_THRESHOLDS.SILVER) * 100
-  return {
-    name: 'Bronze',
-    variant: 'neutral',
-    nextTier: 'Silver',
-    nextThreshold: TIER_THRESHOLDS.SILVER,
-    progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
-    remainingToNext: TIER_THRESHOLDS.SILVER - spent,
+    case 'BRONZE':
+    default: {
+      const nextThreshold = TIER_THRESHOLDS.SILVER.spent
+      const progress = (spent / nextThreshold) * 100
+      return {
+        name: 'Bronze',
+        variant: 'neutral',
+        nextTier: 'Silver',
+        nextThreshold,
+        progressPercent: Math.min(100, Math.max(0, Math.round(progress))),
+        remainingToNext: Math.max(0, nextThreshold - spent),
+      }
+    }
   }
 }
 
@@ -347,11 +362,11 @@ onMounted(() => {
               <TableCell class="min-w-[180px]">
                 <div class="flex flex-col gap-1.5">
                   <div class="flex items-center justify-between text-xs">
-                    <Badge :variant="getTier(c.total_spent).variant" class="text-[10px] px-1.5 py-0 font-semibold">
-                      {{ getTier(c.total_spent).name }}
+                    <Badge :variant="getTier(c.total_spent, c.total_purchased).variant" class="text-[10px] px-1.5 py-0 font-semibold">
+                      {{ getTier(c.total_spent, c.total_purchased).name }}
                     </Badge>
-                    <span v-if="getTier(c.total_spent).nextTier" class="text-[10px] text-muted-foreground font-mono">
-                      {{ fmtMoney(getTier(c.total_spent).remainingToNext) }} to {{ getTier(c.total_spent).nextTier }}
+                    <span v-if="getTier(c.total_spent, c.total_purchased).nextTier" class="text-[10px] text-muted-foreground font-mono">
+                      {{ fmtMoney(getTier(c.total_spent, c.total_purchased).remainingToNext) }} to {{ getTier(c.total_spent, c.total_purchased).nextTier }}
                     </span>
                     <span v-else class="text-[10px] font-bold text-purple-600">
                       Top VIP
@@ -362,7 +377,7 @@ onMounted(() => {
                   <div class="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       class="h-full bg-primary transition-all duration-300 rounded-full"
-                      :style="{ width: `${getTier(c.total_spent).progressPercent}%` }"
+                      :style="{ width: `${getTier(c.total_spent, c.total_purchased).progressPercent}%` }"
                     />
                   </div>
                 </div>

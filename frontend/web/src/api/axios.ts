@@ -1,5 +1,8 @@
 import axios, { AxiosError } from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
+import { tokenStore } from './tokenStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useToast } from '@/composables/useToast'
 
 export interface ApiErrorPayload {
   message: string
@@ -21,16 +24,17 @@ export class ApiError extends Error {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://backend.test/api/v1',
+  timeout: 15000, // 15s default timeout (matches mobile)
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 })
 
-// Request interceptor - inject auth token from localStorage
+// Request interceptor - inject auth token via injectable tokenStore
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('omnipos_token')
+    const token = tokenStore.get()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -48,10 +52,12 @@ api.interceptors.response.use(
     const message = data?.message || error.message || 'An unexpected error occurred.'
     const errors = data?.errors
 
-    // Clear auth on 401 Unauthorized
+    // Clear auth on 401 Unauthorized and notify user
     if (status === 401) {
-      localStorage.removeItem('omnipos_token')
-      localStorage.removeItem('omnipos_user')
+      const auth = useAuthStore()
+      auth.handleSessionExpired() // sets isAuthenticated=false, clears token
+      const toast = useToast()
+      toast.warning('Your session has expired. Please log in again.')
     }
 
     return Promise.reject(new ApiError(message, errors, status))

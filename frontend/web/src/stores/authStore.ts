@@ -23,9 +23,11 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const isAuthenticated = computed(() => !!token.value)
   const isLoading = ref(false)
+  const initialized = ref(false)
 
   // Initialize from localStorage on first load
   const initAuth = () => {
+    if (initialized.value) return
     const storedToken = localStorage.getItem('omnipos_token')
     const storedUser = localStorage.getItem('omnipos_user')
 
@@ -36,6 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
     } else {
       isLoading.value = false
     }
+    initialized.value = true
   }
 
   // Login
@@ -72,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem('omnipos_token')
     localStorage.removeItem('omnipos_user')
+    initialized.value = false
   }
 
   // Refresh user from API (optional)
@@ -94,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isLoading,
+    initialized,
     initAuth,
     login,
     logout,
