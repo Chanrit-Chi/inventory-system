@@ -288,7 +288,7 @@ onMounted(loadStats)
         <div
           v-for="s in stats"
           :key="s.id"
-          class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3 transition-all duration-150 hover:shadow-sm hover:border-border-strong hover:-translate-y-px"
+          class="stat-card rounded-xl border border-border bg-card shadow-xs flex flex-col gap-3 transition-all duration-150 hover:shadow-sm hover:border-border-strong hover:-translate-y-px"
         >
           <div class="flex items-center justify-between">
             <div :class="cn('inline-flex items-center justify-center w-11 h-11 rounded-lg text-xl border', s.iconBadgeClass === 'icon-badge--primary' ? 'bg-info-bg text-info border-info-border' : s.iconBadgeClass === 'icon-badge--success' ? 'bg-success-bg text-success border-success-border' : s.iconBadgeClass === 'icon-badge--warning' ? 'bg-warning-bg text-warning border-warning-border' : s.iconBadgeClass === 'icon-badge--purple' ? 'bg-purple-bg text-purple-border border-purple-border' : 'bg-muted text-muted-foreground border-border')">
