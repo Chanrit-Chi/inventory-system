@@ -1,18 +1,42 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/api/axios'
+import { cn } from '@/lib/utils'
+import {
+  Receipt,
+  Users,
+  Tag,
+  Wallet,
+  Sparkles,
+  ArrowDownToLine,
+  Package,
+  Star,
+  Zap,
+  Clock,
+  TrendingUp,
+  Minus,
+  RefreshCw,
+  Plus,
+} from 'lucide-vue-next'
+
+interface HealthIndicator {
+  label: string
+  value: string
+  isSuccess?: boolean
+  isPrimary?: boolean
+}
 
 interface MetricStat {
   id: string
   label: string
   value: string | number
   sub: string
-  icon: string
+  icon: Component
   iconBadgeClass: string
   trend: string
   trendClass: string
-  trendIcon: string
+  trendIcon: Component
 }
 
 interface ActivityEvent {
@@ -20,7 +44,7 @@ interface ActivityEvent {
   title: string
   desc: string
   time: string
-  icon: string
+  icon: Component
   badgeText: string
   badgeClass: string
 }
@@ -38,22 +62,29 @@ const systemHealth = ref({
   securityLock: 'Passkey Verified',
 })
 
+const healthIndicators = computed<HealthIndicator[]>(() => [
+  { label: 'Active Register', value: systemHealth.value.activeRegister },
+  { label: 'Offline Sync Hook', value: systemHealth.value.syncStatus, isSuccess: true },
+  { label: 'Database Engine Latency', value: systemHealth.value.dbLatency, isPrimary: true },
+  { label: 'Security & Idempotency Check', value: 'UUID v4 Locks Active' },
+])
+
 const recentEvents = ref<ActivityEvent[]>([
   {
     id: 'e1',
     title: 'POS Shift Checkout #ORD-1092',
     desc: 'Cashier processed $45.00 via ABA PayWay QR',
     time: '2 mins ago',
-    icon: '🧾',
+    icon: Receipt,
     badgeText: 'Completed',
-    badgeClass: 'badge--green',
+    badgeClass: 'badge--success',
   },
   {
     id: 'e2',
     title: 'Supplier Restock Session #RS-8802',
     desc: 'Intake batch received +120 units across 4 SKUs',
     time: '35 mins ago',
-    icon: '📥',
+    icon: Package,
     badgeText: 'Restocked',
     badgeClass: 'badge--blue',
   },
@@ -62,7 +93,7 @@ const recentEvents = ref<ActivityEvent[]>([
     title: 'Loyalty Upgrade: Sophia Chan',
     desc: 'Customer reached 1,200 lifetime points -> Gold Tier',
     time: '1 hour ago',
-    icon: '⭐',
+    icon: Star,
     badgeText: 'Gold Tier',
     badgeClass: 'badge-tier-gold',
   },
@@ -71,7 +102,7 @@ const recentEvents = ref<ActivityEvent[]>([
     title: 'Store Utility Expense Recorded',
     desc: 'Log store electricity & internet expense ($185.00)',
     time: '3 hours ago',
-    icon: '💰',
+    icon: Wallet,
     badgeText: 'Expense',
     badgeClass: 'badge--neutral',
   },
@@ -98,44 +129,44 @@ async function loadStats() {
         label: 'Total Orders & POS Sales',
         value: totalOrders > 0 ? `${totalOrders.toLocaleString()}` : '0',
         sub: 'Transactions processed',
-        icon: '🧾',
+        icon: Receipt,
         iconBadgeClass: 'icon-badge--primary',
         trend: '+14.2% vs last week',
         trendClass: 'trend-pill--up',
-        trendIcon: '▲',
+        trendIcon: TrendingUp,
       },
       {
         id: 'customers',
         label: 'Loyalty Members',
         value: totalCustomers > 0 ? `${totalCustomers.toLocaleString()}` : '0',
         sub: 'Enrolled CRM profiles',
-        icon: '👥',
+        icon: Users,
         iconBadgeClass: 'icon-badge--success',
         trend: '+8.5% new members',
         trendClass: 'trend-pill--up',
-        trendIcon: '▲',
+        trendIcon: TrendingUp,
       },
       {
         id: 'products',
         label: 'Catalog Master SKUs',
         value: totalProducts > 0 ? `${totalProducts.toLocaleString()}` : '0',
         sub: 'Products & active matrices',
-        icon: '🏷️',
+        icon: Tag,
         iconBadgeClass: 'icon-badge--warning',
         trend: '98.5% In Stock',
         trendClass: 'trend-pill--neutral',
-        trendIcon: '●',
+        trendIcon: Minus,
       },
       {
         id: 'expenses',
         label: 'Expenses Logged',
         value: totalExpenses > 0 ? `${totalExpenses.toLocaleString()}` : '0',
         sub: 'Operational entries',
-        icon: '💰',
+        icon: Wallet,
         iconBadgeClass: 'icon-badge--purple',
         trend: 'On budget',
         trendClass: 'trend-pill--neutral',
-        trendIcon: '●',
+        trendIcon: Minus,
       },
     ]
 
@@ -153,7 +184,7 @@ const quickNavCards = [
     to: '/products',
     title: 'Products & Matrix',
     desc: 'Browse product catalog, generate variant combinations, and adjust prices.',
-    icon: '🏷️',
+    icon: Tag,
     color: 'var(--action-primary)',
     badge: 'Catalog',
   },
@@ -161,7 +192,7 @@ const quickNavCards = [
     to: '/products/create',
     title: 'New Product',
     desc: 'Define new master product line with multi-tier pricing and SKU barcodes.',
-    icon: '✨',
+    icon: Sparkles,
     color: 'var(--status-purple)',
     badge: 'Creator',
   },
@@ -169,7 +200,7 @@ const quickNavCards = [
     to: '/restock',
     title: 'Restock Intake',
     desc: 'Intake supplier batches with barcode scanning and auto-commit to stock on hand.',
-    icon: '📥',
+    icon: ArrowDownToLine,
     color: 'var(--status-success)',
     badge: 'Logistics',
   },
@@ -177,7 +208,7 @@ const quickNavCards = [
     to: '/inventory',
     title: 'Inventory Ledger',
     desc: 'Monitor real-time SKU stock levels, reorder thresholds, and stock movements.',
-    icon: '📦',
+    icon: Package,
     color: 'var(--status-warning)',
     badge: 'Stock Audit',
   },
@@ -185,7 +216,7 @@ const quickNavCards = [
     to: '/orders',
     title: 'Orders & Sales',
     desc: 'Review sales transactions, payment receipts, delivery details, and POS audits.',
-    icon: '🧾',
+    icon: Receipt,
     color: 'var(--action-primary)',
     badge: 'Transactions',
   },
@@ -193,7 +224,7 @@ const quickNavCards = [
     to: '/customers',
     title: 'Customers & CRM',
     desc: 'Inspect customer purchase histories, lifetime value, and loyalty tier rankings.',
-    icon: '👥',
+    icon: Users,
     color: 'var(--status-info)',
     badge: 'Loyalty CRM',
   },
@@ -201,7 +232,7 @@ const quickNavCards = [
     to: '/expenses',
     title: 'Expenses Tracker',
     desc: 'Log store utilities, supplier invoices, store rent, and operational costs.',
-    icon: '💰',
+    icon: Wallet,
     color: 'var(--action-destructive)',
     badge: 'Finance',
   },
@@ -217,11 +248,11 @@ onMounted(loadStats)
       <div>
         <div class="flex items-center gap-12">
           <h1 class="page-title">Executive Dashboard</h1>
-          <span class="badge badge--green font-semibold">● System Healthy</span>
+          <span class="badge badge--success">● System Healthy</span>
         </div>
         <p class="text-muted text-sm mt-4">
           Omnichannel POS register & inventory administration overview.
-          <span v-if="lastRefreshed" class="text-xs" style="color: var(--text-disabled); margin-left: 8px;">
+          <span v-if="lastRefreshed" class="text-xs text-muted-foreground" style="margin-left: 8px;">
             Last synced: {{ lastRefreshed }}
           </span>
         </p>
@@ -229,26 +260,26 @@ onMounted(loadStats)
 
       <div class="flex items-center gap-12">
         <button class="btn btn--ghost" :disabled="loading" @click="loadStats">
-          <span :class="{ spinner: loading, 'spinner--dark': loading }"></span>
-          <span v-if="!loading">↺ Refresh Metrics</span>
+          <RefreshCw :size="16" :class="{ 'spinner': loading }" />
+          <span v-if="!loading">Refresh Metrics</span>
           <span v-else>Updating...</span>
         </button>
         <RouterLink to="/products/create" class="btn btn--primary">
-          <span>+</span>
+          <Plus :size="16" />
           <span>New Product</span>
         </RouterLink>
       </div>
     </div>
 
     <!-- Elevated Stat Cards with Soft Tinted Backdrops & Trend Indicators -->
-    <div class="grid-4 gap-16">
+    <div class="grid-4 gap-20">
       <template v-if="loading">
         <div v-for="i in 4" :key="i" class="card flex-col gap-12" style="min-height: 130px;">
           <div class="flex items-center justify-between">
-            <div class="skeleton-box" style="width: 42px; height: 42px; border-radius: var(--radius-md);"></div>
-            <div class="skeleton-box" style="width: 70px; height: 22px; border-radius: var(--radius-full);"></div>
+            <div class="skeleton-box" style="width: 44px; height: 44px; border-radius: var(--radius-lg);"></div>
+            <div class="skeleton-box" style="width: 70px; height: 20px; border-radius: var(--radius-full);"></div>
           </div>
-          <div class="skeleton-box" style="width: 50%; height: 28px;"></div>
+          <div class="skeleton-box" style="width: 40%; height: 28px;"></div>
           <div class="skeleton-box" style="width: 80%; height: 14px;"></div>
         </div>
       </template>
@@ -257,26 +288,27 @@ onMounted(loadStats)
         <div
           v-for="s in stats"
           :key="s.id"
-          class="stat-card"
+          class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3 transition-all duration-150 hover:shadow-sm hover:border-border-strong hover:-translate-y-px"
         >
-          <div class="stat-card-header">
-            <div class="icon-badge" :class="s.iconBadgeClass">
-              <span>{{ s.icon }}</span>
+          <div class="flex items-center justify-between">
+            <div :class="cn('inline-flex items-center justify-center w-11 h-11 rounded-lg text-xl border', s.iconBadgeClass === 'icon-badge--primary' ? 'bg-info-bg text-info border-info-border' : s.iconBadgeClass === 'icon-badge--success' ? 'bg-success-bg text-success border-success-border' : s.iconBadgeClass === 'icon-badge--warning' ? 'bg-warning-bg text-warning border-warning-border' : s.iconBadgeClass === 'icon-badge--purple' ? 'bg-purple-bg text-purple-border border-purple-border' : 'bg-muted text-muted-foreground border-border')">
+              <component :is="s.icon" :size="20" />
             </div>
-            <div class="trend-pill" :class="s.trendClass">
-              <span>{{ s.trendIcon }}</span>
+            <span :class="cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border', s.trendClass === 'trend-pill--up' ? 'bg-success-bg text-success-foreground border-success-border' : s.trendClass === 'trend-pill--down' ? 'bg-error-bg text-error-text border-error-border' : s.trendClass === 'trend-pill--warning' ? 'bg-warning-bg text-warning-foreground border-warning-border' : 'bg-muted text-muted-foreground border-border')">
+              <component :is="s.trendIcon" :size="12" />
               <span>{{ s.trend }}</span>
-            </div>
+            </span>
           </div>
-
-          <div class="stat-card-body">
-            <span class="stat-card-value tabular-nums">{{ s.value }}</span>
-            <span class="stat-card-label">{{ s.label }}</span>
-            <span class="stat-card-sub">{{ s.sub }}</span>
+          <div class="flex flex-col gap-1">
+            <span class="text-[28px] font-bold tracking-tight tabular-nums text-foreground leading-tight">{{ s.value }}</span>
+            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ s.label }}</span>
+            <span class="text-xs text-muted-foreground">{{ s.sub }}</span>
           </div>
         </div>
       </template>
     </div>
+
+    <hr class="section-divider" aria-hidden="true" />
 
     <!-- Quick Operations & Management Hub -->
     <section class="card">
@@ -285,30 +317,31 @@ onMounted(loadStats)
           <h2 class="font-bold text-lg">Quick Operations Hub</h2>
           <p class="text-muted text-sm mt-4">High-frequency workflows and management modules</p>
         </div>
-        <span class="badge badge--neutral">7 Modules Available</span>
+        <span class="badge badge--neutral">{{ quickNavCards.length }} Modules Available</span>
       </div>
 
-      <div class="grid-3 gap-16">
+      <div class="grid-modules">
         <RouterLink
           v-for="card in quickNavCards"
           :key="card.to"
           :to="card.to"
-          class="card card--interactive flex-col gap-8"
-          style="text-decoration: none; padding: 20px; border-color: var(--border-color);"
+          class="card interactive flex-col gap-3"
         >
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-10 font-bold text-lg" :style="{ color: card.color }">
-              <span style="font-size: 22px;">{{ card.icon }}</span>
+            <div class="flex items-center gap-10 font-semibold text-lg" :style="{ color: card.color }">
+              <component :is="card.icon" :size="22" />
               <span>{{ card.title }}</span>
             </div>
-            <span class="badge badge--neutral" style="font-size: 11px;">{{ card.badge }}</span>
+            <span class="badge badge--neutral">{{ card.badge }}</span>
           </div>
-          <p class="text-muted text-sm" style="line-height: 1.45;">
+          <p class="text-muted text-sm">
             {{ card.desc }}
           </p>
         </RouterLink>
       </div>
     </section>
+
+    <hr class="section-divider" aria-hidden="true" />
 
     <!-- Operational Health & Activity Grid -->
     <div class="grid-2 gap-20">
@@ -317,35 +350,24 @@ onMounted(loadStats)
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-10">
             <div class="icon-badge icon-badge--success" style="width: 32px; height: 32px; font-size: 16px;">
-              <span>⚡</span>
+              <Zap :size="16" />
             </div>
             <h3 class="font-bold text-lg">Live Channel Diagnostics</h3>
           </div>
-          <span class="badge badge--green">Connected</span>
+          <span class="badge badge--success">Connected</span>
         </div>
 
         <div class="flex-col gap-12">
-          <div class="flex items-center justify-between" style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md);">
-            <span class="text-muted text-sm font-semibold">Active Register</span>
-            <span class="font-semibold text-sm">{{ systemHealth.activeRegister }}</span>
-          </div>
-
-          <div class="flex items-center justify-between" style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md);">
-            <span class="text-muted text-sm font-semibold">Offline Sync Hook</span>
-            <div class="flex items-center gap-6">
-              <span class="channel-dot" style="width: 7px; height: 7px;"></span>
-              <span class="text-sm font-semibold" style="color: var(--status-success);">{{ systemHealth.syncStatus }}</span>
+          <div
+            v-for="(item, idx) in healthIndicators"
+            :key="idx"
+            class="flex items-center justify-between rounded-md bg-muted/60 px-3.5 py-2.5"
+          >
+            <span class="text-muted text-sm font-semibold">{{ item.label }}</span>
+            <div class="flex items-center gap-1.5">
+              <span v-if="item.isSuccess" class="w-[7px] h-[7px] rounded-full bg-success" />
+              <span class="font-semibold text-sm tabular-nums" :class="item.isPrimary ? 'text-primary' : 'text-foreground'">{{ item.value }}</span>
             </div>
-          </div>
-
-          <div class="flex items-center justify-between" style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md);">
-            <span class="text-muted text-sm font-semibold">Database Engine Latency</span>
-            <span class="text-sm font-semibold tabular-nums" style="color: var(--action-primary);">{{ systemHealth.dbLatency }}</span>
-          </div>
-
-          <div class="flex items-center justify-between" style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md);">
-            <span class="text-muted text-sm font-semibold">Security & Idempotency Check</span>
-            <span class="text-sm font-semibold" style="color: var(--text-primary);">UUID v4 Locks Active</span>
           </div>
         </div>
       </section>
@@ -355,7 +377,7 @@ onMounted(loadStats)
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-10">
             <div class="icon-badge icon-badge--primary" style="width: 32px; height: 32px; font-size: 16px;">
-              <span>🕒</span>
+              <Clock :size="16" />
             </div>
             <h3 class="font-bold text-lg">Recent Operational Feed</h3>
           </div>
@@ -366,17 +388,17 @@ onMounted(loadStats)
           <div
             v-for="event in recentEvents"
             :key="event.id"
-            class="flex items-start gap-12"
-            style="padding: 10px 12px; border-radius: var(--radius-md); transition: background-color var(--transition);"
+            class="flex items-start gap-12 rounded-lg"
+            style="padding: 10px 12px; transition: background-color var(--transition);"
           >
-            <span style="font-size: 20px; margin-top: 2px;">{{ event.icon }}</span>
+            <component :is="event.icon" :size="20" style="margin-top: 2px;" />
             <div class="flex-1 min-width-0">
               <div class="flex items-center justify-between">
                 <span class="font-semibold text-sm">{{ event.title }}</span>
                 <span class="badge badge--sm" :class="event.badgeClass">{{ event.badgeText }}</span>
               </div>
               <p class="text-muted text-xs mt-4">{{ event.desc }}</p>
-              <span class="text-xs" style="color: var(--text-disabled); font-size: 11px;">{{ event.time }}</span>
+              <span class="text-xs text-muted-foreground">{{ event.time }}</span>
             </div>
           </div>
         </div>
