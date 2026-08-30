@@ -8,6 +8,7 @@ use App\Models\UserSalary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class UserController extends BaseApiController
@@ -21,7 +22,33 @@ class UserController extends BaseApiController
         $users = User::whereNull('deleted_at')
             ->orderBy('name')
             ->get()
-            ->map(fn (User $u) => $this->formatUser($u));
+            ->map(fn (User $u) => $this->formatUser($u, true));
+
+        return $this->successResponse($users);
+    }
+
+    /**
+     * GET /api/v1/staff-members
+     * List all active staff users for sales attribution (accessible to all authenticated staff).
+     */
+    public function staffList(Request $request): JsonResponse
+    {
+        $users = User::whereNull('deleted_at')
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('role')
+                  ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
+            })
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $u) => [
+                'id'         => $u->id,
+                'name'       => $u->name,
+                'email'      => $u->email,
+                'role'       => $u->role,
+                'department' => $u->department,
+                'is_active'  => (bool) $u->is_active,
+            ]);
 
         return $this->successResponse($users);
     }
@@ -39,24 +66,27 @@ class UserController extends BaseApiController
             'hire_date'        => ['nullable', 'date'],
             'department'       => ['nullable', 'string', 'max:50'],
             'role'             => ['required', Rule::in(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER'])],
-            'password'         => ['required', 'string', 'min:8'],
+            'password'         => ['nullable', 'string', 'min:8'],
             'permission_group' => ['nullable', 'string'],
             'notes'            => ['nullable', 'string'],
             'base_salary'      => ['nullable', 'numeric', 'min:0'],
             'salary_reason'    => ['nullable', 'string', 'max:255'],
         ]);
 
+        $plainPassword = !empty($data['password']) ? $data['password'] : Str::random(10);
+
         $user = User::create([
-            'name'             => $data['name'],
-            'email'            => $data['email'],
-            'phone'            => $data['phone'] ?? null,
-            'hire_date'        => $data['hire_date'] ?? null,
-            'department'       => $data['department'] ?? null,
-            'role'             => $data['role'],
-            'password'         => Hash::make($data['password']),
-            'is_active'        => true,
-            'permission_group' => $data['permission_group'] ?? null,
-            'notes'            => $data['notes'] ?? null,
+            'name'                 => $data['name'],
+            'email'                => $data['email'],
+            'phone'                => $data['phone'] ?? null,
+            'hire_date'            => $data['hire_date'] ?? null,
+            'department'           => $data['department'] ?? null,
+            'role'                 => $data['role'],
+            'password'             => Hash::make($plainPassword),
+            'is_active'            => true,
+            'must_change_password' => true,
+            'permission_group'     => $data['permission_group'] ?? null,
+            'notes'                => $data['notes'] ?? null,
         ]);
 
         if (isset($data['base_salary']) && is_numeric($data['base_salary']) && (float) $data['base_salary'] > 0) {
@@ -69,7 +99,10 @@ class UserController extends BaseApiController
             ]);
         }
 
-        return $this->createdResponse($this->formatUser($user), 'User created successfully.');
+        $formatted = $this->formatUser($user);
+        $formatted['temporary_password'] = $plainPassword;
+
+        return $this->createdResponse($formatted, 'User created successfully.');
     }
 
     /**
@@ -184,28 +217,48 @@ class UserController extends BaseApiController
             ->orderByDesc('effective_from')
             ->first();
 
+        $attrs = $user->getAttributes();
+        $isActive = array_key_exists('is_active', $attrs) ? (bool) $attrs['is_active'] : true;
+        $mustChange = array_key_exists('must_change_password', $attrs) ? (bool) $attrs['must_change_password'] : false;
+
         $formatted = [
-            'id'              => $user->id,
-            'name'            => $user->name,
-            'email'           => $user->email,
-            'phone'           => $user->phone,
-            'hire_date'       => $user->hire_date?->toDateString(),
-            'department'      => $user->department,
-            'notes'           => $user->notes,
-            'role'            => $user->role,
-            'isActive'        => (bool) $user->is_active,
-            'base_salary'     => $latestSalary ? (float) $latestSalary->base_salary : 0,
-            'salary_reason'   => $latestSalary?->reason,
-            'permissionGroup' => $user->permission_group,
-            'permissions'     => $user->getPermissionsArray(),
-            'lastActive'      => $user->updated_at?->toDateTimeString(),
+            'id'                   => $user->id,
+            'name'                 => $user->name,
+            'email'                => $user->email,
+            'phone'                => array_key_exists('phone', $attrs) ? $attrs['phone'] : null,
+            'hire_date'            => $user->hire_date?->toDateString(),
+            'department'           => array_key_exists('department', $attrs) ? $attrs['department'] : null,
+            'notes'                => array_key_exists('notes', $attrs) ? $attrs['notes'] : null,
+            'role'                 => $user->role,
+            'isActive'             => $isActive,
+            'must_change_password' => $mustChange,
+            'mustChangePassword'   => $mustChange,
+            'base_salary'          => $latestSalary ? (float) $latestSalary->base_salary : 0,
+            'salary_reason'        => $latestSalary?->reason,
+            'permissionGroup'      => array_key_exists('permission_group', $attrs) ? $attrs['permission_group'] : null,
+            'permissions'          => $user->getPermissionsArray(),
+            'lastActive'           => $user->updated_at?->toDateTimeString(),
+            'createdAt'            => $user->created_at?->toDateTimeString(),
+            'created_at'           => $user->created_at?->toDateTimeString(),
         ];
 
         if ($detailed) {
-            $totalOrders = \App\Models\Order::where('seller_id', $user->id)->count();
-            $totalSales = (float) \App\Models\Order::where('seller_id', $user->id)
-                ->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'")
-                ->sum('total_amount');
+            $totalOrders = \App\Models\Order::where(function ($q) use ($user) {
+                $q->where('seller_id', $user->id)
+                  ->orWhere(function ($q2) use ($user) {
+                      $q2->where('user_id', $user->id)->whereNull('seller_id');
+                  });
+            })->count();
+
+            $totalSales = (float) \App\Models\Order::where(function ($q) use ($user) {
+                $q->where('seller_id', $user->id)
+                  ->orWhere(function ($q2) use ($user) {
+                      $q2->where('user_id', $user->id)->whereNull('seller_id');
+                  });
+            })
+            ->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'")
+            ->sum('total_amount');
+
             $totalNetPaid = (float) \App\Models\Payroll::where('user_id', $user->id)
                 ->where('status', 'PAID')
                 ->sum('total_net_pay');

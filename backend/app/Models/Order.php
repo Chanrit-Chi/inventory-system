@@ -56,6 +56,17 @@ class Order extends Model
         ];
     }
 
+    public function setStatusAttribute($value): void
+    {
+        if ($value instanceof \App\Enums\OrderStatus) {
+            $this->attributes['status'] = $value->value;
+        } elseif (is_string($value)) {
+            $this->attributes['status'] = strtoupper($value);
+        } else {
+            $this->attributes['status'] = $value;
+        }
+    }
+
     public function setChannelIdAttribute($value): void
     {
         $this->attributes['channel_id'] = $value;

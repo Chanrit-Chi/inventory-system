@@ -2,6 +2,35 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useRestockStore, type RestockScanResult } from '@/stores/restockStore'
+import {
+  ArrowDownToLine,
+  Check,
+  Zap,
+  Trash2,
+  ArrowLeft,
+  AlertCircle,
+  Info,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  Card,
+  Alert,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  EmptyState,
+} from '@/components/ui'
 
 const router = useRouter()
 const restockStore = useRestockStore()
@@ -13,7 +42,6 @@ const showVariantPicker = ref(false)
 const multiVariantProduct = ref<RestockScanResult | null>(null)
 const discardConfirm = ref(false)
 
-// Active Stepper Step calculation based on session state
 const activeStep = computed(() => {
   if (restockStore.items.length === 0) return 1
   if (restockStore.items.length > 0 && !restockStore.submitting) return 2
@@ -98,7 +126,7 @@ async function handleCompleteSession() {
   scanError.value = ''
   try {
     await restockStore.commitRestock()
-    successMessage.value = 'Restock session completed successfully! Stock levels updated.'
+    successMessage.value = 'Restock batch committed successfully! Inventory updated.'
     setTimeout(() => {
       router.push('/inventory')
     }, 1200)
@@ -122,407 +150,369 @@ function fmtMoney(amount: number): string {
 </script>
 
 <template>
-  <div class="flex-col gap-24" style="max-width: 1140px;">
+  <div class="flex flex-col gap-6 max-w-5xl mx-auto w-full">
     <!-- Header -->
-    <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 16px;">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-12">
-          <h1 class="page-title" style="margin: 0;">Restock Intake Batch</h1>
-          <span class="badge badge--yellow font-bold">DRAFT INTAKE</span>
-          <span v-if="restockStore.items.length > 0" class="badge badge--blue tabular-nums">
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Restock Intake Batch</h1>
+          <Badge variant="warning" class="font-mono text-xs px-2.5 py-0.5 font-bold">
+            DRAFT INTAKE
+          </Badge>
+          <Badge v-if="restockStore.items.length > 0" variant="info" class="font-mono text-xs px-2.5 py-0.5">
             {{ restockStore.totals.lineCount }} Lines / {{ restockStore.totals.totalUnits }} Units
-          </span>
+          </Badge>
         </div>
-        <p class="text-muted text-sm mt-4">
-          Scan supplier items, verify unit intake costs, and commit atomic stock updates to the ledger.
+        <p class="text-xs text-muted-foreground mt-0.5">
+          Scan physical supplier items, adjust unit intake costs, and commit atomic stock updates to the ledger.
         </p>
       </div>
 
-      <div class="flex items-center gap-12">
-        <button
+      <div class="flex items-center gap-2">
+        <Button
           v-if="restockStore.items.length > 0"
           id="btn-discard-draft"
-          class="btn btn--ghost btn--sm"
-          style="color: var(--action-destructive);"
+          variant="ghost"
+          size="sm"
+          class="text-destructive hover:bg-destructive/10 text-xs"
           @click="promptDiscardDraft"
         >
           Discard Draft
-        </button>
+        </Button>
 
-        <RouterLink to="/inventory" class="btn btn--ghost btn--sm">
-          ← Back to Ledger
+        <RouterLink to="/inventory">
+          <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs">
+            <ArrowLeft :size="14" />
+            <span>Back to Ledger</span>
+          </Button>
         </RouterLink>
       </div>
     </div>
 
     <!-- Stepper Workflow Header -->
-    <section class="card" style="padding: 16px 24px;">
-      <div class="stepper-nav">
+    <div class="rounded-xl border border-border bg-card p-4 shadow-xs">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div
-          class="step-item"
-          :class="{ 'step-item--active': activeStep === 1, 'step-item--done': restockStore.items.length > 0 }"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1"
+          :class="activeStep === 1 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'"
         >
-          <div class="step-num">1</div>
-          <div class="step-info">
-            <div class="step-title">Scan / Enter Barcode</div>
-            <div class="step-sub">Lookup master or variant SKU</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono"
+            :class="restockStore.items.length > 0 ? 'bg-success text-success-foreground' : activeStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <Check v-if="restockStore.items.length > 0" :size="14" />
+            <span v-else>1</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Scan / Enter Barcode</div>
+            <div class="text-[11px] text-muted-foreground">Lookup master SKU or variant</div>
           </div>
         </div>
 
-        <div class="step-divider"></div>
+        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
 
         <div
-          class="step-item"
-          :class="{ 'step-item--active': activeStep === 2, 'step-item--done': restockStore.items.length > 0 }"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1"
+          :class="activeStep === 2 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'"
         >
-          <div class="step-num">2</div>
-          <div class="step-info">
-            <div class="step-title">Verify Quantities & Costs</div>
-            <div class="step-sub">Adjust supplier intake costs</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono"
+            :class="restockStore.items.length > 0 ? 'bg-success text-success-foreground' : activeStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <Check v-if="restockStore.items.length > 0" :size="14" />
+            <span v-else>2</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Verify Quantities & Costs</div>
+            <div class="text-[11px] text-muted-foreground">Adjust intake wholesale pricing</div>
           </div>
         </div>
 
-        <div class="step-divider"></div>
+        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
 
         <div
-          class="step-item"
-          :class="{ 'step-item--active': activeStep === 3 }"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1"
+          :class="activeStep === 3 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'"
         >
-          <div class="step-num">3</div>
-          <div class="step-info">
-            <div class="step-title">Review & Commit</div>
-            <div class="step-sub">Record ledger transactions</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono"
+            :class="activeStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <span>3</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Review & Commit</div>
+            <div class="text-[11px] text-muted-foreground">Record stock movements</div>
           </div>
         </div>
       </div>
-    </section>
-
-    <!-- Restored Draft Banner -->
-    <div v-if="restockStore.isDraftLoaded" class="alert alert--info">
-      <span>ℹ️ Restored draft session from local browser storage.</span>
     </div>
+
+    <!-- Restored Draft Notice -->
+    <Alert v-if="restockStore.isDraftLoaded" variant="info">
+      <div class="flex items-center gap-2">
+        <Info :size="15" class="flex-shrink-0" />
+        <span>Restored saved draft session from local browser storage.</span>
+      </div>
+    </Alert>
 
     <!-- Alert Notifications -->
-    <div v-if="scanError || restockStore.error" class="alert alert--error">
-      <span>⚠️ {{ scanError || restockStore.error }}</span>
-    </div>
+    <Alert v-if="scanError || restockStore.error" variant="error">
+      <div class="flex items-center gap-2">
+        <AlertCircle :size="16" class="flex-shrink-0" />
+        <span>{{ scanError || restockStore.error }}</span>
+      </div>
+    </Alert>
 
-    <div v-if="successMessage" class="alert alert--success">
-      <span>✓ {{ successMessage }}</span>
-    </div>
+    <Alert v-if="successMessage" variant="success">
+      <div class="flex items-center gap-2">
+        <Check :size="16" class="flex-shrink-0" />
+        <span>{{ successMessage }}</span>
+      </div>
+    </Alert>
 
     <!-- Session Metadata Card -->
-    <section class="card">
-      <div class="grid-2 gap-16">
-        <div class="form-group">
-          <label class="form-label">Session Intake Date *</label>
-          <input
+    <Card class="p-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-foreground mb-1">Session Intake Date *</label>
+          <Input
             id="restock-date"
             v-model="restockStore.sessionDate"
             type="date"
+            class="h-9 bg-surface text-sm font-mono"
             @change="restockStore.saveDraft"
           />
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Supplier / Invoice Notes</label>
-          <input
+        <div>
+          <label class="block text-xs font-semibold text-foreground mb-1">Supplier / Invoice Notes</label>
+          <Input
             id="restock-notes"
             v-model="restockStore.notes"
             type="text"
             placeholder="e.g. Supplier Invoice #INV-2026-088 — Alpha Apparel Ltd."
+            class="h-9 bg-surface text-sm"
             @input="restockStore.saveDraft"
           />
         </div>
       </div>
-    </section>
+    </Card>
 
     <!-- Scan Intake Bar -->
-    <section class="card" style="background: linear-gradient(180deg, var(--surface-base) 0%, var(--surface-alt) 100%);">
-      <div class="flex items-center justify-between mb-8">
-        <div class="flex items-center gap-8">
-          <div class="icon-badge icon-badge--sm icon-badge--primary">
-            <span>⚡</span>
-          </div>
-          <h2 class="font-bold text-lg">Rapid Barcode Scanner & SKU Lookup</h2>
+    <Card class="border-cta/30 bg-cta/5 p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 text-cta font-bold font-display text-base">
+          <Zap :size="18" />
+          <span>Rapid Barcode Scanner & SKU Lookup</span>
         </div>
-        <span class="badge badge--neutral text-xs">Press Enter to Add</span>
+        <Badge variant="neutral" class="text-[11px]">Press Enter to Add</Badge>
       </div>
 
-      <p class="text-muted text-sm mb-16">
-        Scan physical barcodes with a USB/Bluetooth barcode gun or enter SKU codes manually.
+      <p class="text-xs text-muted-foreground">
+        Scan physical barcodes with a USB/Bluetooth scanner gun or enter SKU codes manually.
       </p>
 
-      <div class="flex gap-12">
-        <div style="flex: 1;">
-          <input
-            id="restock-barcode-input"
-            v-model="barcodeInput"
-            type="text"
-            placeholder="Scan barcode or enter SKU (e.g. 8859123456789 or PROD-M-BLU)…"
-            :disabled="restockStore.loading || restockStore.submitting"
-            autofocus
-            @keydown.enter.prevent="handleBarcodeScan"
-          />
-        </div>
-
-        <button
+      <div class="flex gap-2.5">
+        <Input
+          id="restock-barcode-input"
+          v-model="barcodeInput"
+          type="text"
+          placeholder="Scan barcode or enter SKU (e.g. 8859123456789 or PROD-M-BLU)…"
+          class="h-10 bg-surface text-sm font-mono flex-1 border-cta/40 focus:border-cta"
+          :disabled="restockStore.loading || restockStore.submitting"
+          autofocus
+          @keydown.enter.prevent="handleBarcodeScan"
+        />
+        <Button
           id="btn-scan-intake"
-          class="btn btn--primary"
+          variant="primary"
+          class="h-10 px-5 gap-1.5 text-xs font-semibold"
           :disabled="!barcodeInput.trim() || restockStore.loading || restockStore.submitting"
           @click="handleBarcodeScan"
         >
-          <span v-if="restockStore.loading" class="spinner"></span>
-          {{ restockStore.loading ? 'Looking up…' : '+ Add Item' }}
-        </button>
+          <span v-if="restockStore.loading" class="animate-spin mr-1">⏳</span>
+          <ArrowDownToLine v-else :size="15" />
+          <span>{{ restockStore.loading ? 'Looking up…' : '+ Add Item' }}</span>
+        </Button>
       </div>
-    </section>
+    </Card>
 
-    <!-- Line Items Table -->
-    <section class="card" style="padding: 0; overflow: hidden;">
-      <div class="flex items-center justify-between" style="padding: 20px 24px; border-bottom: 1px solid var(--border-color);">
+    <!-- Line Items Table Container -->
+    <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+      <div class="p-4 border-b border-border bg-surface-subtle/40 flex items-center justify-between">
         <div>
-          <h2 class="font-bold text-lg">
-            Batch Intake Line Items
-            <span class="badge badge--blue tabular-nums" style="margin-left: 8px;">
+          <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+            <span>Batch Intake Line Items</span>
+            <Badge variant="info" class="font-mono text-xs">
               {{ restockStore.totals.lineCount }} items
-            </span>
+            </Badge>
           </h2>
-          <p class="text-muted text-xs mt-2">
+          <p class="text-[11px] text-muted-foreground mt-0.5">
             Verify unit intake cost and incoming quantity before committing.
           </p>
         </div>
 
-        <div v-if="restockStore.items.length > 0" class="flex items-center gap-16">
-          <span class="text-xs text-muted">
-            Auto-saved to draft
-          </span>
+        <div v-if="restockStore.items.length > 0" class="text-xs text-muted-foreground font-mono">
+          Auto-saved to draft
         </div>
       </div>
 
-      <div v-if="restockStore.items.length === 0" class="empty-state">
-        <div class="empty-icon">📥</div>
-        <h3 class="font-bold text-lg mb-8">No items in this restock batch</h3>
-        <p class="text-muted">Scan or type a barcode above to add items to your restock intake session.</p>
-      </div>
+      <EmptyState
+        v-if="restockStore.items.length === 0"
+        :icon="ArrowDownToLine"
+        title="No items in this restock batch"
+        description="Scan or enter a barcode above to add items to your restock intake session."
+      />
 
-      <div v-else class="table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-        <table>
-          <thead>
-            <tr>
-              <th>Item / Variant SKU</th>
-              <th>Scanned Barcode</th>
-              <th style="width: 140px;">Intake Qty</th>
-              <th style="width: 160px;">Unit Cost ($)</th>
-              <th style="width: 140px; text-align: right;">Line Total</th>
-              <th style="width: 60px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in restockStore.items" :key="item.tempId">
-              <td>
-                <div class="font-semibold">{{ item.product_name }}</div>
-                <code class="tabular-nums text-xs" style="color: var(--action-primary); background-color: var(--surface-alt); padding: 2px 6px; border-radius: var(--radius-xs);">
-                  {{ item.sku }}
-                </code>
-              </td>
-              <td>
-                <span v-if="item.scanned_barcode" class="tabular-nums text-xs" style="background-color: var(--surface-alt); padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+      <div v-else class="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow class="bg-muted/40">
+              <TableHead>Item / Variant SKU</TableHead>
+              <TableHead>Barcode</TableHead>
+              <TableHead class="w-32">Intake Qty</TableHead>
+              <TableHead class="w-36">Unit Cost ($)</TableHead>
+              <TableHead class="font-mono text-right w-32">Line Total</TableHead>
+              <TableHead class="text-right w-12"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="item in restockStore.items" :key="item.tempId" class="hover:bg-surface-subtle/80 transition-colors">
+              <TableCell>
+                <div class="font-semibold text-foreground">{{ item.product_name }}</div>
+                <span class="font-mono text-xs text-primary">{{ item.sku }}</span>
+              </TableCell>
+
+              <TableCell class="font-mono text-xs">
+                <span v-if="item.scanned_barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
                   {{ item.scanned_barcode }}
                 </span>
-                <span v-else class="text-muted text-xs">—</span>
-              </td>
-              <td>
-                <input
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+
+              <TableCell>
+                <Input
                   :id="`qty-input-${item.tempId}`"
                   type="number"
                   min="1"
-                  :value="item.quantity"
-                  class="tabular-nums font-bold"
-                  style="width: 100px; padding: 6px 10px;"
+                  :model-value="item.quantity"
+                  class="h-8 w-24 bg-surface text-xs font-mono font-bold text-center"
                   @change="restockStore.updateItemQty(item.tempId, parseInt(($event.target as HTMLInputElement).value) || 1)"
                 />
-              </td>
-              <td>
-                <input
+              </TableCell>
+
+              <TableCell>
+                <Input
                   :id="`cost-input-${item.tempId}`"
                   type="number"
                   step="0.01"
                   min="0"
-                  :value="item.unit_cost"
-                  class="tabular-nums"
-                  style="width: 120px; padding: 6px 10px;"
+                  :model-value="item.unit_cost"
+                  class="h-8 w-28 bg-surface text-xs font-mono text-right"
                   @change="restockStore.updateItemCost(item.tempId, parseFloat(($event.target as HTMLInputElement).value) || 0)"
                 />
-              </td>
-              <td class="tabular-nums font-bold text-right" style="font-size: 14.5px; color: var(--action-primary);">
+              </TableCell>
+
+              <TableCell class="font-mono text-sm font-bold text-foreground text-right tabular-nums">
                 {{ fmtMoney(item.quantity * item.unit_cost) }}
-              </td>
-              <td style="text-align: right;">
-                <button
+              </TableCell>
+
+              <TableCell class="text-right">
+                <Button
                   :id="`btn-remove-item-${item.tempId}`"
-                  class="btn btn--ghost btn--sm"
-                  style="color: var(--action-destructive); padding: 4px 8px;"
-                  title="Remove Item"
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
                   @click="restockStore.removeItem(item.tempId)"
                 >
-                  ✕
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  <Trash2 :size="13" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <!-- Totals & Commit Action Bar -->
       <div
         v-if="restockStore.items.length > 0"
-        style="padding: 20px 24px; background-color: var(--surface-alt); border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;"
+        class="p-4 border-t border-border bg-surface-subtle/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4"
       >
-        <div class="flex items-center gap-24">
+        <div class="flex items-center gap-6 text-xs">
           <div>
-            <span class="text-xs text-muted block">Total Intake Units:</span>
-            <span class="font-bold tabular-nums text-xl">{{ restockStore.totals.totalUnits }} units</span>
+            <span class="text-muted-foreground block text-[10px] uppercase font-semibold">Total Intake Units</span>
+            <span class="font-display font-bold text-lg text-foreground tabular-nums">{{ restockStore.totals.totalUnits }} units</span>
           </div>
 
           <div>
-            <span class="text-xs text-muted block">Batch Total Investment:</span>
-            <span class="font-bold tabular-nums text-xl" style="color: var(--action-primary);">
-              {{ fmtMoney(restockStore.totals.totalCost) }}
-            </span>
+            <span class="text-muted-foreground block text-[10px] uppercase font-semibold">Batch Investment</span>
+            <span class="font-display font-bold text-lg text-primary tabular-nums">{{ fmtMoney(restockStore.totals.totalCost) }}</span>
           </div>
         </div>
 
-        <button
+        <Button
           id="btn-commit-restock"
-          class="btn btn--primary btn--lg"
+          variant="primary"
+          size="sm"
+          class="h-10 px-6 gap-2 text-xs font-semibold"
           :disabled="restockStore.submitting || restockStore.items.length === 0"
           @click="handleCompleteSession"
         >
-          <span v-if="restockStore.submitting" class="spinner"></span>
-          {{ restockStore.submitting ? 'Committing Batch to Ledger…' : '✓ Complete Restock Intake' }}
-        </button>
+          <span v-if="restockStore.submitting" class="animate-spin mr-1">⏳</span>
+          <Check v-else :size="15" />
+          <span>{{ restockStore.submitting ? 'Committing Batch to Ledger…' : 'Complete Restock Intake' }}</span>
+        </Button>
       </div>
-    </section>
+    </div>
 
     <!-- Variant Picker Modal for Master Barcode Scan -->
-    <div v-if="showVariantPicker && multiVariantProduct" class="modal-backdrop" @click.self="closeVariantPicker">
-      <div class="modal">
-        <h2 class="modal-title">Select Variant to Intake</h2>
-        <p class="text-muted text-sm mb-16">
-          Product: <strong>{{ multiVariantProduct.product?.name }}</strong>
-        </p>
+    <Dialog :open="showVariantPicker && !!multiVariantProduct" @update:open="(val) => { if (!val) closeVariantPicker(); }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="font-display">Select Variant to Intake</DialogTitle>
+          <DialogDescription>
+            Product: <strong>{{ multiVariantProduct?.product?.name }}</strong>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div class="flex-col gap-8 mb-24">
+        <div class="flex flex-col gap-2.5 py-2">
           <div
-            v-for="v in multiVariantProduct.variants"
+            v-for="v in (multiVariantProduct?.variants || [])"
             :key="v.id"
-            style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all var(--transition); background-color: var(--surface-base);"
-            class="card--interactive"
+            class="p-3 rounded-lg border border-border bg-surface hover:bg-surface-subtle hover:border-primary/40 flex items-center justify-between cursor-pointer transition-all"
             @click="selectVariantFromModal(v)"
           >
             <div>
-              <div class="font-semibold">{{ v.sku }}</div>
-              <div class="text-xs text-muted">Stock on hand: {{ v.quantity_on_hand }} units</div>
+              <div class="font-semibold text-xs text-foreground font-mono">{{ v.sku }}</div>
+              <div class="text-[11px] text-muted-foreground">Current Stock: {{ v.quantity_on_hand }} units</div>
             </div>
-
-            <button class="btn btn--primary btn--sm">
-              + Select
-            </button>
+            <Button variant="outline" size="sm" class="h-7 text-xs">+ Select</Button>
           </div>
         </div>
 
-        <div class="flex justify-end">
-          <button class="btn btn--ghost" @click="closeVariantPicker">Cancel</button>
-        </div>
-      </div>
-    </div>
+        <DialogFooter class="mt-4">
+          <Button variant="outline" @click="closeVariantPicker">Cancel</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- Discard Draft Confirmation Modal -->
-    <div v-if="discardConfirm" class="modal-backdrop" @click.self="discardConfirm = false">
-      <div class="modal">
-        <h2 class="modal-title" style="color: var(--action-destructive);">Discard Restock Draft?</h2>
-        <p class="mb-16 text-secondary">
-          Are you sure you want to discard all {{ restockStore.items.length }} line items in this draft session? This action will clear local session storage.
-        </p>
-        <div class="flex justify-end gap-12">
-          <button class="btn btn--ghost" @click="discardConfirm = false">Keep Editing</button>
-          <button id="btn-confirm-discard-draft" class="btn btn--destructive" @click="executeDiscardDraft">
+    <Dialog :open="discardConfirm" @update:open="(val) => discardConfirm = val">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="text-destructive font-display">Discard Restock Draft?</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to discard all {{ restockStore.items.length }} line items in this draft session? This will clear local draft storage.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2 sm:gap-0 mt-4">
+          <Button variant="outline" @click="discardConfirm = false">Keep Editing</Button>
+          <Button id="btn-confirm-discard-draft" variant="destructive" @click="executeDiscardDraft">
             Discard Session
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
-
-<style scoped>
-.stepper-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  flex: 1;
-}
-
-.step-item--active {
-  background-color: var(--action-primary-bg);
-}
-
-.step-num {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background-color: var(--surface-alt);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-weight: 700;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.step-item--active .step-num {
-  background-color: var(--action-primary);
-  border-color: var(--action-primary);
-  color: #ffffff;
-}
-
-.step-item--done .step-num {
-  background-color: var(--status-success);
-  border-color: var(--status-success);
-  color: #ffffff;
-}
-
-.step-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.step-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.step-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.step-divider {
-  width: 32px;
-  height: 1px;
-  background-color: var(--border-color);
-  flex-shrink: 0;
-}
-</style>

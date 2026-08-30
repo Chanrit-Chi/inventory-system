@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, StyleProp, ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import type { Order } from '../types'
@@ -8,27 +8,21 @@ export interface TransactionCardProps {
   order: Order
   onPress?: (order: Order) => void
   testID?: string
-  style?: any
+  style?: ViewStyle
 }
 
-function formatOrderTime(dateStr: string): string {
+function formatDateTime(dateStr?: string | null): string {
+  if (!dateStr) return 'Today'
   try {
     const d = new Date(dateStr)
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  } catch {
-    return '12:00 PM'
-  }
-}
-
-function formatRelativeTime(dateStr: string): string {
-  try {
-    const diffMs = Date.now() - new Date(dateStr).getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    const diffHours = Math.floor(diffMins / 60)
-    if (diffHours < 24) return `${diffHours}h ago`
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    if (isToday) {
+      return `Today, ${timeStr}`
+    }
+    const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return `${dateFormatted} • ${timeStr}`
   } catch {
     return 'Today'
   }
@@ -140,102 +134,57 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
       accessibilityRole="button"
       accessibilityLabel={`Order ${order.order_number}, ${order.customer?.name || 'Walk-in Customer'}, total $${totalNum.toFixed(2)}, status ${order.status}`}
     >
-      {/* 1. Header Bar: Order ID + Channel Name Badge (Icon + Name) + Relative Time & Status */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeftGroup}>
-          <View style={styles.orderIdPill}>
-            <Ionicons name="receipt-outline" size={11} color="#924C00" style={styles.orderIdIcon} />
-            <Text style={styles.orderIdText} numberOfLines={1}>
-              {order.order_number}
-            </Text>
-          </View>
-          {channelName ? (
-            <View
-              style={[
-                styles.channelTag,
-                channelMeta ? { backgroundColor: channelMeta.bg } : null,
-              ]}
-              accessibilityLabel={`Channel: ${channelName}`}
-            >
-              <Ionicons
-                name={channelMeta?.icon || 'storefront-outline'}
-                size={10}
-                color={channelMeta?.color || tokens.colors.secondary}
-                style={{ marginRight: 3 }}
-              />
-              <Text
-                style={[
-                  styles.channelTagText,
-                  channelMeta ? { color: channelMeta.color } : null,
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {channelName}
-              </Text>
-            </View>
-          ) : null}
+      {/* 1. Top Header: Order Number Pill + Status Badge */}
+      <View style={styles.topHeaderRow}>
+        <View style={styles.orderIdPill}>
+          <Ionicons name="receipt-outline" size={12} color="#924C00" style={styles.orderIdIcon} />
+          <Text style={styles.orderIdText} numberOfLines={1}>
+            #{order.order_number}
+          </Text>
         </View>
 
-        <View style={styles.headerRightGroup}>
-          <Text style={styles.timeText} numberOfLines={1}>
-            {formatRelativeTime(order.created_at || '')}
-          </Text>
+        <View
+          style={[
+            styles.statusBadge,
+            isCompleted && styles.statusBadgeCompleted,
+            isPending && styles.statusBadgePending,
+            isCancelled && styles.statusBadgeCancelled,
+          ]}
+        >
           <View
             style={[
-              styles.statusBadge,
-              isCompleted && styles.statusBadgeCompleted,
-              isPending && styles.statusBadgePending,
-              isCancelled && styles.statusBadgeCancelled,
+              styles.statusDot,
+              isCompleted && styles.statusDotCompleted,
+              isPending && styles.statusDotPending,
+              isCancelled && styles.statusDotCancelled,
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              isCompleted && styles.statusTextCompleted,
+              isPending && styles.statusTextPending,
+              isCancelled && styles.statusTextCancelled,
             ]}
           >
-            <View
-              style={[
-                styles.statusDot,
-                isCompleted && styles.statusDotCompleted,
-                isPending && styles.statusDotPending,
-                isCancelled && styles.statusDotCancelled,
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                isCompleted && styles.statusTextCompleted,
-                isPending && styles.statusTextPending,
-                isCancelled && styles.statusTextCancelled,
-              ]}
-            >
-              {isCompleted ? 'Paid' : isPending ? 'Pending' : isCancelled ? 'Cancelled' : (order.status || 'PAID').toUpperCase()}
-            </Text>
-          </View>
+            {isCompleted ? 'Paid' : isPending ? 'Pending' : isCancelled ? 'Cancelled' : (order.status || 'PAID').toUpperCase()}
+          </Text>
         </View>
       </View>
 
-      {/* 2. Divider line */}
-      <View style={styles.divider} />
-
-      {/* 3. Main Row: Payment Icon + Customer Info + Price / Receipt CTA */}
-      <View style={styles.bodyRow}>
-        {/* Payment Avatar */}
-        <View style={[styles.payAvatar, { backgroundColor: payInfo.bg }]}>
-          <Ionicons name={payInfo.name} size={18} color={payInfo.color} />
-        </View>
-
-        {/* Customer & Item Details */}
-        <View style={styles.infoCol}>
+      {/* 2. Middle Row: Hero Customer Name & Item Count + Price */}
+      <View style={styles.middleRow}>
+        <View style={styles.customerInfoCol}>
           <Text style={styles.customerName} numberOfLines={1} ellipsizeMode="tail">
             {order.customer?.name || 'Walk-in Customer'}
           </Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'} • {payMethod}
-              {cashierName ? ` • ${cashierName}` : ''}
-            </Text>
-          </View>
+          <Text style={styles.itemCountText} numberOfLines={1}>
+            {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            {cashierName ? ` • by ${cashierName}` : ''}
+          </Text>
         </View>
 
-        {/* Amount & Time */}
-        <View style={styles.priceCol}>
+        <View style={styles.priceContainer}>
           <Text
             style={[
               styles.priceText,
@@ -245,10 +194,51 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
           >
             ${totalNum.toFixed(2)}
           </Text>
-          <View style={styles.receiptHintRow}>
-            <Text style={styles.receiptHintText}>{formatOrderTime(order.created_at || '')}</Text>
-            <Ionicons name="chevron-forward" size={12} color={tokens.colors.secondary} style={{ marginLeft: 2 }} />
+          <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondary} style={{ marginLeft: 3 }} />
+        </View>
+      </View>
+
+      {/* 3. Bottom Tag Strip: Channel, Payment Method, Date & Time */}
+      <View style={styles.bottomTagStrip}>
+        {/* Channel Tag */}
+        {channelName ? (
+          <View
+            style={[
+              styles.metaPill,
+              channelMeta ? { backgroundColor: channelMeta.bg } : styles.metaPillNeutral,
+            ]}
+          >
+            <Ionicons
+              name={channelMeta?.icon || 'storefront-outline'}
+              size={11}
+              color={channelMeta?.color || tokens.colors.secondary}
+            />
+            <Text
+              style={[
+                styles.metaPillText,
+                channelMeta ? { color: channelMeta.color } : styles.metaPillTextNeutral,
+              ]}
+              numberOfLines={1}
+            >
+              {channelName}
+            </Text>
           </View>
+        ) : null}
+
+        {/* Payment Method Tag */}
+        <View style={[styles.metaPill, { backgroundColor: payInfo.bg }]}>
+          <Ionicons name={payInfo.name} size={11} color={payInfo.color} />
+          <Text style={[styles.metaPillText, { color: payInfo.color }]} numberOfLines={1}>
+            {payInfo.label || payMethod}
+          </Text>
+        </View>
+
+        {/* Date & Time Tag */}
+        <View style={[styles.metaPill, styles.metaPillDate]}>
+          <Ionicons name="time-outline" size={11} color={tokens.colors.secondary} />
+          <Text style={[styles.metaPillText, styles.metaPillTextDate]} numberOfLines={1}>
+            {formatDateTime(order.created_at)}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -258,10 +248,10 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: tokens.colors.surfaceCard,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     ...tokens.shadows.card,
@@ -274,70 +264,39 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
     backgroundColor: '#FFFBFB',
   },
-  headerRow: {
+  topHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 10,
     gap: 8,
-  },
-  headerLeftGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-    minWidth: 0,
   },
   orderIdPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF4E8',
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
     borderRadius: 6,
     flexShrink: 0,
   },
   orderIdIcon: {
-    marginRight: 3,
+    marginRight: 4,
   },
   orderIdText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '800',
     color: '#924C00',
     letterSpacing: 0.2,
   },
-  channelTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    maxWidth: 110,
-    flexShrink: 1,
-  },
-  channelTagText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: tokens.colors.secondary,
-  },
-  headerRightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-  },
-  timeText: {
-    fontSize: 11,
-    color: tokens.colors.textMuted,
-    fontWeight: '500',
-  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
     borderRadius: 9999,
     gap: 4,
+    flexShrink: 0,
   },
   statusBadgeCompleted: {
     backgroundColor: '#DCFCE7',
@@ -363,7 +322,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DC2626',
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   statusTextCompleted: {
@@ -375,69 +334,80 @@ const styles = StyleSheet.create({
   statusTextCancelled: {
     color: '#B91C1C',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#F2EBE1',
-    marginVertical: 6,
-  },
-  bodyRow: {
+  middleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
   },
-  payAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  infoCol: {
+  customerInfoCol: {
     flex: 1,
     minWidth: 0,
-    justifyContent: 'center',
   },
   customerName: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: tokens.colors.onBackground,
-    marginBottom: 2,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  metaText: {
-    fontSize: 11.5,
-    color: tokens.colors.secondary,
-    fontWeight: '400',
-  },
-  priceCol: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    flexShrink: 0,
-    minWidth: 65,
-  },
-  priceText: {
-    fontSize: 15.5,
+    fontSize: 15,
     fontWeight: '800',
     color: tokens.colors.onBackground,
+    marginBottom: 2,
     letterSpacing: -0.2,
+  },
+  itemCountText: {
+    fontSize: 12,
+    color: tokens.colors.secondary,
+    fontWeight: '500',
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  priceText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: tokens.colors.onBackground,
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
   },
   priceTextCancelled: {
     color: '#DC2626',
     textDecorationLine: 'line-through',
   },
-  receiptHintRow: {
+  bottomTagStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
   },
-  receiptHintText: {
-    fontSize: 10.5,
-    color: tokens.colors.textMuted,
-    fontWeight: '500',
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    gap: 4,
+  },
+  metaPillNeutral: {
+    backgroundColor: '#F1F5F9',
+  },
+  metaPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  metaPillTextNeutral: {
+    color: tokens.colors.secondary,
+  },
+  metaPillDate: {
+    backgroundColor: tokens.colors.surfaceAlt,
+    marginLeft: 'auto',
+  },
+  metaPillTextDate: {
+    color: tokens.colors.secondary,
+    fontWeight: '600',
+    fontSize: 11,
   },
 })
 

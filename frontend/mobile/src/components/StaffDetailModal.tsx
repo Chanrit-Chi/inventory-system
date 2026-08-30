@@ -22,6 +22,7 @@ import type {
   ThirteenthMonthSummary,
 } from '../types'
 import {
+  fetchUser,
   fetchStaffPerformance,
   fetchStaffIncentives,
   fetchSalaryHistory,
@@ -35,6 +36,7 @@ import {
 } from '../api/endpoints'
 import { useAuth } from '../context/AuthContext'
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
 
 export interface StaffDetailModalProps {
   visible: boolean
@@ -53,6 +55,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
   onEditProfile,
   onStatusToggle,
 }) => {
+  const { showToast } = useToast()
   const { currentUser } = useAuth()
   const { can } = usePermissions()
   const isSelf = !!(currentUser && user && currentUser.id === user.id)
@@ -62,6 +65,24 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
   const canManagePayroll = (isSuperAdmin || isAdmin || can('payroll:manage')) && (!isSelf || isSuperAdmin)
 
   const [activeTab, setActiveTab] = useState<TabKey>('profile')
+  const [localUser, setLocalUser] = useState<UserAccount | null>(user)
+
+  useEffect(() => {
+    setLocalUser(user)
+    if (visible && user?.id) {
+      fetchUser(user.id)
+        .then((fresh) => {
+          if (fresh) {
+            setLocalUser((prev) => (prev ? { ...prev, ...fresh } : fresh))
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to load fresh user stats:', err)
+        })
+    }
+  }, [visible, user])
+
+  const activeUser = localUser || user
 
   // Performance State
   const [perfPeriod, setPerfPeriod] = useState<'today' | '7d' | '30d' | 'month' | 'year'>('30d')
@@ -207,12 +228,13 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
         effective_from: raiseEffectiveDate.trim() || undefined,
         reason: raiseReason.trim() || 'Salary Raise',
       })
-      Alert.alert('Salary Updated', 'New base salary of ' + formatCurrency(amt) + ' recorded.')
+      showToast('New base salary of ' + formatCurrency(amt) + ' recorded.', 'success')
       setRaiseModalVisible(false)
       setNewSalaryAmount('')
       await loadSalaryHistory()
-    } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to update salary.')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } }; message?: string }
+      showToast(error.response?.data?.message || error.message || 'Failed to update salary.', 'error')
     } finally {
       setSavingRaise(false)
     }
@@ -224,12 +246,12 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
     const available = reserveSummary?.available_balance ?? 0
 
     if (isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid payout amount greater than $0.')
+      showToast('Please enter a valid payout amount greater than $0.', 'warning')
       return
     }
 
     if (amt > available) {
-      Alert.alert('Insufficient Reserve', 'Payout amount exceeds available reserve (' + formatCurrency(available) + ').')
+      showToast('Payout amount exceeds available reserve (' + formatCurrency(available) + ').', 'warning')
       return
     }
 
@@ -239,20 +261,21 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
         amount: amt,
         notes: disburseNotes.trim(),
       })
-      Alert.alert('Disbursement Recorded', 'Successfully disbursed ' + formatCurrency(amt) + ' seniority payout.')
+      showToast('Successfully disbursed ' + formatCurrency(amt) + ' seniority payout.', 'success')
       setDisburseModalVisible(false)
       setDisburseAmount('')
       await loadReserves()
-    } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to disburse payout.')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } }; message?: string }
+      showToast(error.response?.data?.message || error.message || 'Failed to disburse payout.', 'error')
     } finally {
       setSavingDisburse(false)
     }
   }
 
-  if (!user) return null
+  if (!user || !activeUser) return null
 
-  const initial = user.name.charAt(0).toUpperCase()
+  const initial = activeUser.name.charAt(0).toUpperCase()
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -266,14 +289,14 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={styles.staffName} numberOfLines={1}>
-                    {user.name}
+                    {activeUser.name}
                   </Text>
-                  <View style={[styles.roleBadge, user.role === 'SUPER_ADMIN' && styles.roleSuperAdmin]}>
-                    <Text style={styles.roleBadgeText}>{user.role}</Text>
+                  <View style={[styles.roleBadge, activeUser.role === 'SUPER_ADMIN' && styles.roleSuperAdmin]}>
+                    <Text style={styles.roleBadgeText}>{activeUser.role}</Text>
                   </View>
                 </View>
                 <Text style={styles.staffEmail} numberOfLines={1}>
-                  {user.email} • {user.department || 'General Store'}
+                  {activeUser.email} • {activeUser.department || 'General Store'}
                 </Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -371,26 +394,26 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                   <Text style={styles.cardSectionTitle}>EMPLOYMENT DETAILS</Text>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Department / Store</Text>
-                    <Text style={styles.detailValue}>{user.department || 'Main Counter'}</Text>
+                    <Text style={styles.detailValue}>{activeUser.department || 'Main Counter'}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Hire Date</Text>
                     <Text style={styles.detailValue}>
-                      {user.hire_date ? new Date(user.hire_date).toLocaleDateString() : 'Not Specified'}
+                      {activeUser.hire_date ? new Date(activeUser.hire_date).toLocaleDateString() : 'Not Specified'}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Contact Phone</Text>
-                    <Text style={styles.detailValue}>{user.phone || 'No phone recorded'}</Text>
+                    <Text style={styles.detailValue}>{activeUser.phone || 'No phone recorded'}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Permission Group</Text>
-                    <Text style={styles.detailValue}>{user.permissionGroup || 'Standard Role'}</Text>
+                    <Text style={styles.detailValue}>{activeUser.permissionGroup || 'Standard Role'}</Text>
                   </View>
-                  {user.notes ? (
+                  {activeUser.notes ? (
                     <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: tokens.colors.borderSubtle }}>
                       <Text style={styles.detailLabel}>Notes</Text>
-                      <Text style={{ fontSize: 12.5, color: tokens.colors.onSurface, marginTop: 2 }}>{user.notes}</Text>
+                      <Text style={{ fontSize: 12.5, color: tokens.colors.onSurface, marginTop: 2 }}>{activeUser.notes}</Text>
                     </View>
                   ) : null}
                 </View>
@@ -400,12 +423,14 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                   <View style={styles.twoColGrid}>
                     <View style={styles.kpiBox}>
                       <Text style={styles.kpiLabel}>TOTAL ORDERS</Text>
-                      <Text style={styles.kpiValue}>{user.stats?.total_orders ?? 0}</Text>
+                      <Text style={styles.kpiValue}>
+                        {activeUser.stats?.total_orders ?? perfData?.total_orders ?? perfData?.summary?.total_orders ?? 0}
+                      </Text>
                     </View>
                     <View style={styles.kpiBox}>
                       <Text style={styles.kpiLabel}>TOTAL SALES VOLUME</Text>
                       <Text style={[styles.kpiValue, { color: tokens.colors.primaryContainer }]}>
-                        {formatCurrency(user.stats?.total_sales ?? 0)}
+                        {formatCurrency(activeUser.stats?.total_sales ?? perfData?.total_revenue ?? perfData?.summary?.total_revenue ?? 0)}
                       </Text>
                     </View>
                   </View>
@@ -413,13 +438,17 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                     <View style={styles.kpiBox}>
                       <Text style={styles.kpiLabel}>TOTAL NET SALARY PAID</Text>
                       <Text style={[styles.kpiValue, { color: tokens.colors.statusSuccess }]}>
-                        {formatCurrency(user.stats?.total_net_paid ?? 0)}
+                        {formatCurrency(activeUser.stats?.total_net_paid ?? 0)}
                       </Text>
                     </View>
                     <View style={styles.kpiBox}>
                       <Text style={styles.kpiLabel}>ACCOUNT CREATED</Text>
                       <Text style={styles.kpiValue}>
-                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '2026'}
+                        {activeUser.hire_date
+                          ? new Date(activeUser.hire_date).toLocaleDateString()
+                          : activeUser.createdAt || activeUser.created_at
+                          ? new Date(activeUser.createdAt || activeUser.created_at!).toLocaleDateString()
+                          : 'Active Member'}
                       </Text>
                     </View>
                   </View>

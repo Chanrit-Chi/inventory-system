@@ -117,102 +117,130 @@ export const tokens = {
     actionButtonHeight: 52,
     stepperButtonSize: 48,
   },
+  fonts: {
+    regular: 'DMSans_400Regular',
+    medium: 'DMSans_500Medium',
+    semiBold: 'DMSans_600SemiBold',
+    bold: 'DMSans_700Bold',
+    extraBold: 'DMSans_800ExtraBold',
+    black: 'DMSans_900Black',
+  },
+
   typography: {
-    // Space Grotesk / High-glanceability scale
+    // DM Sans / High-glanceability scale
     headlineLarge: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 32,
       lineHeight: 38,
       fontWeight: '700' as const,
     },
     headlineLargeMobile: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 24,
       lineHeight: 29,
       fontWeight: '700' as const,
     },
     headlineMedium: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 20,
       lineHeight: 26,
       fontWeight: '600' as const,
     },
     bodyLarge: {
+      fontFamily: 'DMSans_500Medium',
       fontSize: 16,
       lineHeight: 24,
       fontWeight: '500' as const,
     },
     bodyMedium: {
+      fontFamily: 'DMSans_400Regular',
       fontSize: 14,
       lineHeight: 20,
       fontWeight: '400' as const,
     },
     bodySemibold: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 14,
       lineHeight: 20,
       fontWeight: '600' as const,
     },
     labelCaps: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 12,
       lineHeight: 16,
       fontWeight: '600' as const,
       letterSpacing: 0.6,
     },
     priceDisplay: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 18,
       lineHeight: 22,
       fontWeight: '700' as const,
     },
     statLarge: {
+      fontFamily: 'DMSans_800ExtraBold',
       fontSize: 28,
       lineHeight: 34,
       fontWeight: '800' as const,
     },
     statHero: {
+      fontFamily: 'DMSans_800ExtraBold',
       fontSize: 48,
       lineHeight: 52,
       fontWeight: '700' as const,
     },
 
-    // Legacy typography aliases so existing components don't break
+    // Typography aliases for existing components
     title: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 20,
       lineHeight: 28,
       fontWeight: '700' as const,
     },
     titleLarge: {
+      fontFamily: 'DMSans_800ExtraBold',
       fontSize: 24,
       lineHeight: 32,
       fontWeight: '800' as const,
     },
     section: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 16,
       lineHeight: 24,
       fontWeight: '600' as const,
     },
     body: {
+      fontFamily: 'DMSans_400Regular',
       fontSize: 14,
       lineHeight: 20,
       fontWeight: '400' as const,
     },
     caption: {
+      fontFamily: 'DMSans_500Medium',
       fontSize: 12,
       lineHeight: 16,
       fontWeight: '500' as const,
     },
     captionSmall: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 10,
       lineHeight: 14,
       fontWeight: '600' as const,
     },
     numericLarge: {
+      fontFamily: 'DMSans_800ExtraBold',
       fontSize: 26,
       lineHeight: 32,
       fontWeight: '800' as const,
     },
     numericMedium: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 17,
       lineHeight: 22,
       fontWeight: '700' as const,
     },
     numericSmall: {
+      fontFamily: 'DMSans_700Bold',
       fontSize: 13,
       lineHeight: 18,
       fontWeight: '600' as const,

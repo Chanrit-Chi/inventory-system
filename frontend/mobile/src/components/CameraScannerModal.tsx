@@ -5,23 +5,55 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Animated,
   Easing,
   Platform,
   StatusBar as RNStatusBar,
+  ScrollView,
+  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera'
 import { tokens } from '../theme/tokens'
 
+export interface ScannedPreviewItem {
+  id: string
+  name: string
+  sku?: string | null
+  barcode?: string | null
+  quantity: number
+  priceOrCost?: number
+  priceOrCostLabel?: string
+  imageUrl?: string | null
+}
+
+export interface ScannerFeedbackState {
+  message: string
+  submessage?: string
+  type?: 'success' | 'warning' | 'error' | 'info'
+  timestamp: number
+}
+
 export interface CameraScannerModalProps {
   visible: boolean
   onClose: () => void
   onScanCode: (code: string) => Promise<void>
   isLoading: boolean
+  // Continuous scanning enhancements
+  scannedItems?: ScannedPreviewItem[]
+  onUpdateItemQuantity?: (id: string, delta: number) => void
+  onRemoveItem?: (id: string) => void
+  onPrimaryAction?: () => void
+  primaryActionLabel?: string
+  primaryActionIcon?: any
+  totalCount?: number
+  totalValue?: number
+  currencySymbol?: string
+  feedback?: ScannerFeedbackState | null
+  title?: string
+  subtitle?: string
 }
 
 const RETICLE_WIDTH = 280
@@ -32,14 +64,30 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   onClose,
   onScanCode,
   isLoading,
+  scannedItems = [],
+  onUpdateItemQuantity,
+  onRemoveItem,
+  onPrimaryAction,
+  primaryActionLabel = 'Go to Register',
+  primaryActionIcon = 'arrow-forward-outline',
+  totalCount,
+  totalValue,
+  currencySymbol = '$',
+  feedback,
+  title = 'Scan Barcode / SKU',
+  subtitle,
 }) => {
   const [permission, requestPermission] = useCameraPermissions()
-  const [manualCode, setManualCode] = useState('')
-  const [isSubmittingManual, setIsSubmittingManual] = useState(false)
   const [isTorchOn, setIsTorchOn] = useState(false)
+  const [isReviewOpen, setIsReviewOpen] = useState(false)
 
   // Animated laser line translation
   const laserAnim = useRef(new Animated.Value(0)).current
+
+  // Animated feedback banner (in-viewfinder toast)
+  const feedbackOpacity = useRef(new Animated.Value(0)).current
+  const feedbackTranslateY = useRef(new Animated.Value(-12)).current
+  const [currentFeedback, setCurrentFeedback] = useState<ScannerFeedbackState | null>(null)
 
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null
@@ -72,38 +120,85 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     }
   }, [visible, permission?.granted, laserAnim])
 
-  // Reset torch and input on modal close
+  // Reset torch and review dialog on modal close
   useEffect(() => {
     if (!visible) {
       setIsTorchOn(false)
-      setManualCode('')
+      setIsReviewOpen(false)
+      setCurrentFeedback(null)
     }
   }, [visible])
+
+  // Handle incoming feedback updates
+  useEffect(() => {
+    if (feedback && feedback.timestamp) {
+      setCurrentFeedback(feedback)
+      feedbackOpacity.setValue(0)
+      feedbackTranslateY.setValue(-12)
+
+      Animated.parallel([
+        Animated.timing(feedbackOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(feedbackTranslateY, {
+          toValue: 0,
+          duration: 200,
+          easing: Easing.out(Easing.back(1.5)),
+          useNativeDriver: true,
+        }),
+      ]).start()
+
+      const timer = setTimeout(() => {
+        Animated.timing(feedbackOpacity, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }).start(() => {
+          setCurrentFeedback((prev) => (prev?.timestamp === feedback.timestamp ? null : prev))
+        })
+      }, 2400)
+
+      return () => clearTimeout(timer)
+    }
+  }, [feedback, feedbackOpacity, feedbackTranslateY])
 
   const handleBarcodeScanned = (result: BarcodeScanningResult) => {
     if (isLoading || !result.data) return
     onScanCode(result.data)
   }
 
-  const handleManualSubmit = async () => {
-    if (!manualCode.trim() || isLoading || isSubmittingManual) return
-    setIsSubmittingManual(true)
-    try {
-      await onScanCode(manualCode.trim())
-      setManualCode('')
-    } finally {
-      setIsSubmittingManual(false)
-    }
-  }
-
   const toggleTorch = () => {
-    setIsTorchOn(prev => !prev)
+    setIsTorchOn((prev) => !prev)
   }
 
   const laserTranslateY = laserAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [6, RETICLE_HEIGHT - 10],
   })
+
+  // Derive counts
+  const itemsCount =
+    totalCount !== undefined
+      ? totalCount
+      : scannedItems.reduce((sum, item) => sum + (item.quantity || 1), 0)
+
+  const itemsValue =
+    totalValue !== undefined
+      ? totalValue
+      : scannedItems.reduce(
+          (sum, item) => sum + (item.priceOrCost || 0) * (item.quantity || 1),
+          0
+        )
+
+  const handlePrimaryPress = () => {
+    if (onPrimaryAction) {
+      onPrimaryAction()
+    } else {
+      onClose()
+    }
+  }
 
   return (
     <Modal
@@ -113,17 +208,19 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       statusBarTranslucent
     >
       <SafeAreaView style={styles.container}>
-        {/* Warm Editorial Top Header Bar */}
+        {/* Top Header Bar */}
         <View style={styles.header}>
           <View style={styles.headerTitleGroup}>
             <View style={styles.scannerBadge}>
               <Ionicons name="barcode-outline" size={18} color={tokens.colors.primaryContainer} />
             </View>
             <View style={{ flexShrink: 1 }}>
-              <Text style={styles.headerTitle} numberOfLines={1}>Scan Barcode / SKU</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
               <View style={styles.liveStatusRow}>
                 <View style={styles.livePulseDot} />
-                <Text style={styles.liveStatusText}>Ready to Scan</Text>
+                <Text style={styles.liveStatusText}>
+                  {subtitle || `${itemsCount} item${itemsCount === 1 ? '' : 's'} scanned • Live`}
+                </Text>
               </View>
             </View>
           </View>
@@ -181,7 +278,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
               </View>
               <Text style={styles.permissionTitle}>Camera Access Needed</Text>
               <Text style={styles.permissionText}>
-                Camera permission is required to scan product barcodes and QR codes directly at the register.
+                Camera permission is required to scan product barcodes and QR codes directly.
               </Text>
               <TouchableOpacity
                 style={styles.permissionButton}
@@ -206,26 +303,63 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
               {/* Masked Overlay with Viewfinder Window */}
               <View style={styles.maskContainer} pointerEvents="none">
-                {/* Top Mask */}
-                <View style={styles.maskTop} />
+                {/* Top Mask with Live In-Camera Feedback HUD */}
+                <View style={styles.maskTop}>
+                  {currentFeedback && (
+                    <Animated.View
+                      style={[
+                        styles.feedbackBanner,
+                        currentFeedback.type === 'success' && styles.feedbackSuccess,
+                        currentFeedback.type === 'warning' && styles.feedbackWarning,
+                        currentFeedback.type === 'error' && styles.feedbackError,
+                        currentFeedback.type === 'info' && styles.feedbackInfo,
+                        {
+                          opacity: feedbackOpacity,
+                          transform: [{ translateY: feedbackTranslateY }],
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          currentFeedback.type === 'success'
+                            ? 'checkmark-circle'
+                            : currentFeedback.type === 'warning'
+                            ? 'warning'
+                            : currentFeedback.type === 'error'
+                            ? 'alert-circle'
+                            : 'information-circle'
+                        }
+                        size={20}
+                        color={tokens.colors.onPrimary}
+                      />
+                      <View style={{ flexShrink: 1 }}>
+                        <Text style={styles.feedbackMessage} numberOfLines={1}>
+                          {currentFeedback.message}
+                        </Text>
+                        {Boolean(currentFeedback.submessage) && (
+                          <Text style={styles.feedbackSubmessage} numberOfLines={1}>
+                            {currentFeedback.submessage}
+                          </Text>
+                        )}
+                      </View>
+                    </Animated.View>
+                  )}
+                </View>
 
                 {/* Center Row */}
                 <View style={styles.maskCenterRow}>
                   <View style={styles.maskSide} />
 
-                  {/* Reticle Focus Window with 32px rounded corners and #FF8800 accents */}
+                  {/* Reticle Focus Window */}
                   <View style={styles.reticle}>
-                    {/* Targeting Corner Brackets in #FF8800 */}
                     <View style={[styles.corner, styles.topLeft]} />
                     <View style={[styles.corner, styles.topRight]} />
                     <View style={[styles.corner, styles.bottomLeft]} />
                     <View style={[styles.corner, styles.bottomRight]} />
 
-                    {/* Crosshair Target */}
                     <View style={styles.crosshairH} />
                     <View style={styles.crosshairV} />
 
-                    {/* Animated Scanning Laser Line in Vibrant Orange */}
                     <Animated.View
                       style={[
                         styles.laserLine,
@@ -246,7 +380,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                   <View style={styles.hintContainer}>
                     <Ionicons name="scan-outline" size={16} color={tokens.colors.primaryContainer} />
                     <Text style={styles.hintText}>
-                      Align barcode or QR code inside the frame
+                      Keep scanning barcodes continuously
                     </Text>
                   </View>
                 </View>
@@ -254,73 +388,256 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
             </>
           )}
 
-          {/* Loading / Looking up Overlay */}
+          {/* Loading Overlay */}
           {Boolean(isLoading) && (
             <View style={styles.loadingOverlay}>
               <View style={styles.loadingCard}>
                 <ActivityIndicator size="large" color={tokens.colors.primaryContainer} />
                 <Text style={styles.loadingTitle}>Looking up item...</Text>
-                <Text style={styles.loadingSubtitle}>Resolving SKU / master barcode in catalog</Text>
+                <Text style={styles.loadingSubtitle}>Resolving barcode in catalog</Text>
               </View>
             </View>
           )}
         </View>
 
-        {/* Manual Code Entry Drawer (Bottom Sheet) */}
-        <View style={styles.manualDrawer}>
-          <View style={styles.drawerHandle} />
-
-          <View style={styles.manualHeaderRow}>
-            <Text style={styles.manualEntryLabel}>Manual Barcode / SKU Lookup</Text>
-            <Text style={styles.manualEntrySub}>Type code or SKU if scanner cannot read</Text>
-          </View>
-
-          <View style={styles.manualInputRow}>
-            <View style={styles.manualInputWrapper}>
-              <TextInput
-                testID="input-manual-barcode"
-                style={styles.manualInput}
-                placeholder="Enter barcode or SKU"
-                placeholderTextColor={tokens.colors.textMuted}
-                value={manualCode}
-                onChangeText={setManualCode}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                returnKeyType="done"
-                numberOfLines={1}
-                multiline={false}
-                onSubmitEditing={handleManualSubmit}
+        {/* Bottom Uninterrupted Scanner Control Bar */}
+        <View style={styles.bottomControlBar}>
+          {/* Review Scanned Items Button */}
+          <TouchableOpacity
+            testID="btn-view-scanned-items"
+            style={[
+              styles.reviewItemsButton,
+              itemsCount > 0 && styles.reviewItemsButtonActive,
+            ]}
+            onPress={() => setIsReviewOpen(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Review ${itemsCount} scanned items`}
+          >
+            <View style={styles.reviewBadgeIcon}>
+              <Ionicons
+                name="list-outline"
+                size={20}
+                color={itemsCount > 0 ? tokens.colors.primaryContainer : tokens.colors.secondary}
               />
-              {manualCode.length > 0 && (
-                <TouchableOpacity
-                  style={styles.clearInputBtn}
-                  onPress={() => setManualCode('')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.clearInputText}>✕</Text>
-                </TouchableOpacity>
+              {itemsCount > 0 && (
+                <View style={styles.counterBadge}>
+                  <Text style={styles.counterBadgeText}>{itemsCount > 99 ? '99+' : itemsCount}</Text>
+                </View>
               )}
             </View>
+            <View style={styles.reviewTextGroup}>
+              <Text style={styles.reviewButtonTitle}>
+                {itemsCount > 0 ? `Scanned (${itemsCount})` : 'Scanned List'}
+              </Text>
+              <Text style={styles.reviewButtonSubtitle}>
+                {itemsCount > 0 && itemsValue > 0
+                  ? `${currencySymbol}${itemsValue.toFixed(2)}`
+                  : 'Tap to view list'}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              testID="btn-submit-manual-barcode"
-              style={[
-                styles.manualSubmitButton,
-                !manualCode.trim() && styles.manualSubmitButtonDisabled,
-              ]}
-              onPress={handleManualSubmit}
-              disabled={!manualCode.trim() || isLoading || isSubmittingManual}
-              accessibilityRole="button"
-              activeOpacity={0.8}
-            >
-              {isSubmittingManual ? (
-                <ActivityIndicator size="small" color={tokens.colors.onPrimary} />
-              ) : (
-                <Text style={styles.manualSubmitText}>+ Add</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          {/* Primary Action Button (e.g. Go to Register / Done) */}
+          <TouchableOpacity
+            testID="btn-scanner-primary-action"
+            style={[
+              styles.primaryActionButton,
+              itemsCount === 0 && styles.primaryActionButtonSecondary,
+            ]}
+            onPress={handlePrimaryPress}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={primaryActionLabel}
+          >
+            <Text style={styles.primaryActionText}>{primaryActionLabel}</Text>
+            <Ionicons
+              name={primaryActionIcon}
+              size={18}
+              color={tokens.colors.onPrimary}
+            />
+          </TouchableOpacity>
         </View>
+
+        {/* Scanned Items Review Dialog / Bottom Sheet Modal */}
+        <Modal
+          visible={isReviewOpen}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsReviewOpen(false)}
+        >
+          <View style={styles.sheetOverlay}>
+            <View style={styles.sheetContainer}>
+              {/* Sheet Handle */}
+              <View style={styles.sheetHandle} />
+
+              {/* Sheet Header */}
+              <View style={styles.sheetHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={styles.sheetTitle}>Scanned Items</Text>
+                    <View style={styles.sheetCountPill}>
+                      <Text style={styles.sheetCountText}>{itemsCount} items</Text>
+                    </View>
+                  </View>
+                  {itemsValue > 0 && (
+                    <Text style={styles.sheetSubtotalText}>
+                      Total: {currencySymbol}{itemsValue.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  testID="btn-close-review-sheet"
+                  style={styles.sheetCloseBtn}
+                  onPress={() => setIsReviewOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close review sheet"
+                >
+                  <Text style={styles.sheetCloseBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Scanned Items List */}
+              <ScrollView
+                style={styles.sheetScrollView}
+                contentContainerStyle={styles.sheetScrollContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {scannedItems.length === 0 ? (
+                  <View style={styles.emptyScannedContainer}>
+                    <Ionicons name="scan-circle-outline" size={54} color={tokens.colors.secondaryFixedDim} />
+                    <Text style={styles.emptyScannedTitle}>No Items Scanned Yet</Text>
+                    <Text style={styles.emptyScannedSubtitle}>
+                      Aim the camera at product barcodes to quickly scan and add items continuously.
+                    </Text>
+                  </View>
+                ) : (
+                  scannedItems.map((item, index) => {
+                    const priceOrCost = item.priceOrCost !== undefined ? item.priceOrCost : 0
+                    const itemTotal = priceOrCost * (item.quantity || 1)
+                    return (
+                      <View key={item.id || `scanned-${index}`} style={styles.itemRowCard}>
+                        {/* Thumbnail or Fallback Icon */}
+                        <View style={styles.itemThumbnailWrapper}>
+                          {item.imageUrl ? (
+                            <Image
+                              source={{ uri: item.imageUrl }}
+                              style={styles.itemThumbnail}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.itemThumbnailFallback}>
+                              <Ionicons name="cube-outline" size={20} color={tokens.colors.primaryContainer} />
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Item Details */}
+                        <View style={styles.itemInfo}>
+                          <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                          <View style={styles.itemMetaRow}>
+                            {Boolean(item.sku) && (
+                              <View style={styles.metaBadge}>
+                                <Text style={styles.metaBadgeText}>{item.sku}</Text>
+                              </View>
+                            )}
+                            {Boolean(item.barcode) && (
+                              <View style={styles.barcodeBadge}>
+                                <Ionicons name="barcode-outline" size={12} color={tokens.colors.secondary} />
+                                <Text style={styles.barcodeBadgeText}>{item.barcode}</Text>
+                              </View>
+                            )}
+                          </View>
+                          {priceOrCost > 0 && (
+                            <Text style={styles.itemPriceText}>
+                              {currencySymbol}{priceOrCost.toFixed(2)} each • Total: {currencySymbol}{itemTotal.toFixed(2)}
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Quantity Stepper & Remove */}
+                        <View style={styles.itemActionsColumn}>
+                          {onUpdateItemQuantity ? (
+                            <View style={styles.quantityStepper}>
+                              <TouchableOpacity
+                                testID={`btn-dec-qty-${item.id}`}
+                                style={styles.stepperBtn}
+                                onPress={() => onUpdateItemQuantity(item.id, -1)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Decrease quantity for ${item.name}`}
+                              >
+                                <Ionicons
+                                  name={item.quantity <= 1 ? 'trash-outline' : 'remove'}
+                                  size={14}
+                                  color={item.quantity <= 1 ? tokens.colors.statusError : tokens.colors.onBackground}
+                                />
+                              </TouchableOpacity>
+                              <Text style={styles.stepperQtyText}>{item.quantity}</Text>
+                              <TouchableOpacity
+                                testID={`btn-inc-qty-${item.id}`}
+                                style={styles.stepperBtn}
+                                onPress={() => onUpdateItemQuantity(item.id, 1)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Increase quantity for ${item.name}`}
+                              >
+                                <Ionicons name="add" size={14} color={tokens.colors.onBackground} />
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <View style={styles.readonlyQtyBadge}>
+                              <Text style={styles.readonlyQtyText}>x{item.quantity}</Text>
+                            </View>
+                          )}
+
+                          {onRemoveItem && (
+                            <TouchableOpacity
+                              testID={`btn-remove-${item.id}`}
+                              style={styles.trashBtn}
+                              onPress={() => onRemoveItem(item.id)}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Remove ${item.name}`}
+                            >
+                              <Ionicons name="trash-outline" size={15} color={tokens.colors.textMuted} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    )
+                  })
+                )}
+              </ScrollView>
+
+              {/* Sheet Bottom Footer Actions */}
+              <View style={styles.sheetFooter}>
+                <TouchableOpacity
+                  testID="btn-sheet-keep-scanning"
+                  style={styles.sheetKeepScanningBtn}
+                  onPress={() => setIsReviewOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Keep scanning"
+                >
+                  <Ionicons name="camera-outline" size={18} color={tokens.colors.onBackground} />
+                  <Text style={styles.sheetKeepScanningText}>Keep Scanning</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="btn-sheet-go-register"
+                  style={styles.sheetPrimaryBtn}
+                  onPress={() => {
+                    setIsReviewOpen(false)
+                    handlePrimaryPress()
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={primaryActionLabel}
+                >
+                  <Text style={styles.sheetPrimaryBtnText}>{primaryActionLabel}</Text>
+                  <Ionicons name={primaryActionIcon} size={18} color={tokens.colors.onPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Modal>
   )
@@ -369,12 +686,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
-    gap: 4,
+    gap: 5,
   },
   livePulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: tokens.colors.statusSuccess,
   },
   liveStatusText: {
@@ -482,6 +799,50 @@ const styles = StyleSheet.create({
   maskTop: {
     flex: 1,
     backgroundColor: 'rgba(29, 27, 22, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: tokens.spacing.md,
+    paddingHorizontal: tokens.spacing.md,
+  },
+  feedbackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: tokens.spacing.xs + 4,
+    paddingHorizontal: tokens.spacing.md,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: '#1E1E1E',
+    borderWidth: 1.5,
+    borderColor: tokens.colors.primaryContainer,
+    gap: 8,
+    maxWidth: '92%',
+    ...tokens.shadows.modal,
+  },
+  feedbackSuccess: {
+    backgroundColor: 'rgba(22, 101, 52, 0.94)',
+    borderColor: '#4ADE80',
+  },
+  feedbackWarning: {
+    backgroundColor: 'rgba(146, 76, 0, 0.94)',
+    borderColor: '#FDBA74',
+  },
+  feedbackError: {
+    backgroundColor: 'rgba(186, 26, 26, 0.94)',
+    borderColor: '#FCA5A5',
+  },
+  feedbackInfo: {
+    backgroundColor: 'rgba(14, 116, 144, 0.94)',
+    borderColor: '#67E8F9',
+  },
+  feedbackMessage: {
+    color: tokens.colors.onPrimary,
+    fontSize: tokens.typography.bodySemibold.fontSize,
+    fontWeight: '700',
+  },
+  feedbackSubmessage: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 1,
   },
   maskCenterRow: {
     flexDirection: 'row',
@@ -623,92 +984,354 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  manualDrawer: {
+  bottomControlBar: {
     backgroundColor: tokens.colors.surfaceContainerLowest,
     paddingHorizontal: tokens.spacing.md,
-    paddingTop: tokens.spacing.sm,
+    paddingTop: tokens.spacing.sm + 2,
     paddingBottom: Platform.OS === 'ios' ? tokens.spacing.lg : tokens.spacing.md,
     borderTopLeftRadius: tokens.borderRadius.card,
     borderTopRightRadius: tokens.borderRadius.card,
     borderTopWidth: 1,
     borderTopColor: tokens.colors.borderSubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
     ...tokens.shadows.actionSheet,
   },
-  drawerHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: tokens.colors.borderSubtle,
-    alignSelf: 'center',
-    marginBottom: tokens.spacing.sm,
+  reviewItemsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    borderRadius: tokens.borderRadius.card,
+    paddingVertical: tokens.spacing.xs + 2,
+    paddingHorizontal: tokens.spacing.sm + 2,
+    gap: tokens.spacing.sm,
+    minHeight: tokens.touchTarget.actionButtonHeight,
   },
-  manualHeaderRow: {
-    marginBottom: tokens.spacing.xs + 2,
+  reviewItemsButtonActive: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    borderColor: tokens.colors.primaryFixedDim,
   },
-  manualEntryLabel: {
+  reviewBadgeIcon: {
+    position: 'relative',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+  },
+  counterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: tokens.colors.primaryContainer,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  counterBadgeText: {
+    color: tokens.colors.onPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  reviewTextGroup: {
+    flex: 1,
+  },
+  reviewButtonTitle: {
     color: tokens.colors.onBackground,
     fontSize: tokens.typography.bodySemibold.fontSize,
     fontWeight: '700',
   },
-  manualEntrySub: {
+  reviewButtonSubtitle: {
     color: tokens.colors.secondary,
     fontSize: 11,
+    fontWeight: '600',
     marginTop: 1,
   },
-  manualInputRow: {
+  primaryActionButton: {
+    flex: 1.15,
+    minHeight: tokens.touchTarget.actionButtonHeight,
+    paddingHorizontal: tokens.spacing.md,
+    backgroundColor: tokens.colors.primaryContainer,
+    borderRadius: tokens.borderRadius.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    ...tokens.shadows.card,
+  },
+  primaryActionButtonSecondary: {
+    backgroundColor: tokens.colors.primary,
+  },
+  primaryActionText: {
+    color: tokens.colors.onPrimary,
+    fontSize: tokens.typography.bodySemibold.fontSize,
+    fontWeight: '700',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    minHeight: 380,
+    paddingTop: tokens.spacing.xs,
+    paddingBottom: Platform.OS === 'ios' ? tokens.spacing.xl : tokens.spacing.md,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: tokens.colors.borderSubtle,
+    alignSelf: 'center',
+    marginTop: 6,
+    marginBottom: tokens.spacing.sm,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: tokens.spacing.lg,
+    paddingBottom: tokens.spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderSubtle,
+  },
+  sheetTitle: {
+    color: tokens.colors.onBackground,
+    fontSize: tokens.typography.title.fontSize,
+    fontWeight: '800',
+  },
+  sheetCountPill: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  sheetCountText: {
+    color: tokens.colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sheetSubtotalText: {
+    color: tokens.colors.secondary,
+    fontSize: tokens.typography.caption.fontSize,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: tokens.colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetCloseBtnText: {
+    color: tokens.colors.onBackground,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sheetScrollView: {
+    flex: 1,
+  },
+  sheetScrollContent: {
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: tokens.spacing.sm,
+  },
+  emptyScannedContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: tokens.spacing.xxl,
+    paddingHorizontal: tokens.spacing.xl,
+  },
+  emptyScannedTitle: {
+    color: tokens.colors.onBackground,
+    fontSize: tokens.typography.section.fontSize,
+    fontWeight: '700',
+    marginTop: tokens.spacing.md,
+  },
+  emptyScannedSubtitle: {
+    color: tokens.colors.secondary,
+    fontSize: tokens.typography.body.fontSize,
+    textAlign: 'center',
+    marginTop: tokens.spacing.xs,
+    lineHeight: 20,
+  },
+  itemRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceBright,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    padding: tokens.spacing.sm,
+    marginBottom: tokens.spacing.xs + 2,
+    gap: tokens.spacing.sm,
+  },
+  itemThumbnailWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: tokens.borderRadius.sm,
+    backgroundColor: tokens.colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  itemThumbnail: {
+    width: 44,
+    height: 44,
+  },
+  itemThumbnailFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    color: tokens.colors.onBackground,
+    fontSize: tokens.typography.bodySemibold.fontSize,
+    fontWeight: '700',
+  },
+  itemMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 2,
+  },
+  metaBadge: {
+    backgroundColor: tokens.colors.surfaceMuted,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  metaBadgeText: {
+    color: tokens.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  barcodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceMuted,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    gap: 3,
+  },
+  barcodeBadgeText: {
+    color: tokens.colors.secondary,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  itemPriceText: {
+    color: tokens.colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  itemActionsColumn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quantityStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceAlt,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  stepperBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperQtyText: {
+    color: tokens.colors.onBackground,
+    fontSize: 13,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  readonlyQtyBadge: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: tokens.borderRadius.pill,
+  },
+  readonlyQtyText: {
+    color: tokens.colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  trashBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.spacing.sm,
-    marginTop: tokens.spacing.xs,
-  },
-  manualInputWrapper: {
-    flex: 1,
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  manualInput: {
-    minHeight: tokens.touchTarget.minHeight,
-    backgroundColor: tokens.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: tokens.colors.borderSubtle,
-    borderRadius: tokens.borderRadius.pill,
     paddingHorizontal: tokens.spacing.md,
-    paddingRight: 36,
-    color: tokens.colors.onBackground,
-    fontSize: tokens.typography.body.fontSize,
-    fontWeight: '600',
+    paddingTop: tokens.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
   },
-  clearInputBtn: {
-    position: 'absolute',
-    right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: tokens.colors.secondaryContainer,
-    justifyContent: 'center',
+  sheetKeepScanningBtn: {
+    flex: 1,
+    minHeight: tokens.touchTarget.actionButtonHeight,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderDark,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: tokens.colors.surfaceContainerLowest,
   },
-  clearInputText: {
-    color: tokens.colors.secondary,
-    fontSize: 11,
+  sheetKeepScanningText: {
+    color: tokens.colors.onBackground,
+    fontSize: tokens.typography.bodySemibold.fontSize,
     fontWeight: '700',
   },
-  manualSubmitButton: {
-    minHeight: tokens.touchTarget.minHeight,
-    minWidth: 84,
-    paddingHorizontal: tokens.spacing.md,
-    backgroundColor: tokens.colors.primaryContainer,
+  sheetPrimaryBtn: {
+    flex: 1.2,
+    minHeight: tokens.touchTarget.actionButtonHeight,
     borderRadius: tokens.borderRadius.pill,
-    justifyContent: 'center',
+    backgroundColor: tokens.colors.primaryContainer,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     ...tokens.shadows.card,
   },
-  manualSubmitButtonDisabled: {
-    backgroundColor: tokens.colors.textDisabled,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  manualSubmitText: {
+  sheetPrimaryBtnText: {
     color: tokens.colors.onPrimary,
     fontSize: tokens.typography.bodySemibold.fontSize,
     fontWeight: '700',

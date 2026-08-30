@@ -124,11 +124,11 @@ export function PurchaseOrdersTab({
                         <View style={styles.poIconBox}>
                           <Ionicons name="document-text" size={16} color={tokens.colors.primaryContainer} />
                         </View>
-                        <View>
-                          <Text style={styles.poModernNumber}>{po.poNumber}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.poModernNumber} numberOfLines={1}>{po.poNumber}</Text>
                           <View style={styles.poSupplierRow}>
                             <Ionicons name="business-outline" size={12} color={tokens.colors.secondary} />
-                            <Text style={styles.poModernSupplier}>{po.supplierName}</Text>
+                            <Text style={styles.poModernSupplier} numberOfLines={1} ellipsizeMode="tail">{po.supplierName}</Text>
                           </View>
                         </View>
                       </View>

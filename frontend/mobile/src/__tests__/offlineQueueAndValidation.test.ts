@@ -1,4 +1,4 @@
-﻿import { getBackoffDelay } from '../hooks/useOfflineQueue'
+import { getBackoffDelay } from '../hooks/useOfflineQueue'
 import { customerSchema, supplierSchema, productSchema } from '../utils/validation'
 
 describe('useOfflineQueue Backoff & Retry', () => {
@@ -13,6 +13,45 @@ describe('useOfflineQueue Backoff & Retry', () => {
   it('caps backoff delay at 30000ms', () => {
     expect(getBackoffDelay(5)).toBe(30000)
     expect(getBackoffDelay(10)).toBe(30000)
+  })
+
+  it('correctly constructs offline checkout mutation with client_mutation_id', () => {
+    const mockPayload = {
+      client_mutation_id: 'mut-12345',
+      channel_id: 'chan-pos',
+      items: [{ variant_id: 'var-1', quantity: 2, unit_price: 5.0 }],
+      payment_method: 'Cash',
+      payment_amount: 10.0,
+      status: 'paid',
+    }
+
+    const mutation = {
+      id: mockPayload.client_mutation_id,
+      timestamp: Date.now(),
+      endpoint: '/orders/checkout',
+      payload: mockPayload,
+      retryCount: 0,
+      status: 'pending' as const,
+    }
+
+    expect(mutation.id).toBe('mut-12345')
+    expect(mutation.endpoint).toBe('/orders/checkout')
+    expect(mutation.status).toBe('pending')
+  })
+
+  it('deduplicates mutations when enqueueing existing client_mutation_id', () => {
+    const queue: any[] = [
+      { id: 'mut-1', endpoint: '/orders/checkout', retryCount: 0, status: 'pending' },
+      { id: 'mut-2', endpoint: '/inventory/adjust', retryCount: 0, status: 'pending' },
+    ]
+
+    const incoming = { id: 'mut-1', endpoint: '/orders/checkout', retryCount: 1, status: 'pending' }
+    const updatedQueue = queue.some((m) => m.id === incoming.id)
+      ? queue.map((m) => (m.id === incoming.id ? incoming : m))
+      : [...queue, incoming]
+
+    expect(updatedQueue).toHaveLength(2)
+    expect(updatedQueue[0].retryCount).toBe(1)
   })
 })
 

@@ -2,13 +2,13 @@ import React from 'react'
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
-import { CopyableBadge } from './CopyableBadge'
 import type { Product } from '../types'
 
 export interface ProductCardProps {
@@ -18,6 +18,7 @@ export interface ProductCardProps {
   onAddToCart?: (product: Product) => void
   onIncrease?: (product: Product) => void
   onDecrease?: (product: Product) => void
+  onSetQuantity?: (product: Product, quantity: number) => void
   onPress?: (product: Product) => void
 }
 
@@ -28,6 +29,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
   onAddToCart,
   onIncrease,
   onDecrease,
+  onSetQuantity,
   onPress,
 }) => {
   const price =
@@ -44,7 +46,12 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
   const isOutOfStock = totalStock <= 0
   const isLowStock = totalStock > 0 && totalStock <= reorderLevel
   const isInCart = cartQuantity > 0
-  const isVariable = product.variants && product.variants.length > 0
+  const isVariable =
+    Boolean(product.variants && product.variants.length > 1) ||
+    Boolean(
+      product.variants?.[0]?.attribute_values &&
+        product.variants[0].attribute_values.length > 0
+    )
 
   const categoryName = product.category?.name || 'General'
 
@@ -59,13 +66,11 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
   }
 
   const handleCardPress = () => {
-    if (mode === 'management') {
-      onPress?.(product)
-    } else if (isInCart) {
-      onPress?.(product)
-    } else {
+    if (onPress) {
+      onPress(product)
+    } else if (onAddToCart) {
       if (isOutOfStock) return
-      onAddToCart?.(product)
+      onAddToCart(product)
     }
   }
 
@@ -125,34 +130,6 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
           {product.name}
         </Text>
 
-        {/* SKU & Barcode copyable pills */}
-        {(() => {
-          const cardSku = product.sku || (!isVariable ? product.variants?.[0]?.sku : null)
-          const cardBarcode = product.barcode || (!isVariable ? product.variants?.[0]?.barcode : null)
-
-          if (!cardSku && !cardBarcode) return null
-
-          return (
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-              {Boolean(cardSku) && (
-                <CopyableBadge
-                  type="sku"
-                  value={cardSku}
-                  compact
-                />
-              )}
-              {Boolean(cardBarcode) && (
-                <CopyableBadge
-                  type="barcode"
-                  value={cardBarcode}
-                  compact
-                  prefixIcon
-                />
-              )}
-            </View>
-          )
-        })()}
-
         {/* Category + Stock row */}
         <View style={styles.metaRow}>
           <View style={styles.categoryBadge}>
@@ -198,17 +175,23 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
           ) : !isInCart ? (
             <TouchableOpacity
               testID={`btn-add-product-${product.id}`}
-              style={[styles.addBtn, isOutOfStock && styles.addBtnDisabled]}
-              onPress={() => onAddToCart?.(product)}
-              disabled={isOutOfStock}
+              style={[styles.addBtn, isOutOfStock && !isVariable && styles.addBtnDisabled]}
+              onPress={() => {
+                if (onPress) {
+                  onPress(product)
+                } else {
+                  onAddToCart?.(product)
+                }
+              }}
+              disabled={isOutOfStock && !isVariable}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel={`Add ${product.name} to cart`}
             >
               <Ionicons
-                name="add"
+                name={isVariable ? 'options-outline' : 'add'}
                 size={18}
-                color={isOutOfStock ? tokens.colors.textDisabled : tokens.colors.primaryContainer}
+                color={isOutOfStock && !isVariable ? tokens.colors.textDisabled : tokens.colors.primaryContainer}
               />
             </TouchableOpacity>
           ) : (
@@ -225,7 +208,19 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
                 <Ionicons name="remove" size={14} color={tokens.colors.onPrimary} />
               </TouchableOpacity>
 
-              <Text style={styles.stepperCount}>{cartQuantity}</Text>
+              <TextInput
+                style={styles.stepperCount}
+                keyboardType="numeric"
+                value={String(cartQuantity)}
+                onChangeText={(txt) => {
+                  const clean = txt.replace(/[^0-9]/g, '')
+                  const num = parseInt(clean, 10)
+                  if (onSetQuantity) {
+                    onSetQuantity(product, isNaN(num) ? 0 : Math.min(num, totalStock))
+                  }
+                }}
+                selectTextOnFocus
+              />
 
               <TouchableOpacity
                 testID={`btn-inc-product-${product.id}`}
@@ -261,6 +256,7 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    maxWidth: '48.5%',
     backgroundColor: tokens.colors.surfaceContainerLowest,
     borderRadius: tokens.borderRadius.card,
     overflow: 'hidden',
@@ -448,8 +444,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
-    minWidth: 14,
+    minWidth: 20,
     textAlign: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+    includeFontPadding: false,
   },
   manageBtn: {
     width: 30,

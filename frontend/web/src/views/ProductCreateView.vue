@@ -3,13 +3,38 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAttributeStore, type Attribute } from '@/stores/attributeStore'
 import { useProductStore } from '@/stores/productStore'
+import { useCategoryStore } from '@/stores/categoryStore'
+import {
+  ArrowLeft,
+  Check,
+  Tag,
+  Layers,
+  AlertCircle,
+  TrendingUp,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  Switch,
+  Card,
+  Alert,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@/components/ui'
 
 const router = useRouter()
 const attrStore = useAttributeStore()
 const productStore = useProductStore()
+const categoryStore = useCategoryStore()
 
 onMounted(() => {
   attrStore.fetchAttributes()
+  categoryStore.fetchCategories()
 })
 
 // Active Step in Stepper Navigation
@@ -40,8 +65,14 @@ const grossMarginPercent = computed(() => {
   return Math.round((grossProfit.value / s) * 100)
 })
 
+// Helper to normalize attribute value name
+function getValName(val: string | { id?: string; value_name?: string }): string {
+  if (typeof val === 'string') return val
+  return val.value_name || val.id || ''
+}
+
 // --- Attribute selection ---
-const selectedAttrs = ref<Record<string, Set<string>>>({}) // attribute_id -> Set of value_ids
+const selectedAttrs = ref<Record<string, Set<string>>>({}) // attribute_id -> Set of value strings
 
 function toggleAttr(attr: Attribute) {
   if (selectedAttrs.value[attr.id]) {
@@ -51,15 +82,15 @@ function toggleAttr(attr: Attribute) {
   }
 }
 
-function toggleValue(attrId: string, valueId: string) {
+function toggleValue(attrId: string, valueName: string) {
   if (!selectedAttrs.value[attrId]) {
     selectedAttrs.value[attrId] = new Set()
   }
   const set = selectedAttrs.value[attrId]
-  if (set.has(valueId)) {
-    set.delete(valueId)
+  if (set.has(valueName)) {
+    set.delete(valueName)
   } else {
-    set.add(valueId)
+    set.add(valueName)
   }
 }
 
@@ -67,8 +98,8 @@ function isAttrActive(attrId: string) {
   return !!selectedAttrs.value[attrId]
 }
 
-function isValueActive(attrId: string, valueId: string) {
-  return selectedAttrs.value[attrId]?.has(valueId) ?? false
+function isValueActive(attrId: string, valueName: string) {
+  return selectedAttrs.value[attrId]?.has(valueName) ?? false
 }
 
 // --- Cartesian Matrix Preview ---
@@ -95,13 +126,10 @@ const matrixPreview = computed<MatrixRow[]>(() => {
   for (const [attrId, valSet] of activeAttrEntries) {
     const attr = attrStore.attributes.find(a => a.id === attrId)
     if (!attr) continue
-    const valItems = [...valSet].map(vid => {
-      const v = attr.values.find(val => val.id === vid)
-      return {
-        id: vid,
-        label: v?.value_name ?? vid,
-      }
-    })
+    const valItems = [...valSet].map(vStr => ({
+      id: vStr,
+      label: vStr,
+    }))
     groups.push(valItems)
   }
 
@@ -194,167 +222,195 @@ function fmtMoney(num: number): string {
 </script>
 
 <template>
-  <div class="flex-col gap-24" style="max-width: 1140px;">
+  <div class="flex flex-col gap-6 max-w-5xl mx-auto w-full">
     <!-- Breadcrumb & Header -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-12">
-        <RouterLink to="/products" class="btn btn--ghost btn--sm">
-          ← Back to Catalog
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <RouterLink to="/products">
+          <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs">
+            <ArrowLeft :size="14" />
+            <span>Back to Catalog</span>
+          </Button>
         </RouterLink>
         <div>
-          <h1 class="page-title" style="margin: 0;">Create Product Line</h1>
-          <p class="text-muted text-xs mt-2">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Create Product Line</h1>
+          <p class="text-xs text-muted-foreground mt-0.5">
             Configure master pricing, assign variant options, and generate SKU matrices.
           </p>
         </div>
       </div>
 
-      <div class="flex items-center gap-8">
-        <span v-if="matrixPreview.length > 0" class="badge badge--green tabular-nums">
+      <div class="flex items-center gap-2">
+        <Badge v-if="matrixPreview.length > 0" variant="success" class="font-mono text-xs px-2.5 py-1">
           ✓ {{ matrixPreview.length }} SKUs ready
-        </span>
+        </Badge>
       </div>
     </div>
 
     <!-- Stepper Navigation Header -->
-    <section class="card" style="padding: 16px 24px; background-color: var(--surface-base);">
-      <div class="stepper-nav">
-        <div
-          class="step-item"
-          :class="{ 'step-item--active': currentStep === 1, 'step-item--done': form.name && form.selling_price }"
+    <div class="rounded-xl border border-border bg-card p-4 shadow-xs">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <button
+          type="button"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
+          :class="currentStep === 1 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
           @click="currentStep = 1"
         >
-          <div class="step-num">1</div>
-          <div class="step-info">
-            <div class="step-title">Base Details & Pricing</div>
-            <div class="step-sub">Name, barcodes & margins</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
+            :class="form.name && form.selling_price ? 'bg-success text-success-foreground' : currentStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <Check v-if="form.name && form.selling_price" :size="14" />
+            <span v-else>1</span>
           </div>
-        </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Base Details & Pricing</div>
+            <div class="text-[11px] text-muted-foreground">Name, barcodes & margins</div>
+          </div>
+        </button>
 
-        <div class="step-divider"></div>
+        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
 
-        <div
-          class="step-item"
-          :class="{ 'step-item--active': currentStep === 2, 'step-item--done': matrixPreview.length > 0 }"
+        <button
+          type="button"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
+          :class="currentStep === 2 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
           @click="currentStep = 2"
         >
-          <div class="step-num">2</div>
-          <div class="step-info">
-            <div class="step-title">Variant Options</div>
-            <div class="step-sub">Sizes, colors, attributes</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
+            :class="matrixPreview.length > 0 ? 'bg-success text-success-foreground' : currentStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <Check v-if="matrixPreview.length > 0" :size="14" />
+            <span v-else>2</span>
           </div>
-        </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Variant Options</div>
+            <div class="text-[11px] text-muted-foreground">Sizes, colors, attributes</div>
+          </div>
+        </button>
 
-        <div class="step-divider"></div>
+        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
 
-        <div
-          class="step-item"
-          :class="{ 'step-item--active': currentStep === 3 }"
+        <button
+          type="button"
+          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
+          :class="currentStep === 3 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
           @click="currentStep = 3"
         >
-          <div class="step-num">3</div>
-          <div class="step-info">
-            <div class="step-title">Cartesian Matrix</div>
-            <div class="step-sub">Review generated SKUs</div>
+          <div
+            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
+            :class="currentStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
+          >
+            <span>3</span>
           </div>
-        </div>
+          <div>
+            <div class="text-xs font-bold text-foreground">Cartesian Matrix</div>
+            <div class="text-[11px] text-muted-foreground">Review generated SKUs</div>
+          </div>
+        </button>
       </div>
-    </section>
+    </div>
 
     <!-- Alert Notifications -->
-    <div v-if="submitError || productStore.error" class="alert alert--error">
-      <span>⚠️ {{ submitError || productStore.error }}</span>
-    </div>
+    <Alert v-if="submitError || productStore.error" variant="error">
+      <div class="flex items-center gap-2">
+        <AlertCircle :size="16" class="flex-shrink-0" />
+        <span>{{ submitError || productStore.error }}</span>
+      </div>
+    </Alert>
 
-    <div v-if="successMessage" class="alert alert--success">
-      <span>✓ {{ successMessage }}</span>
-    </div>
+    <Alert v-if="successMessage" variant="success">
+      <div class="flex items-center gap-2">
+        <Check :size="16" class="flex-shrink-0" />
+        <span>{{ successMessage }}</span>
+      </div>
+    </Alert>
 
     <!-- Step 1 & 2 Grid Section -->
-    <div class="grid-2 gap-24">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Left: Base Product Details Form -->
-      <section class="card flex-col gap-16">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-8">
-            <div class="icon-badge icon-badge--sm icon-badge--primary">1</div>
-            <h2 class="font-bold text-lg">Base Product Details</h2>
+      <Card class="p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold font-mono">1</div>
+            <h2 class="font-display font-bold text-base text-foreground">Base Product Details</h2>
           </div>
-          <span class="badge badge--neutral text-xs">Required Fields *</span>
+          <span class="text-[11px] text-muted-foreground font-medium">* Required</span>
         </div>
 
-        <div class="flex-col gap-16">
-          <div class="form-group">
-            <label class="form-label">Product Name *</label>
-            <input
+        <div class="flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Name *</label>
+            <Input
               id="product-name"
               v-model="form.name"
               type="text"
               placeholder="e.g. Classic Oxford Cotton Shirt"
-              :class="{ 'input--error': productStore.fieldErrors?.name }"
+              class="h-9 bg-surface text-sm"
+              :error="!!productStore.fieldErrors?.name"
             />
-            <span v-if="productStore.fieldErrors?.name" class="form-error-text">
+            <span v-if="productStore.fieldErrors?.name" class="text-xs text-destructive mt-1 block">
               {{ productStore.fieldErrors.name[0] }}
             </span>
           </div>
 
-          <div class="grid-2 gap-16">
-            <div class="form-group">
-              <label class="form-label">Master Barcode</label>
-              <input
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Master Barcode</label>
+              <Input
                 id="product-barcode"
                 v-model="form.barcode"
                 type="text"
                 placeholder="e.g. 8859123456789"
-                :class="{ 'input--error': productStore.fieldErrors?.barcode }"
+                class="h-9 bg-surface text-sm font-mono"
               />
-              <span v-if="productStore.fieldErrors?.barcode" class="form-error-text">
-                {{ productStore.fieldErrors.barcode[0] }}
-              </span>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Default Reorder Level</label>
-              <input
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Default Reorder Level</label>
+              <Input
                 id="product-reorder"
                 v-model="form.default_reorder_level"
                 type="number"
                 min="0"
                 placeholder="5"
+                class="h-9 bg-surface text-sm font-mono"
               />
             </div>
           </div>
 
-          <div class="grid-2 gap-16">
-            <div class="form-group">
-              <label class="form-label">Purchase Price ($) *</label>
-              <input
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Cost Price ($) *</label>
+              <Input
                 id="product-purchase-price"
                 v-model="form.purchase_price"
                 type="number"
                 step="0.01"
                 min="0"
                 placeholder="0.00"
-                class="tabular-nums"
-                :class="{ 'input--error': productStore.fieldErrors?.purchase_price }"
+                class="h-9 bg-surface text-sm font-mono"
+                :error="!!productStore.fieldErrors?.purchase_price"
               />
-              <span v-if="productStore.fieldErrors?.purchase_price" class="form-error-text">
+              <span v-if="productStore.fieldErrors?.purchase_price" class="text-xs text-destructive mt-1 block">
                 {{ productStore.fieldErrors.purchase_price[0] }}
               </span>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Selling Price ($) *</label>
-              <input
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Selling Price ($) *</label>
+              <Input
                 id="product-selling-price"
                 v-model="form.selling_price"
                 type="number"
                 step="0.01"
                 min="0.01"
                 placeholder="0.00"
-                class="tabular-nums"
-                :class="{ 'input--error': productStore.fieldErrors?.selling_price }"
+                class="h-9 bg-surface text-sm font-mono"
+                :error="!!productStore.fieldErrors?.selling_price"
               />
-              <span v-if="productStore.fieldErrors?.selling_price" class="form-error-text">
+              <span v-if="productStore.fieldErrors?.selling_price" class="text-xs text-destructive mt-1 block">
                 {{ productStore.fieldErrors.selling_price[0] }}
               </span>
             </div>
@@ -363,285 +419,210 @@ function fmtMoney(num: number): string {
           <!-- Profit Margin Gauge Banner -->
           <div
             v-if="form.selling_price && form.purchase_price"
-            class="flex items-center justify-between"
-            style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md); border: 1px solid var(--border-color);"
+            class="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-surface-subtle/80 text-xs"
           >
-            <span class="text-xs text-muted font-semibold">Estimated Gross Profit:</span>
-            <div class="flex items-center gap-8">
-              <span class="font-bold tabular-nums" :style="{ color: grossProfit >= 0 ? 'var(--status-success)' : 'var(--status-error)' }">
+            <div class="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <TrendingUp :size="14" class="text-primary" />
+              <span>Estimated Profit:</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold" :class="grossProfit >= 0 ? 'text-success' : 'text-destructive'">
                 {{ fmtMoney(grossProfit) }} / unit
               </span>
-              <span class="badge" :class="grossProfit >= 0 ? 'badge--green' : 'badge--red'">
+              <Badge :variant="grossProfit >= 0 ? 'success' : 'destructive'" class="text-[10px] font-mono px-1.5 py-0">
                 {{ grossMarginPercent }}% Margin
-              </span>
+              </Badge>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Product Image URL</label>
-            <input
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Image URL</label>
+            <Input
               id="product-image"
               v-model="form.image_url"
               type="url"
               placeholder="https://images.unsplash.com/photo-..."
+              class="h-9 bg-surface text-sm"
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Product Description</label>
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Description</label>
             <textarea
               id="product-description"
               v-model="form.description"
               rows="3"
               placeholder="Detailed product descriptions, material specs, or care notes…"
+              class="w-full px-3 py-2 text-sm bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
             ></textarea>
           </div>
 
-          <div class="flex items-center gap-12 pt-8" style="border-top: 1px solid var(--border-subtle);">
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="form.is_active" />
-              <span class="toggle-slider"></span>
-            </label>
+          <div class="flex items-center justify-between pt-3 border-t border-border/60">
             <div>
-              <span class="font-semibold text-sm block">Active in POS & Online Store</span>
-              <span class="text-xs text-muted">Toggle availability for sales channels and register scans</span>
+              <span class="text-xs font-semibold text-foreground block">Active for Sale</span>
+              <span class="text-[11px] text-muted-foreground">Available on POS registers & channels</span>
             </div>
+            <Switch
+              :checked="form.is_active"
+              @update:checked="(val) => form.is_active = val"
+            />
           </div>
         </div>
-      </section>
+      </Card>
 
       <!-- Right: Variant Attributes Selector -->
-      <section class="card flex-col gap-16">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-8">
-            <div class="icon-badge icon-badge--sm icon-badge--warning">2</div>
-            <h2 class="font-bold text-lg">Variant Attributes</h2>
+      <Card class="p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-md bg-warning text-warning-foreground flex items-center justify-center text-xs font-bold font-mono">2</div>
+            <h2 class="font-display font-bold text-base text-foreground">Variant Attributes</h2>
           </div>
-          <span class="badge badge--blue tabular-nums">
+          <Badge variant="info" class="font-mono text-xs">
             {{ attrStore.attributes.length }} Available
-          </span>
+          </Badge>
         </div>
 
-        <p class="text-muted text-sm">
-          Select attributes (e.g. Size, Color) and pick specific values to automatically generate Cartesian combinations.
+        <p class="text-xs text-muted-foreground leading-relaxed">
+          Select attributes (e.g. Size, Color) and click specific value chips to automatically generate Cartesian variant combinations.
         </p>
 
-        <div v-if="attrStore.loading" class="text-muted" style="padding: 16px 0;">
-          <div v-for="i in 3" :key="i" class="skeleton-row"></div>
+        <div v-if="attrStore.loading" class="py-6 space-y-2">
+          <div v-for="i in 3" :key="i" class="h-10 rounded-lg bg-muted/50 animate-pulse" />
         </div>
 
-        <div v-else-if="attrStore.attributes.length === 0" class="empty-state" style="padding: 24px 0;">
-          <div class="empty-icon" style="font-size: 32px;">🏷️</div>
-          <p class="text-muted">No attributes configured in system.</p>
+        <div v-else-if="attrStore.attributes.length === 0" class="py-8 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+          <Tag :size="28" class="text-muted-foreground/60 stroke-1" />
+          <span>No attributes defined in system yet.</span>
         </div>
 
-        <div v-else class="flex-col gap-16">
+        <div v-else class="flex flex-col gap-3">
           <div
             v-for="attr in attrStore.attributes"
             :key="attr.id"
-            class="attr-card"
-            :class="{ 'attr-card--selected': isAttrActive(attr.id) }"
+            class="p-3.5 rounded-lg border transition-all"
+            :class="isAttrActive(attr.id) ? 'border-primary/40 bg-surface-subtle' : 'border-border bg-surface hover:border-border-strong'"
           >
             <!-- Attribute Header / Toggle -->
             <div class="flex items-center justify-between">
-              <span
+              <button
+                type="button"
                 :id="`attr-toggle-${attr.id}`"
-                class="tag font-semibold"
-                :class="isAttrActive(attr.id) ? 'tag--active' : 'tag--inactive'"
+                class="flex items-center gap-2 text-xs font-semibold rounded-md px-2.5 py-1 transition-colors"
+                :class="isAttrActive(attr.id) ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'"
                 @click="toggleAttr(attr)"
               >
-                {{ isAttrActive(attr.id) ? '✓ ' : '+ ' }} {{ attr.name }}
-              </span>
+                <span>{{ isAttrActive(attr.id) ? '✓' : '+' }}</span>
+                <span>{{ attr.name }}</span>
+              </button>
 
-              <span v-if="isAttrActive(attr.id)" class="text-xs font-semibold" style="color: var(--action-primary);">
+              <span v-if="isAttrActive(attr.id)" class="text-[11px] font-mono font-medium text-primary">
                 {{ selectedAttrs[attr.id]?.size || 0 }} of {{ attr.values.length }} selected
               </span>
             </div>
 
             <!-- Value Chips -->
-            <div v-if="isAttrActive(attr.id)" class="tags" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
-              <span
+            <div v-if="isAttrActive(attr.id)" class="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-dashed border-border/80">
+              <button
+                type="button"
                 v-for="val in attr.values"
-                :key="val.id"
-                :id="`val-toggle-${val.id}`"
-                class="tag"
-                :class="isValueActive(attr.id, val.id) ? 'tag--active' : 'tag--inactive'"
-                @click="toggleValue(attr.id, val.id)"
+                :key="getValName(val)"
+                :id="`val-toggle-${getValName(val)}`"
+                class="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
+                :class="isValueActive(attr.id, getValName(val))
+                  ? 'bg-cta text-cta-foreground font-semibold shadow-xs'
+                  : 'bg-surface border border-border text-foreground hover:border-border-strong'"
+                @click="toggleValue(attr.id, getValName(val))"
               >
-                {{ val.value_name }}
-              </span>
+                {{ getValName(val) }}
+              </button>
             </div>
           </div>
         </div>
-      </section>
+      </Card>
     </div>
 
     <!-- Step 3: Live Cartesian Matrix Preview Table -->
-    <section class="card">
-      <div class="flex items-center justify-between mb-16" style="flex-wrap: wrap; gap: 12px;">
-        <div class="flex items-center gap-10">
-          <div class="icon-badge icon-badge--sm icon-badge--success">3</div>
+    <Card class="p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-2 border-b border-border/60">
+        <div class="flex items-center gap-2.5">
+          <div class="w-6 h-6 rounded-md bg-success text-success-foreground flex items-center justify-center text-xs font-bold font-mono">3</div>
           <div>
-            <h2 class="font-bold text-lg">
-              Live Cartesian Variant Matrix Preview
-              <span v-if="matrixPreview.length > 0" class="badge badge--blue tabular-nums" style="margin-left: 8px;">
-                {{ matrixPreview.length }} Combinations
-              </span>
+            <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+              <span>Live Cartesian Variant Matrix Preview</span>
+              <Badge v-if="matrixPreview.length > 0" variant="info" class="font-mono text-xs">
+                {{ matrixPreview.length }} SKUs
+              </Badge>
             </h2>
-            <p class="text-muted text-xs mt-2">
-              Real-time preview of SKU variants that will be generated upon saving.
+            <p class="text-[11px] text-muted-foreground mt-0.5">
+              Real-time generated SKU variant catalog combinations based on selected attributes.
             </p>
           </div>
         </div>
       </div>
 
-      <div v-if="matrixPreview.length === 0" class="empty-state" style="padding: 36px 0;">
-        <div class="empty-icon" style="font-size: 36px;">🧬</div>
-        <h4 class="font-semibold text-base mb-4">No attributes selected</h4>
-        <p class="text-muted text-sm">
-          Select one or more attribute values in Step 2 above to generate Cartesian variant matrix rows.
-        </p>
+      <div v-if="matrixPreview.length === 0" class="py-10 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+        <Layers :size="32" class="text-muted-foreground/50 stroke-1" />
+        <span class="font-medium text-foreground text-sm">No attributes selected</span>
+        <span class="text-muted-foreground">Select one or more attribute values in Step 2 to generate SKU combinations.</span>
       </div>
 
-      <div v-else class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Generated SKU</th>
-              <th>Option Combinations</th>
-              <th>Unit Cost</th>
-              <th>Selling Price</th>
-              <th>Reorder At</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in matrixPreview" :key="row.sku">
-              <td>
-                <code class="tabular-nums font-semibold" style="font-size: 13px; color: var(--action-primary); background-color: var(--surface-alt); padding: 3px 8px; border-radius: var(--radius-xs); border: 1px solid var(--border-color);">
-                  {{ row.sku }}
-                </code>
-              </td>
-              <td>
-                <div class="tags">
-                  <span v-for="opt in row.combination" :key="opt" class="badge badge--neutral">
+      <div v-else class="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow class="bg-muted/40">
+              <TableHead>Generated SKU</TableHead>
+              <TableHead>Option Combinations</TableHead>
+              <TableHead class="font-mono">Cost</TableHead>
+              <TableHead class="font-mono">Selling Price</TableHead>
+              <TableHead class="font-mono">Reorder Level</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in matrixPreview" :key="row.sku" class="hover:bg-surface-subtle/80 transition-colors">
+              <TableCell class="font-mono text-xs font-semibold text-primary">
+                {{ row.sku }}
+              </TableCell>
+              <TableCell>
+                <div class="flex flex-wrap gap-1">
+                  <Badge v-for="opt in row.combination" :key="opt" variant="neutral" class="text-[10px] px-1.5 py-0">
                     {{ opt }}
-                  </span>
+                  </Badge>
                 </div>
-              </td>
-              <td class="tabular-nums text-muted">{{ fmtMoney(row.purchasePrice) }}</td>
-              <td class="tabular-nums font-bold" style="color: var(--action-primary);">{{ fmtMoney(row.sellingPrice) }}</td>
-              <td class="tabular-nums text-muted">{{ row.reorderLevel }} units</td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                {{ fmtMoney(row.purchasePrice) }}
+              </TableCell>
+              <TableCell class="font-mono text-xs font-bold text-foreground tabular-nums">
+                {{ fmtMoney(row.sellingPrice) }}
+              </TableCell>
+              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                {{ row.reorderLevel }} units
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
-    </section>
+    </Card>
 
-    <!-- Form Submit Action Bar -->
-    <div class="flex items-center justify-end gap-12 mt-8">
-      <RouterLink to="/products" class="btn btn--ghost">
-        Cancel
+    <!-- Submit Action Bar -->
+    <div class="flex items-center justify-end gap-3 pb-8">
+      <RouterLink to="/products">
+        <Button variant="outline" size="sm" class="h-9 px-4 text-xs">
+          Cancel
+        </Button>
       </RouterLink>
 
-      <button
+      <Button
         id="btn-create-product"
-        class="btn btn--primary btn--lg"
+        variant="primary"
+        size="sm"
+        class="h-9 px-5 text-xs gap-1.5"
         :disabled="productStore.mutating"
         @click="submit"
       >
-        <span v-if="productStore.mutating" class="spinner"></span>
-        {{ productStore.mutating ? 'Saving Product & Matrix…' : '✓ Save & Generate Product' }}
-      </button>
+        <span v-if="productStore.mutating" class="animate-spin mr-1">⏳</span>
+        <span>{{ productStore.mutating ? 'Saving Product…' : '✓ Save Product Line' }}</span>
+      </Button>
     </div>
   </div>
 </template>
-
-<style scoped>
-.stepper-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  transition: all var(--transition);
-  flex: 1;
-}
-
-.step-item:hover {
-  background-color: var(--surface-hover);
-}
-
-.step-item--active {
-  background-color: var(--action-primary-bg);
-}
-
-.step-num {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background-color: var(--surface-alt);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-weight: 700;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.step-item--active .step-num {
-  background-color: var(--action-primary);
-  border-color: var(--action-primary);
-  color: #ffffff;
-}
-
-.step-item--done .step-num {
-  background-color: var(--status-success);
-  border-color: var(--status-success);
-  color: #ffffff;
-}
-
-.step-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.step-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.step-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.step-divider {
-  width: 32px;
-  height: 1px;
-  background-color: var(--border-color);
-  flex-shrink: 0;
-}
-
-.attr-card {
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  background-color: var(--surface-base);
-  transition: all var(--transition);
-}
-
-.attr-card--selected {
-  border-color: var(--action-primary-border);
-  background-color: #FAFCFF;
-}
-</style>

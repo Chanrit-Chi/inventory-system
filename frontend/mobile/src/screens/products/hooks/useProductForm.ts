@@ -2,10 +2,12 @@ import { useState, useCallback } from 'react'
 import { Alert } from 'react-native'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
+import { queryKeys } from '../../../api/queryKeys'
 import { productSchema, ProductFormValues } from '../../../utils/validation'
 import { createProduct, updateProduct, uploadMedia } from '../../../api/endpoints'
-import type { Product, ProductVariant, ScannedAttributeValue } from '../../../types'
+import type { Product, ProductVariant, ScannedAttributeValue, ApiResponse } from '../../../types'
 
 export interface VariantDraft {
   id: string
@@ -44,13 +46,14 @@ export function useProductForm({
   loadProducts,
   managedCategories,
 }: UseProductFormProps) {
+  const queryClient = useQueryClient()
   const [productModalOpen, setProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
   const { control, handleSubmit, reset, watch, setValue, getValues } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      productType: 'SIMPLE',
+      productType: 'VARIABLE',
       name: '',
       category: 'Apparel',
       purchase_price: '',
@@ -120,8 +123,8 @@ export function useProductForm({
         const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg')
         setSelectedPhotoFile({ uri: asset.uri, name: filename, type: mimeType })
       }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to select image.')
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to select image.')
     }
   }
 
@@ -143,8 +146,9 @@ export function useProductForm({
         const filename = `photo_${Date.now()}.jpg`
         setSelectedPhotoFile({ uri: asset.uri, name: filename, type: 'image/jpeg' })
       }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to capture photo.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to capture photo.'
+      Alert.alert('Error', msg)
     }
   }
 
@@ -290,7 +294,7 @@ export function useProductForm({
         if (uploadRes && uploadRes.data?.url) {
           finalImageUrl = uploadRes.data.url
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.warn('Image upload failed, preserving local preview:', err)
         finalImageUrl = selectedPhotoUri
       } finally {
@@ -332,7 +336,11 @@ export function useProductForm({
         selling_price_override: vd.priceOverride || null,
         selling_price: vd.priceOverride || sellP.toString(),
         cost_price_override: vd.costOverride || null,
-        attribute_values: vd.attribute_values,
+        attribute_values: (vd.attribute_values || []).map((av: any) => ({
+          id: String(av.id || `av-${av.value_name || av.value || ''}`),
+          value_name: String(av.value_name || av.value || ''),
+          attribute: av.attribute ? { id: String(av.attribute.id || ''), name: String(av.attribute.name || '') } : undefined,
+        })),
       }))
     }
 
@@ -349,8 +357,9 @@ export function useProductForm({
           name: v.name,
           sku: v.sku,
           barcode: v.barcode || null,
-          quantity_on_hand: v.quantity_on_hand || 0,
-          stock: v.quantity_on_hand || 0,
+          quantity_on_hand: Number(v.quantity_on_hand) || 0,
+          stock: Number(v.quantity_on_hand) || 0,
+          initial_stock: Number(v.quantity_on_hand) || 0,
           selling_price: Number(v.selling_price) || sellP,
           cost_price: buyP,
           selling_price_override: v.selling_price_override ? Number(v.selling_price_override) : null,
@@ -378,7 +387,7 @@ export function useProductForm({
           stock: simpleStock,
           variants: variantsPayload,
         })
-        const savedProd = (res.data as any)?.product || (res.data as any)?.data || res.data
+        const savedProd = res?.data as Product | undefined
         const updated: Product = savedProd && savedProd.id ? savedProd : {
           ...editingProduct,
           name: data.name,
@@ -389,7 +398,7 @@ export function useProductForm({
           default_reorder_level: reorder,
           image_url: finalImageUrl,
           is_active: data.is_active,
-          category: matchedCategory || { id: 'cat-1', name: data.category, code: data.category.substring(0, 3).toUpperCase() },
+          category: (matchedCategory || (data.category ? { id: 'cat-1', name: data.category, code: data.category.substring(0, 3).toUpperCase() } : undefined)) as any,
           variants: finalVariants,
         }
 
@@ -397,6 +406,7 @@ export function useProductForm({
         if (detailProduct?.id === editingProduct.id) {
           setDetailProduct(updated)
         }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
         loadProducts()
         Alert.alert('Product Saved', `Product "${data.name}" updated successfully.`)
       } else {
@@ -414,18 +424,19 @@ export function useProductForm({
           stock: simpleStock,
           variants: variantsPayload,
         })
-        const createdProd = (res.data as any)?.product || (res.data as any)?.data || res.data
+        const createdProd = res?.data as Product | undefined
         if (createdProd && createdProd.id) {
           setProducts((prev) => [createdProd, ...prev.filter((p) => p.id !== createdProd.id)])
         }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
         loadProducts()
         Alert.alert('Product Created', `New ${data.productType === 'VARIABLE' ? 'Variable' : 'Simple'} product "${data.name}" created.`)
       }
 
       setProductModalOpen(false)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Product save error:', err)
-      Alert.alert('Save Failed', err?.message || 'Could not save product changes.')
+      Alert.alert('Save Failed', err instanceof Error ? err.message : 'Could not save product changes.')
       loadProducts()
     } finally {
       setIsSavingProduct(false)
@@ -438,7 +449,7 @@ export function useProductForm({
     setSelectedPhotoFile(null)
     setSelectedProductAttributes([])
     reset({
-      productType: 'SIMPLE',
+      productType: 'VARIABLE',
       name: '',
       category: managedCategories[0]?.name || 'Apparel',
       purchase_price: '',
@@ -470,7 +481,7 @@ export function useProductForm({
       prod.variants.forEach((v) => {
         v.attribute_values?.forEach((av) => {
           const attrName = av.attribute?.name || 'Option'
-          const val = av.value_name || (av as any).value || ''
+          const val = av.value_name || (av as { value?: string }).value || ''
           if (!existingAttrsMap[attrName]) {
             existingAttrsMap[attrName] = {
               id: av.attribute?.id || `attr-${attrName}`,

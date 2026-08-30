@@ -62,7 +62,7 @@ export function ProductFormModal({
     handleStartScanVariantBarcode,
     removeVariant,
   } = form
-  const onFormError = (errors: any) => {
+  const onFormError = (errors: Record<string, { message?: string }>) => {
     const firstKey = Object.keys(errors)[0]
     const msg = errors[firstKey]?.message || 'Please review required fields in product form.'
     Alert.alert('Incomplete Form', msg)

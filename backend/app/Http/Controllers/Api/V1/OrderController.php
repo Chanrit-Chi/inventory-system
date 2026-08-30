@@ -129,7 +129,7 @@ class OrderController extends BaseApiController
         return DB::transaction(function () use ($request, $id) {
             $order = Order::where('id', $id)->lockForUpdate()->with(['payments', 'customer'])->findOrFail($id);
             $newStatus = strtolower($request->input('status'));
-            $currentStatus = strtolower($order->status);
+            $currentStatus = strtolower($order->status instanceof \App\Enums\OrderStatus ? $order->status->value : (string) $order->status);
 
             // Idempotency: if already in target status, return cleanly without duplicating actions
             if ($currentStatus === $newStatus) {
@@ -167,7 +167,7 @@ class OrderController extends BaseApiController
                 }
             }
 
-            $order->status = $newStatus;
+            $order->status = strtoupper($newStatus);
             if ($request->filled('notes')) {
                 $order->notes = $request->input('notes');
             }
@@ -258,6 +258,7 @@ class OrderController extends BaseApiController
             'notes' => ['nullable', 'string'],
             'delivery_address' => ['nullable', 'string'],
             'region' => ['nullable', 'string'],
+            'seller_id' => ['nullable', 'string', 'uuid', 'exists:users,id'],
         ]);
 
         if (isset($validated['status'])) {
@@ -311,6 +312,16 @@ class OrderController extends BaseApiController
         if (array_key_exists('region', $validated)) {
             $order->region = $validated['region'];
         }
+        if (array_key_exists('seller_id', $validated)) {
+            $oldSellerId = $order->seller_id;
+            $order->seller_id = $validated['seller_id'];
+            if ($oldSellerId && $oldSellerId !== $validated['seller_id']) {
+                $orderDate = $order->created_at?->toDateString();
+                \App\Models\SellerDailySettlement::where('seller_id', $oldSellerId)
+                    ->where('settlement_date', $orderDate)
+                    ->update(['status' => 'REVISED']);
+            }
+        }
 
         if (!empty($validated['payment_method']) && $order->payments->isNotEmpty()) {
             $firstPayment = $order->payments->first();
@@ -324,7 +335,7 @@ class OrderController extends BaseApiController
         $order->save();
 
         return $this->successResponse(
-            $order->loadMissing(['customer', 'channel', 'items.variant.attributeValues.attribute', 'payments', 'user:id,name']),
+            $order->loadMissing(['customer', 'channel', 'items.variant.attributeValues.attribute', 'payments', 'user:id,name', 'seller:id,name,role']),
             'Order updated successfully.'
         );
     }

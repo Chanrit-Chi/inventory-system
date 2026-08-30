@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import {
   View,
   Text,
@@ -22,9 +22,12 @@ import {
   printThermalReceiptToDevice,
 } from '../utils/thermalPrinter'
 import type { PrinterConfig, PrinterDevice } from '../utils/thermalPrinter'
-import type { Order, Customer } from '../types'
+import type { Order, Customer, UserAccount } from '../types'
+import { fetchStaffMembers } from '../api/endpoints'
 import { DigitalReceipt } from './DigitalReceipt'
 import { PrinterPickerModal } from './PrinterPickerModal'
+import { SellerPickerModal } from './pos/SellerPickerModal'
+import { useToast } from '../context/ToastContext'
 import ViewShot, { captureRef } from 'react-native-view-shot'
 import * as Sharing from 'expo-sharing'
 
@@ -32,11 +35,14 @@ export interface OrderReceiptModalProps {
   visible: boolean
   order: Order | null
   matchedCustomer?: Customer | null
-  onNewSale: () => void
+  onNewSale?: () => void
   onClose?: () => void
   onNavigateSettings?: () => void
-  onUpdateStatus?: (orderId: string, newStatus: string, paymentMethod?: string, notes?: string) => Promise<void> | void
-  onUpdateOrder?: (orderId: string, payload: { status?: string; payment_method?: string; notes?: string; delivery_address?: string; region?: string }) => Promise<void> | void
+  onUpdateStatus?: (orderId: string, status: string, paymentMethod?: string) => Promise<void>
+  onUpdateOrder?: (
+    orderId: string,
+    updates: { notes?: string; delivery_address?: string; seller_id?: string | null }
+  ) => Promise<void>
 }
 
 const PAYMENT_METHODS = [
@@ -57,6 +63,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
   onUpdateStatus,
   onUpdateOrder,
 }) => {
+  const { showToast } = useToast()
   const bounceAnim = useRef(new Animated.Value(0)).current
   const [localOrder, setLocalOrder] = useState<Order | null>(order)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -65,21 +72,67 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
   const [selectedMethod, setSelectedMethod] = useState('ABA QR')
   const [editNotes, setEditNotes] = useState('')
   const [editAddress, setEditAddress] = useState('')
+  const [editSeller, setEditSeller] = useState<{ id: string; name: string; role?: string; email?: string; isActive?: boolean } | null>(null)
+  const [staffUsers, setStaffUsers] = useState<UserAccount[]>([])
+  const [sellerPickerOpen, setSellerPickerOpen] = useState(false)
   const [isCapturing, setIsCapturing] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [devices, setDevices] = useState<PrinterDevice[]>([])
   const [showPrinterPicker, setShowPrinterPicker] = useState(false)
   const [printerConfig, setPrinterConfig] = useState<PrinterConfig | null>(null)
   const receiptRef = useRef<View>(null)
+  const hiddenReceiptRef = useRef<View>(null)
+
+  const activeOrder = localOrder || order
+  const items = activeOrder?.items ?? []
+
+  const receiptItems = useMemo(() => {
+    return items.map((item, index) => ({
+      id: item.id || `item-${index}`,
+      name: item.variant?.sku || `Item #${index + 1}`,
+      sku: item.variant?.attribute_values && item.variant.attribute_values.length > 0
+        ? item.variant.attribute_values.map(a => a.value_name).join(' • ')
+        : undefined,
+      quantity: item.quantity,
+      unitPrice: typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0,
+      totalPrice: typeof item.line_total === 'number' ? item.line_total : parseFloat(String(item.line_total || '0')) || item.quantity * (typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0)
+    }))
+  }, [items])
+
+  const orderDate = useMemo(() => {
+    if (!activeOrder?.created_at) return new Date().toLocaleString()
+    try {
+      const d = new Date(activeOrder.created_at)
+      return d.toLocaleString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+    } catch {
+      return String(activeOrder.created_at)
+    }
+  }, [activeOrder?.created_at])
 
   useEffect(() => {
     setLocalOrder(order)
+    if (order) {
+      setEditNotes(order.notes || '')
+      setEditAddress(order.delivery_address || '')
+      setEditSeller(order.seller || null)
+    }
   }, [order])
 
   useEffect(() => {
     if (visible) {
       getPrinterConfig().then(setPrinterConfig)
       getPrinterDevices().then(setDevices)
+      fetchStaffMembers().then((res) => {
+        if (Array.isArray(res)) setStaffUsers(res)
+      }).catch(() => null)
       bounceAnim.setValue(0)
       Animated.spring(bounceAnim, {
         toValue: 1,
@@ -113,8 +166,8 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
       } else {
         await printThermalReceipt(order)
       }
-    } catch (err: any) {
-      Alert.alert('Print Notice', err?.message || 'Could not send receipt to printer.')
+    } catch (err: unknown) {
+      Alert.alert('Print Notice', err instanceof Error ? err.message : 'Could not send receipt to printer.')
     } finally {
       setIsPrinting(false)
     }
@@ -126,8 +179,8 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
     setIsPrinting(true)
     try {
       await printThermalReceiptToDevice(order, device)
-    } catch (err: any) {
-      Alert.alert('Print Notice', err?.message || 'Could not send ticket to printer.')
+    } catch (err: unknown) {
+      Alert.alert('Print Notice', err instanceof Error ? err.message : 'Could not send ticket to printer.')
     } finally {
       setIsPrinting(false)
     }
@@ -141,14 +194,13 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
       for (const dev of devices) {
         await printThermalReceiptToDevice(order, dev)
       }
-    } catch (err: any) {
-      Alert.alert('Print Notice', err?.message || 'Error dispatching to all printers.')
+    } catch (err: unknown) {
+      Alert.alert('Print Notice', err instanceof Error ? err.message : 'Error dispatching to all printers.')
     } finally {
       setIsPrinting(false)
     }
   }
 
-  const activeOrder = localOrder || order
   if (!activeOrder) return null
 
   const statusLower = (activeOrder.status || 'completed').toLowerCase()
@@ -156,23 +208,12 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
   const isCancelled = statusLower === 'cancelled'
   const isCompleted = statusLower === 'completed' || statusLower === 'paid'
 
-  const orderDate = activeOrder.created_at
-    ? new Date(activeOrder.created_at).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : new Date().toLocaleString()
-
   const totalPaid =
     typeof activeOrder.total_amount === 'number'
       ? activeOrder.total_amount
       : parseFloat(String(activeOrder.total_amount || '0')) || 0
 
   const paymentMethod = activeOrder.payments?.[0]?.payment_method || 'Cash'
-  const items = activeOrder.items ?? []
 
   // Resolve customer loyalty tier styling
   const customerObj = activeOrder.customer || matchedCustomer
@@ -232,16 +273,24 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
     ? tokens.colors.accentCash
     : tokens.colors.onBackground
 
+  const receiptSubtotal = typeof activeOrder.subtotal === 'number' ? activeOrder.subtotal : parseFloat(String(activeOrder.subtotal || '0')) || totalPaid
+  const receiptTax = typeof activeOrder.tax_amount === 'number' ? activeOrder.tax_amount : parseFloat(String(activeOrder.tax_amount || '0')) || 0
+  const receiptDiscount = typeof activeOrder.discount === 'number' ? activeOrder.discount : parseFloat(String(activeOrder.discount || '0')) || 0
+  const receiptDeliveryCost = typeof activeOrder.delivery_cost === 'number' ? activeOrder.delivery_cost : parseFloat(String(activeOrder.delivery_cost || '0')) || 0
+  const deliveryCompany = activeOrder.delivery_company
+  const deliveryAddress = activeOrder.delivery_address || editAddress
 
   const handleShareReceipt = async () => {
     try {
-      if (receiptRef.current) {
+      const targetRef = hiddenReceiptRef.current || receiptRef.current
+      if (targetRef) {
         setIsCapturing(true)
-        // Add a slight delay to ensure UI layout is settled and buttons are hidden
+        // Add a slight delay to ensure UI layout is settled and views are rasterized
         await new Promise(resolve => setTimeout(resolve, 150))
-        const uri = await captureRef(receiptRef, {
+        const uri = await captureRef(targetRef, {
           format: 'png',
           quality: 1,
+          result: 'tmpfile',
         })
         setIsCapturing(false)
         const canShare = await Sharing.isAvailableAsync()
@@ -254,9 +303,9 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
           Alert.alert('Share Unavailable', 'File sharing is not available on this device.')
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsCapturing(false)
-      Alert.alert('Share Notice', err?.message || 'Could not generate or open share dialog.')
+      Alert.alert('Share Notice', err instanceof Error ? err.message : 'Could not generate or open share dialog.')
     }
   }
 
@@ -268,9 +317,9 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
       }
       setLocalOrder((prev) => (prev ? { ...prev, status: 'completed' } : null))
       setShowSettleModal(false)
-      Alert.alert('Payment Settle Complete', `Order #${activeOrder.order_number} marked as Paid via ${selectedMethod}.`)
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update order status.')
+      showToast(`Order #${activeOrder.order_number} marked as Paid via ${selectedMethod}.`, 'success')
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Failed to update order status.', 'error')
     } finally {
       setIsUpdating(false)
     }
@@ -278,7 +327,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
 
   const handleCancelOrder = () => {
     if (isCancelled) {
-      Alert.alert('Notice', 'This order is already cancelled.')
+      showToast('This order is already cancelled.', 'info')
       return
     }
     Alert.alert(
@@ -293,12 +342,13 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
             try {
               setIsUpdating(true)
               if (onUpdateStatus) {
-                await onUpdateStatus(activeOrder.id, 'cancelled')
+                 await onUpdateStatus(activeOrder.id, 'cancelled')
               }
               setLocalOrder((prev) => (prev ? { ...prev, status: 'cancelled' } : null))
-              Alert.alert('Order Cancelled', `Order #${activeOrder.order_number} has been voided and stock restored.`)
-            } catch (err: any) {
-              Alert.alert('Error', err?.message || 'Failed to cancel order.')
+              showToast(`Order #${activeOrder.order_number} has been voided and stock restored.`, 'info')
+            } catch (err: unknown) {
+              const error = err as { message?: string }
+              showToast(error?.message || 'Failed to cancel order.', 'error')
             } finally {
               setIsUpdating(false)
             }
@@ -315,6 +365,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
         await onUpdateOrder(activeOrder.id, {
           notes: editNotes,
           delivery_address: editAddress,
+          seller_id: editSeller?.id || null,
         })
       }
       setLocalOrder((prev) =>
@@ -323,13 +374,15 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
               ...prev,
               notes: editNotes,
               delivery_address: editAddress,
+              seller: editSeller,
+              seller_id: editSeller?.id || null,
             }
           : null
       )
       setShowEditModal(false)
-      Alert.alert('Details Saved', `Order #${activeOrder.order_number} details have been updated.`)
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update details.')
+      showToast(`Order #${activeOrder.order_number} details updated.`, 'success')
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Failed to update details.', 'error')
     } finally {
       setIsUpdating(false)
     }
@@ -387,7 +440,10 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
               <Text style={styles.orderNumberLabel}>Order</Text>
               <Text style={styles.orderNumberText}>#{activeOrder.order_number}</Text>
             </View>
-            <Text style={styles.orderDateText}>{orderDate}</Text>
+            <View style={styles.orderDateTimeBadge}>
+              <Ionicons name="time-outline" size={13} color={tokens.colors.secondary} />
+              <Text style={styles.orderDateText}>{orderDate}</Text>
+            </View>
           </View>
 
           {/* Receipt Scroll Area */}
@@ -396,67 +452,87 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
             contentContainerStyle={styles.receiptContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Quick Action Banner for Pending / Editable Orders */}
-            <View
-              style={[
-                styles.statusControlBanner,
-                isPending && styles.statusControlBannerPending,
-                isCancelled && styles.statusControlBannerCancelled,
-                isCompleted && styles.statusControlBannerCompleted,
-              ]}
-            >
-              <View style={styles.statusControlHeader}>
-                <View style={styles.statusControlTitleRow}>
-                  <Ionicons
-                    name={
-                      isPending
-                        ? 'alert-circle'
+            {/* Modern Redesigned Status Card */}
+            <View style={styles.statusControlCard}>
+              <View style={styles.statusCardTopRow}>
+                {/* Left: Status Badge Pill + Payment Method */}
+                <View style={styles.statusCardLeft}>
+                  <View style={[
+                    styles.statusPill,
+                    isPending && styles.statusPillPending,
+                    isCancelled && styles.statusPillCancelled,
+                    isCompleted && styles.statusPillCompleted,
+                  ]}>
+                    <Ionicons
+                      name={
+                        isPending
+                          ? 'time-outline'
+                          : isCancelled
+                          ? 'close-circle'
+                          : 'checkmark-circle'
+                      }
+                      size={13}
+                      color={
+                        isPending
+                          ? '#D97706'
+                          : isCancelled
+                          ? '#DC2626'
+                          : '#16A34A'
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        isPending && { color: '#B45309' },
+                        isCancelled && { color: '#B91C1C' },
+                        isCompleted && { color: '#15803D' },
+                      ]}
+                    >
+                      {isPending
+                        ? `Pending • $${totalPaid.toFixed(2)}`
                         : isCancelled
-                        ? 'close-circle'
-                        : 'checkmark-circle'
-                    }
-                    size={20}
-                    color={
-                      isPending
-                        ? '#D97706'
-                        : isCancelled
-                        ? '#DC2626'
-                        : '#16A34A'
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.statusControlTitle,
-                      isPending && { color: '#92400E' },
-                      isCancelled && { color: '#991B1B' },
-                      isCompleted && { color: '#166534' },
-                    ]}
-                  >
-                    {isPending
-                      ? `Pending Payment: $${totalPaid.toFixed(2)}`
-                      : isCancelled
-                      ? 'Order Voided / Cancelled'
-                      : `Paid in Full (${paymentMethod})`}
-                  </Text>
-                </View>
-                {!isCancelled && (
-                  <TouchableOpacity
-                    style={styles.editNotesBtn}
-                    onPress={() => setShowEditModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="create-outline" size={14} color={tokens.colors.primary} />
-                    <Text style={styles.editNotesBtnText}>Edit Info</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+                        ? 'Cancelled / Void'
+                        : 'Paid in Full'}
+                    </Text>
+                  </View>
 
-              {/* Status Action Buttons */}
-              <View style={styles.statusActionButtonsRow}>
-                {isPending ? (
-                  <>
+                  <View style={styles.paymentMethodMetaRow}>
+                    <View style={[styles.methodPill, { backgroundColor: methodBg }]}>
+                      <Ionicons
+                        name={isCash ? 'cash-outline' : isAba ? 'qr-code-outline' : 'card-outline'}
+                        size={11}
+                        color={methodColor}
+                      />
+                      <Text style={[styles.methodPillText, { color: methodColor }]}>
+                        {paymentMethod}
+                      </Text>
+                    </View>
+                    {Boolean(activeOrder.notes || activeOrder.delivery_address) && (
+                      <Text style={styles.hasNotesIndicator} numberOfLines={1}>
+                        • {activeOrder.notes || activeOrder.delivery_address}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Right: Actions (Edit, Settle, Void) */}
+                <View style={styles.statusCardRight}>
+                  {!isCancelled && (
                     <TouchableOpacity
-                      style={styles.settlePaymentBtn}
+                      style={styles.editInfoIconBtn}
+                      onPress={() => setShowEditModal(true)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit Order Details"
+                    >
+                      <Ionicons name="create-outline" size={13} color={tokens.colors.primary} />
+                      <Text style={styles.editInfoBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {isPending ? (
+                    <TouchableOpacity
+                      style={styles.settlePaymentPillBtn}
                       onPress={() => setShowSettleModal(true)}
                       disabled={isUpdating}
                       activeOpacity={0.8}
@@ -465,39 +541,24 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <>
-                          <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
-                          <Text style={styles.settlePaymentBtnText}>Settle & Mark as Paid</Text>
+                          <Ionicons name="checkmark-done" size={13} color="#FFFFFF" />
+                          <Text style={styles.settlePaymentPillText}>Settle</Text>
                         </>
                       )}
                     </TouchableOpacity>
+                  ) : !isCancelled ? (
                     <TouchableOpacity
-                      style={styles.cancelOrderBtn}
+                      style={styles.voidOrderOutlineBtn}
                       onPress={handleCancelOrder}
                       disabled={isUpdating}
-                      activeOpacity={0.8}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Ionicons name="trash-outline" size={15} color="#DC2626" />
-                      <Text style={styles.cancelOrderBtnText}>Cancel</Text>
+                      <Ionicons name="close-circle-outline" size={13} color={tokens.colors.statusError} />
+                      <Text style={styles.voidOrderText}>Void</Text>
                     </TouchableOpacity>
-                  </>
-                ) : isCancelled ? (
-                  <View style={styles.cancelledNoticeBadge}>
-                    <Ionicons name="close-circle" size={16} color="#DC2626" />
-                    <Text style={styles.cancelledNoticeText}>Order Cancelled • Stock Restored to Inventory</Text>
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.cancelOrderBtn}
-                      onPress={handleCancelOrder}
-                      disabled={isUpdating}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="close-circle-outline" size={15} color="#DC2626" />
-                      <Text style={styles.cancelOrderBtnText}>Void / Cancel Order</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                  ) : null}
+                </View>
               </View>
             </View>
 
@@ -507,23 +568,23 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
               documentNumber={activeOrder.order_number || activeOrder.id || 'N/A'}
               customerName={customerObj?.name || 'Walk-in Customer'}
               customerPhone={customerObj?.phone}
-              items={items.map((item, index) => ({
-                id: item.id || `item-${index}`,
-                name: item.variant?.sku || `Item #${index + 1}`,
-                sku: item.variant?.attribute_values && item.variant.attribute_values.length > 0
-                  ? item.variant.attribute_values.map(a => a.value_name).join(' • ')
-                  : undefined,
-                quantity: item.quantity,
-                unitPrice: typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0,
-                totalPrice: typeof item.line_total === 'number' ? item.line_total : parseFloat(String(item.line_total || '0')) || item.quantity * (typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0)
-              }))}
-              subtotal={typeof activeOrder.subtotal === 'number' ? activeOrder.subtotal : parseFloat(String(activeOrder.subtotal || '0')) || totalPaid}
-              tax={typeof activeOrder.tax_amount === 'number' ? activeOrder.tax_amount : parseFloat(String(activeOrder.tax_amount || '0')) || 0}
-              discount={typeof activeOrder.discount === 'number' ? activeOrder.discount : parseFloat(String(activeOrder.discount || '0')) || 0}
+              items={receiptItems}
+              subtotal={receiptSubtotal}
+              tax={receiptTax}
+              discount={receiptDiscount}
+              deliveryCost={receiptDeliveryCost}
+              deliveryCompany={deliveryCompany}
+              deliveryAddress={deliveryAddress}
               amountPaid={totalPaid}
               balanceDue={0}
               paymentMethod={paymentMethod}
+              orderDate={orderDate}
+              createdAt={activeOrder.created_at}
               channelName={activeOrder.channel?.name || activeOrder.channel_id || 'Store POS'}
+              channel={activeOrder.channel}
+              channelId={activeOrder.channel_id}
+              sellerName={activeOrder.seller?.name}
+              cashierName={activeOrder.user?.name}
             />
 
             {/* Secondary Actions: Print & Share (Outside the receipt capture) */}
@@ -741,6 +802,34 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                     onChangeText={setEditAddress}
                   />
                 </View>
+
+                {/* Sales Representative (Incentive Credit) */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Sales Representative (Credited Seller)</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.textInput,
+                      {
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingHorizontal: 12,
+                      },
+                    ]}
+                    onPress={() => setSellerPickerOpen(true)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="person-outline" size={16} color={tokens.colors.primary} />
+                      <Text style={{ ...tokens.typography.body, color: tokens.colors.onBackground }}>
+                        {editSeller?.name || 'Unassigned / General Register'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: tokens.colors.primary }}>
+                      Change
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
 
               <View style={styles.subModalActions}>
@@ -779,18 +868,66 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
           onPrintAll={handlePrintAllStations}
           onManagePrinters={() => {
             if (onNavigateSettings) {
-              onClose()
+              onClose?.()
               onNavigateSettings()
             }
           }}
           onClose={() => setShowPrinterPicker(false)}
         />
+
+        {/* Off-screen Full-Height Container for High-Res Unclipped Image Capture (Option A) */}
+        <View style={styles.offscreenCaptureContainer} pointerEvents="none">
+          <DigitalReceipt
+            ref={hiddenReceiptRef}
+            documentType="Receipt"
+            documentNumber={activeOrder.order_number || activeOrder.id || 'N/A'}
+            customerName={customerObj?.name || 'Walk-in Customer'}
+            customerPhone={customerObj?.phone}
+            items={receiptItems}
+            subtotal={receiptSubtotal}
+            tax={receiptTax}
+            discount={receiptDiscount}
+            deliveryCost={receiptDeliveryCost}
+            deliveryCompany={deliveryCompany}
+            deliveryAddress={deliveryAddress}
+            amountPaid={totalPaid}
+            balanceDue={0}
+            paymentMethod={paymentMethod}
+            channelName={activeOrder.channel?.name || activeOrder.channel_id || 'Store POS'}
+            channel={activeOrder.channel}
+            channelId={activeOrder.channel_id}
+            sellerName={activeOrder.seller?.name}
+            cashierName={activeOrder.user?.name}
+          />
+        </View>
       </SafeAreaView>
+
+      {/* Seller Picker for Editing Order */}
+      <SellerPickerModal
+        visible={sellerPickerOpen}
+        onClose={() => setSellerPickerOpen(false)}
+        users={staffUsers}
+        selectedSellerId={editSeller?.id || null}
+        onSelectSeller={(user) => {
+          setEditSeller(user)
+          setSellerPickerOpen(false)
+        }}
+        onResetToMe={() => {
+          setSellerPickerOpen(false)
+        }}
+      />
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
+  offscreenCaptureContainer: {
+    position: 'absolute',
+    left: -9999,
+    top: 0,
+    width: 380,
+    zIndex: -999,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: tokens.colors.surfaceContainerLowest,
@@ -846,120 +983,135 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  orderDateTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: tokens.borderRadius.pill,
+    marginTop: tokens.spacing.xs + 2,
+    gap: 5,
+  },
   orderDateText: {
     color: tokens.colors.secondary,
-    fontSize: tokens.typography.caption.fontSize,
-    marginTop: tokens.spacing.xs,
+    fontSize: 11.5,
+    fontWeight: '600',
   },
-  statusControlBanner: {
-    marginHorizontal: tokens.spacing.md,
-    marginTop: tokens.spacing.md,
-    marginBottom: tokens.spacing.xs,
-    padding: tokens.spacing.md,
-    borderRadius: tokens.borderRadius.lg,
+  statusControlCard: {
+    marginBottom: tokens.spacing.md,
+    padding: tokens.spacing.sm + 2,
+    borderRadius: tokens.borderRadius.card,
     backgroundColor: tokens.colors.surfaceContainerLowest,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     ...tokens.shadows.card,
   },
-  statusControlBannerPending: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FCD34D',
-  },
-  statusControlBannerCancelled: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-  },
-  statusControlBannerCompleted: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#86EFAC',
-  },
-  statusControlHeader: {
+  statusCardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: tokens.spacing.sm,
   },
-  statusControlTitleRow: {
+  statusCardLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: tokens.borderRadius.pill,
+    alignSelf: 'flex-start',
   },
-  statusControlTitle: {
-    fontSize: 14,
+  statusPillPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusPillCancelled: {
+    backgroundColor: '#FEE2E2',
+  },
+  statusPillCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusPillText: {
+    fontSize: 11,
     fontWeight: '800',
+    letterSpacing: 0.2,
   },
-  editNotesBtn: {
+  paymentMethodMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  methodPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.xs,
+  },
+  methodPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  hasNotesIndicator: {
+    fontSize: 10,
+    color: tokens.colors.secondary,
+    flex: 1,
+  },
+  statusCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editInfoIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: tokens.borderRadius.pill,
     backgroundColor: tokens.colors.surfaceAlt,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
   },
-  editNotesBtnText: {
+  editInfoBtnText: {
     fontSize: 11,
     fontWeight: '700',
     color: tokens.colors.primary,
   },
-  statusActionButtonsRow: {
+  settlePaymentPillBtn: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  settlePaymentBtn: {
-    flex: 1,
-    height: 40,
-    backgroundColor: tokens.colors.primaryContainer,
-    borderRadius: tokens.borderRadius.pill,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    ...tokens.shadows.card,
-  },
-  settlePaymentBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  cancelOrderBtn: {
-    flex: 0.6,
-    height: 40,
-    backgroundColor: '#FEE2E2',
-    borderRadius: tokens.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
-  },
-  cancelOrderBtnText: {
-    color: '#DC2626',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  cancelledNoticeBadge: {
-    flex: 1,
-    height: 40,
-    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: tokens.colors.primaryContainer,
     borderRadius: tokens.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    ...tokens.shadows.card,
   },
-  cancelledNoticeText: {
-    color: '#DC2626',
-    fontSize: 12,
+  settlePaymentPillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  voidOrderOutlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  voidOrderText: {
+    color: tokens.colors.statusError,
+    fontSize: 11,
     fontWeight: '700',
   },
   receiptScroll: {

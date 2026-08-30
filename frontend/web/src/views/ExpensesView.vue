@@ -1,6 +1,35 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useExpenseStore } from '@/stores/expenseStore'
+import {
+  TrendingDown,
+  RefreshCw,
+  Plus,
+  DollarSign,
+  Calendar,
+  Layers,
+  PieChart,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  StatCard,
+  Card,
+  Alert,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  EmptyState,
+  Skeleton,
+} from '@/components/ui'
 
 const expenseStore = useExpenseStore()
 
@@ -52,7 +81,7 @@ const page = ref(1)
 const formSuccess = ref('')
 const formError = ref('')
 
-// Visual category breakdown distribution computations
+// Visual category breakdown
 const categoryBreakdown = computed(() => {
   const map: Record<string, number> = {}
   let total = 0
@@ -69,7 +98,7 @@ const categoryBreakdown = computed(() => {
       name,
       amount,
       percent,
-      color: categoryColors[name] || 'var(--action-primary)',
+      color: categoryColors[name] || '#924C00',
     }
   }).sort((a, b) => b.amount - a.amount)
 })
@@ -125,7 +154,6 @@ async function handleRecordExpense() {
     })
 
     formSuccess.value = 'Expense recorded successfully!'
-    // Reset form
     form.value.amount = ''
     form.value.notes = ''
     setTimeout(() => {
@@ -157,391 +185,330 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-col gap-24">
+  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
     <!-- Header -->
-    <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 16px;">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-10">
-          <h1 class="page-title">Expenses & Finance Management</h1>
-          <span class="badge badge--neutral font-semibold tabular-nums">
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Expenses & Finance Management</h1>
+          <Badge variant="neutral" class="font-mono text-xs px-2.5 py-0.5">
             {{ expenseStore.expenses.length }} Entries
-          </span>
+          </Badge>
         </div>
-        <p class="text-muted text-sm mt-4">
-          Log store overheads, utility bills, inventory freight, and inspect category distribution charts.
+        <p class="text-xs text-muted-foreground mt-0.5">
+          Log store overheads, utility bills, inventory logistics, and monitor category distribution charts.
         </p>
       </div>
 
-      <button id="btn-refresh-expenses" class="btn btn--ghost" @click="loadExpenses">
-        ↺ Refresh
-      </button>
+      <Button
+        id="btn-refresh-expenses"
+        variant="outline"
+        size="sm"
+        class="h-9 px-3 gap-1.5 text-xs"
+        :disabled="expenseStore.loading"
+        @click="loadExpenses"
+      >
+        <RefreshCw :size="14" :class="{ 'animate-spin': expenseStore.loading }" />
+        <span>Refresh</span>
+      </Button>
     </div>
 
     <!-- KPI Summary Cards -->
-    <div class="grid-4 gap-16">
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--danger">
-            <span>💰</span>
-          </div>
-          <div class="trend-pill trend-pill--down">
-            <span>● Cumulative</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-error);">
-            {{ fmtMoney(expenseStore.kpis.totalAll) }}
-          </span>
-          <span class="stat-card-label">Total Outflows</span>
-          <span class="stat-card-sub">Recorded operational costs</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--warning">
-            <span>📅</span>
-          </div>
-          <div class="trend-pill trend-pill--warning">
-            <span>Today</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-warning);">
-            {{ fmtMoney(expenseStore.kpis.totalToday) }}
-          </span>
-          <span class="stat-card-label">Today's Expenses</span>
-          <span class="stat-card-sub">Outflows logged today</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--primary">
-            <span>🏢</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Largest</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value" style="font-size: 20px; color: var(--action-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            {{ expenseStore.kpis.topCategory }}
-          </span>
-          <span class="stat-card-label">Top Expense Category</span>
-          <span class="stat-card-sub">Highest operational spend</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--purple">
-            <span>📊</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Average</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-purple-text);">
-            {{ fmtMoney(avgExpenseValue) }}
-          </span>
-          <span class="stat-card-label">Average Entry</span>
-          <span class="stat-card-sub">Per recorded expense item</span>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatCard
+        label="Total Outflows"
+        :value="fmtMoney(expenseStore.kpis.totalAll)"
+        sub="Cumulative overheads"
+        :icon="TrendingDown"
+        icon-variant="error"
+      />
+      <StatCard
+        label="Today's Expenses"
+        :value="fmtMoney(expenseStore.kpis.totalToday)"
+        sub="Logged today"
+        :icon="Calendar"
+        icon-variant="warning"
+      />
+      <StatCard
+        label="Top Category"
+        :value="expenseStore.kpis.topCategory || 'N/A'"
+        sub="Highest spend area"
+        :icon="Layers"
+        icon-variant="primary"
+      />
+      <StatCard
+        label="Average Entry"
+        :value="fmtMoney(avgExpenseValue)"
+        sub="Per recorded item"
+        :icon="DollarSign"
+        icon-variant="purple"
+      />
     </div>
 
     <!-- Visual Category Distribution Bars -->
-    <section v-if="categoryBreakdown.length > 0" class="card">
-      <div class="flex items-center justify-between mb-16">
+    <Card v-if="categoryBreakdown.length > 0" class="p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
         <div>
-          <h2 class="font-bold text-lg">Expense Category Distribution</h2>
-          <p class="text-muted text-xs mt-2">Percentage breakdown of operational overheads by category</p>
+          <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+            <PieChart :size="16" class="text-primary" />
+            <span>Expense Category Distribution</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-0.5">Percentage breakdown of operational overheads by category</p>
         </div>
-        <span class="badge badge--blue tabular-nums">{{ categoryBreakdown.length }} Categories</span>
+        <Badge variant="info" class="font-mono text-xs">{{ categoryBreakdown.length }} Categories</Badge>
       </div>
 
       <!-- Segmented Bar Preview -->
-      <div class="category-segmented-bar mb-16">
+      <div class="w-full h-3 rounded-full bg-muted overflow-hidden flex">
         <div
           v-for="item in categoryBreakdown"
           :key="item.name"
-          class="segmented-slice"
+          class="h-full transition-all"
           :style="{ width: `${item.percent}%`, backgroundColor: item.color }"
           :title="`${item.name}: ${fmtMoney(item.amount)} (${item.percent}%)`"
-        ></div>
+        />
       </div>
 
       <!-- Category Legend Grid -->
-      <div class="category-chart-grid">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
         <div
           v-for="item in categoryBreakdown"
           :key="item.name"
-          class="category-chart-item"
+          class="p-2.5 rounded-lg border border-border/70 bg-surface text-xs space-y-1.5"
         >
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-8">
-              <span class="chart-color-dot" :style="{ backgroundColor: item.color }"></span>
-              <span class="font-semibold text-sm">{{ item.name }}</span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="{ backgroundColor: item.color }" />
+              <span class="font-semibold text-foreground truncate max-w-[110px]">{{ item.name }}</span>
             </div>
-            <div class="text-right">
-              <span class="font-bold tabular-nums text-sm">{{ fmtMoney(item.amount) }}</span>
-              <span class="text-xs text-muted tabular-nums ml-4">({{ item.percent }}%)</span>
-            </div>
+            <span class="font-mono font-bold text-foreground tabular-nums">{{ fmtMoney(item.amount) }}</span>
           </div>
-          <div class="category-progress-bg">
-            <div
-              class="category-progress-fill"
-              :style="{ width: `${item.percent}%`, backgroundColor: item.color }"
-            ></div>
+          <div class="w-full h-1 bg-muted rounded-full overflow-hidden">
+            <div class="h-full rounded-full" :style="{ width: `${item.percent}%`, backgroundColor: item.color }" />
           </div>
         </div>
       </div>
-    </section>
+    </Card>
 
     <!-- Main Form & Table Layout -->
-    <div class="grid-2 gap-24" style="grid-template-columns: 380px 1fr;">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
       <!-- Left: Record Expense Form -->
-      <section class="card flex-col gap-16" style="height: fit-content;">
-        <div class="flex items-center justify-between">
-          <h2 class="font-bold text-lg">Record Outflow</h2>
-          <span class="badge badge--neutral text-xs">Expense Entry</span>
+      <Card class="p-5 flex flex-col gap-4 lg:col-span-1">
+        <div class="flex items-center justify-between border-b border-border pb-3">
+          <h2 class="font-display font-bold text-base text-foreground">Record Outflow</h2>
+          <Badge variant="neutral" class="text-[10px]">Expense Entry</Badge>
         </div>
 
-        <div v-if="formError || expenseStore.error" class="alert alert--error mb-8">
-          <span>⚠️ {{ formError || expenseStore.error }}</span>
-        </div>
+        <Alert v-if="formError || expenseStore.error" variant="error">
+          <div class="flex items-center gap-2">
+            <AlertCircle :size="15" class="flex-shrink-0" />
+            <span>{{ formError || expenseStore.error }}</span>
+          </div>
+        </Alert>
 
-        <div v-if="formSuccess" class="alert alert--success mb-8">
-          <span>✓ {{ formSuccess }}</span>
-        </div>
+        <Alert v-if="formSuccess" variant="success">
+          <div class="flex items-center gap-2">
+            <CheckCircle2 :size="15" class="flex-shrink-0" />
+            <span>{{ formSuccess }}</span>
+          </div>
+        </Alert>
 
-        <div class="flex-col gap-16">
-          <div class="form-group">
-            <label class="form-label">Expense Date *</label>
-            <input
-              id="expense-date"
-              v-model="form.expense_date"
-              type="date"
-              :class="{ 'input--error': expenseStore.fieldErrors?.expense_date }"
-            />
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Expense Date *</label>
+            <Input id="expense-date" v-model="form.expense_date" type="date" class="h-9 bg-surface text-sm font-mono" />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Category *</label>
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Category *</label>
             <select
               id="expense-category"
               v-model="form.category"
-              :class="{ 'input--error': expenseStore.fieldErrors?.category }"
+              class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
             >
               <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Amount ($ USD) *</label>
-            <input
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Amount ($ USD) *</label>
+            <Input
               id="expense-amount"
               v-model="form.amount"
               type="number"
               step="0.01"
               min="0.01"
               placeholder="0.00"
-              class="tabular-nums"
-              :class="{ 'input--error': expenseStore.fieldErrors?.amount }"
+              class="h-9 bg-surface text-sm font-mono"
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Payment Method *</label>
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Payment Method *</label>
             <select
               id="expense-payment-method"
               v-model="form.payment_method"
-              :class="{ 'input--error': expenseStore.fieldErrors?.payment_method }"
+              class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
             >
               <option v-for="pm in paymentMethods" :key="pm" :value="pm">{{ pm }}</option>
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Notes / Purpose Description</label>
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Notes / Description</label>
             <textarea
               id="expense-notes"
               v-model="form.notes"
               rows="3"
-              placeholder="e.g. Monthly high-speed fiber internet and shopfloor lighting"
+              placeholder="e.g. Monthly internet and shopfloor lighting"
+              class="w-full px-3 py-2 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
             ></textarea>
           </div>
 
-          <button
+          <Button
             id="btn-save-expense"
-            class="btn btn--primary btn--lg mt-8"
+            variant="primary"
+            class="h-9 w-full gap-1.5 text-xs font-semibold mt-2"
             :disabled="expenseStore.mutating"
             @click="handleRecordExpense"
           >
-            <span v-if="expenseStore.mutating" class="spinner"></span>
-            {{ expenseStore.mutating ? 'Saving Outflow…' : '+ Record Expense' }}
-          </button>
+            <span v-if="expenseStore.mutating" class="animate-spin mr-1">⏳</span>
+            <Plus v-else :size="15" />
+            <span>{{ expenseStore.mutating ? 'Saving Outflow…' : 'Record Expense' }}</span>
+          </Button>
         </div>
-      </section>
+      </Card>
 
       <!-- Right: Filter Bar & Expenses Table -->
-      <div class="flex-col gap-16">
-        <!-- Filter Bar -->
-        <section class="card">
-          <div class="grid-4 gap-12" style="align-items: flex-end;">
-            <div class="form-group">
-              <label class="form-label">Category</label>
-              <select id="expense-filter-cat" v-model="filterCategory" @change="onFilterChange">
+      <div class="flex flex-col gap-4 lg:col-span-2">
+        <!-- Filter Toolbar -->
+        <div class="rounded-xl border border-border bg-card p-4 shadow-xs flex flex-col gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Category</label>
+              <select
+                id="expense-filter-cat"
+                v-model="filterCategory"
+                class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+                @change="onFilterChange"
+              >
                 <option value="">All Categories</option>
                 <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
               </select>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Date From</label>
-              <input id="expense-filter-from" type="date" v-model="filterDateFrom" @change="onFilterChange" />
+            <div>
+              <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Payment Method</label>
+              <select
+                id="expense-filter-pm"
+                v-model="filterPaymentMethod"
+                class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+                @change="onFilterChange"
+              >
+                <option value="">All Payment Methods</option>
+                <option v-for="pm in paymentMethods" :key="pm" :value="pm">{{ pm }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 border-t border-border/50 flex-wrap gap-2 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-muted-foreground">Date:</span>
+              <Input v-model="filterDateFrom" type="date" class="h-8 w-32 bg-surface text-xs font-mono" @change="onFilterChange" />
+              <span class="text-muted-foreground">to</span>
+              <Input v-model="filterDateTo" type="date" class="h-8 w-32 bg-surface text-xs font-mono" @change="onFilterChange" />
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Date To</label>
-              <input id="expense-filter-to" type="date" v-model="filterDateTo" @change="onFilterChange" />
-            </div>
-
-            <button id="btn-reset-expenses" class="btn btn--ghost" @click="resetFilters">
-              Reset
-            </button>
+            <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground" @click="resetFilters">
+              Reset Filters
+            </Button>
           </div>
-        </section>
+        </div>
 
-        <!-- Expenses Table -->
-        <section class="card" style="padding: 0; overflow: hidden;">
-          <div v-if="expenseStore.loading" style="padding: 24px;">
-            <div v-for="i in 5" :key="i" class="skeleton-row"></div>
+        <!-- Expenses Table Container -->
+        <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+          <div v-if="expenseStore.loading" class="p-6 space-y-3">
+            <Skeleton v-for="i in 4" :key="i" class="h-10 w-full" />
           </div>
 
-          <div v-else-if="expenseStore.expenses.length === 0" class="empty-state">
-            <div class="empty-icon">💰</div>
-            <h3 class="font-bold text-lg mb-8">No expenses logged</h3>
-            <p class="text-muted">Use the form on the left to record your store's operational expenses.</p>
-          </div>
+          <EmptyState
+            v-else-if="expenseStore.expenses.length === 0"
+            :icon="DollarSign"
+            title="No expenses found"
+            description="No outflow entries recorded matching the selected filter parameters."
+          />
 
-          <div v-else class="table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Category</th>
-                  <th>Notes</th>
-                  <th>Payment Method</th>
-                  <th style="text-align: right;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="exp in expenseStore.expenses" :key="exp.id">
-                  <td class="tabular-nums text-sm font-semibold">
-                    {{ fmtDate(exp.expense_date) }}
-                  </td>
-                  <td>
-                    <span class="badge badge--neutral font-medium">
-                      {{ exp.category }}
-                    </span>
-                  </td>
-                  <td>
-                    <span v-if="exp.notes" class="text-sm">{{ exp.notes }}</span>
-                    <span v-else class="text-muted text-xs">—</span>
-                  </td>
-                  <td>
-                    <span class="badge badge--blue text-xs">
-                      {{ exp.payment_method }}
-                    </span>
-                  </td>
-                  <td class="tabular-nums font-bold text-right" style="color: var(--status-error); font-size: 15px;">
-                    {{ fmtMoney(exp.amount) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else class="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow class="bg-muted/40">
+                  <TableHead>Category</TableHead>
+                  <TableHead class="font-mono">Amount</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead class="font-mono">Date</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="e in expenseStore.expenses" :key="e.id" class="hover:bg-surface-subtle/80 transition-colors">
+                  <TableCell>
+                    <div class="font-semibold text-foreground flex items-center gap-2">
+                      <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="{ backgroundColor: categoryColors[e.category] || '#924C00' }" />
+                      <span>{{ e.category }}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell class="font-mono text-sm font-bold text-destructive tabular-nums">
+                    {{ fmtMoney(e.amount) }}
+                  </TableCell>
+                  <TableCell class="text-xs">
+                    <Badge variant="neutral" class="text-[10px] px-2 py-0.5">
+                      {{ e.payment_method }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="font-mono text-xs text-muted-foreground">
+                    {{ fmtDate(e.expense_date) }}
+                  </TableCell>
+                  <TableCell class="text-xs text-muted-foreground truncate max-w-xs">
+                    {{ e.notes || '—' }}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </div>
 
           <!-- Pagination -->
           <div
             v-if="expenseStore.meta && expenseStore.meta.last_page > 1"
-            class="pagination"
-            style="padding: 16px 24px; border-top: 1px solid var(--border-color);"
+            class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
           >
-            <button
-              class="page-btn"
-              :disabled="page <= 1 || expenseStore.loading"
-              @click="page--; loadExpenses()"
-            >
-              ‹ Previous
-            </button>
-            <span class="page-info tabular-nums">
-              Page {{ page }} of {{ expenseStore.meta.last_page }} ({{ expenseStore.meta.total }} total)
+            <span class="font-mono">
+              Page {{ page }} of {{ expenseStore.meta.last_page }}
             </span>
-            <button
-              class="page-btn"
-              :disabled="page >= expenseStore.meta.last_page || expenseStore.loading"
-              @click="page++; loadExpenses()"
-            >
-              Next ›
-            </button>
+            <div class="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 px-2.5 text-xs gap-1"
+                :disabled="page <= 1 || expenseStore.loading"
+                @click="page--; loadExpenses()"
+              >
+                <ChevronLeft :size="14" />
+                <span>Previous</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-8 px-2.5 text-xs gap-1"
+                :disabled="page >= expenseStore.meta.last_page || expenseStore.loading"
+                @click="page++; loadExpenses()"
+              >
+                <span>Next</span>
+                <ChevronRight :size="14" />
+              </Button>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.category-segmented-bar {
-  width: 100%;
-  height: 12px;
-  background-color: var(--surface-alt);
-  border-radius: var(--radius-full);
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.segmented-slice {
-  height: 100%;
-  transition: width 300ms ease;
-}
-
-.category-chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-}
-
-.category-chart-item {
-  padding: 10px 12px;
-  background-color: var(--surface-alt);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-
-.chart-color-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.category-progress-bg {
-  width: 100%;
-  height: 4px;
-  background-color: var(--border-color);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.category-progress-fill {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width 300ms ease;
-}
-</style>

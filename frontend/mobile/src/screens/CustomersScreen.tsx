@@ -20,22 +20,82 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { customerSchema, CustomerFormValues } from '../utils/validation'
 import { ControlledInput } from '../components/ControlledInput'
-import { fetchCustomers } from '../api/endpoints'
+import { fetchCustomers, getCustomerDetails } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
 import { SearchBar } from '../components/SearchBar'
 import { matchSearch } from '../utils/searchHelper'
+import { getChannelPlatformMeta } from '../components/TransactionCard'
 
 export interface CustomersScreenProps {
   onNavigate: (tab: TabType) => void
   onSelectCustomerForPOS?: (customer: Customer) => void
 }
 
-const INITIAL_CUSTOMERS: Customer[] = []
+function getLoyaltyBadge(spent: number) {
+  if (spent >= 2000) return { label: 'Platinum VIP', bg: '#EDE9FE', text: '#5B21B6' }
+  if (spent >= 1000) return { label: 'Gold Member', bg: '#FEF9C3', text: '#B45309' }
+  if (spent >= 300) return { label: 'Silver Member', bg: '#F3F4F6', text: '#4B5563' }
+  return { label: 'Bronze', bg: '#FEF3C7', text: '#92400E' }
+}
+
+interface CustomerCardProps {
+  customer: Customer
+  onSelect: (cust: Customer) => void
+  onStartSale?: (cust: Customer) => void
+}
+
+const CustomerCard: React.FC<CustomerCardProps> = React.memo(({ customer, onSelect, onStartSale }) => {
+  const spent = Number(customer.total_spent || 0)
+  const badge = getLoyaltyBadge(spent)
+
+  return (
+    <TouchableOpacity
+      style={styles.customerCard}
+      onPress={() => onSelect(customer)}
+      activeOpacity={0.8}
+    >
+      <View style={styles.cardTop}>
+        <View style={styles.avatarBox}>
+          <Ionicons name="person" size={20} color={tokens.colors.primaryContainer} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.customerName}>{customer.name}</Text>
+          <Text style={styles.customerPhone}>{customer.phone}</Text>
+        </View>
+        <View style={[styles.loyaltyBadge, { backgroundColor: badge.bg }]}>
+          <Text style={[styles.loyaltyText, { color: badge.text }]}>{badge.label}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardDivider} />
+
+      <View style={styles.cardBottom}>
+        <View>
+          <Text style={styles.metaLabel}>Total Spend</Text>
+          <Text style={styles.spendVal}>${spent.toFixed(2)}</Text>
+        </View>
+        <View>
+          <Text style={styles.metaLabel}>Orders</Text>
+          <Text style={styles.ordersVal}>{customer.total_purchased || 0} completed</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.posActionBtn}
+          onPress={() => onStartSale?.(customer)}
+        >
+          <Ionicons name="cart" size={14} color={tokens.colors.onPrimary} />
+          <Text style={styles.posActionText}>Start Sale</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  )
+})
 
 export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   onNavigate,
   onSelectCustomerForPOS,
 }) => {
+  const { showToast } = useToast()
   const { can } = usePermissions()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
@@ -44,6 +104,31 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
 
   // Details Modal
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({})
+
+  const handleSelectCustomer = useCallback(async (cust: Customer) => {
+    setSelectedCustomer(cust)
+    setExpandedOrders({})
+    setDetailsLoading(true)
+    try {
+      const res = await getCustomerDetails(cust.id)
+      if (res && res.data) {
+        setSelectedCustomer(res.data)
+      }
+    } catch {
+      // Keep existing customer info if details fetch fails
+    } finally {
+      setDetailsLoading(false)
+    }
+  }, [])
+
+  const toggleOrderExpand = useCallback((orderId: string) => {
+    setExpandedOrders((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId],
+    }))
+  }, [])
 
   // Create / Edit Modal
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
@@ -83,12 +168,32 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
     loadCustomers(search)
   }, [loadCustomers, search])
 
-  const filteredCustomers = useMemo(() => {
-    if (!search.trim()) return customers
-    return customers.filter((c) =>
-      matchSearch(search, c.name, c.phone, c.email, c.address, c.preferred_delivery_company)
+  const [sortBy, setSortBy] = useState<'spent' | 'orders' | 'name'>('spent')
+
+  const sortedCustomers = useMemo(() => {
+    let list = customers
+    if (search.trim()) {
+      list = customers.filter((c) =>
+        matchSearch(search, c.name, c.phone, c.email, c.address, c.preferred_delivery_company)
+      )
+    }
+    return [...list].sort((a, b) => {
+      if (sortBy === 'spent') {
+        return Number(b.total_spent || 0) - Number(a.total_spent || 0)
+      } else if (sortBy === 'orders') {
+        return (b.total_purchased || 0) - (a.total_purchased || 0)
+      } else {
+        return a.name.localeCompare(b.name)
+      }
+    })
+  }, [customers, search, sortBy])
+
+  const sortedModalOrders = useMemo(() => {
+    if (!selectedCustomer?.orders) return []
+    return [...selectedCustomer.orders].sort(
+      (a, b) => Number(b.total_amount || 0) - Number(a.total_amount || 0)
     )
-  }, [customers, search])
+  }, [selectedCustomer?.orders])
 
   const handleOpenCreate = () => {
     setEditingCustomer(null)
@@ -122,7 +227,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
       if (selectedCustomer?.id === editingCustomer.id) {
         setSelectedCustomer(updated)
       }
-      Alert.alert('Success', `Customer "${data.name}" updated.`)
+      showToast(`Customer "${data.name}" updated.`, 'success')
     } else {
       const newCust: Customer = {
         id: `cust-${Date.now()}`,
@@ -136,17 +241,10 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
         created_at: new Date().toISOString(),
       }
       setCustomers([newCust, ...customers])
-      Alert.alert('Success', `New customer "${data.name}" added.`)
+      showToast(`New customer "${data.name}" added.`, 'success')
     }
 
     setCustomerModalOpen(false)
-  }
-
-  const getLoyaltyBadge = (spent: number) => {
-    if (spent >= 2000) return { label: 'Platinum VIP', bg: '#EDE9FE', text: '#5B21B6' }
-    if (spent >= 1000) return { label: 'Gold Member', bg: '#FEF9C3', text: '#B45309' }
-    if (spent >= 300) return { label: 'Silver Member', bg: '#F3F4F6', text: '#4B5563' }
-    return { label: 'Bronze', bg: '#FEF3C7', text: '#92400E' }
   }
 
   return (
@@ -166,10 +264,39 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
         )}
       </View>
 
+      {/* Sort Filter Bar */}
+      <View style={styles.sortBar}>
+        <Text style={styles.sortLabel}>SORT BY:</Text>
+        <TouchableOpacity
+          style={[styles.sortPill, sortBy === 'spent' && styles.sortPillActive]}
+          onPress={() => setSortBy('spent')}
+        >
+          <Text style={[styles.sortPillText, sortBy === 'spent' && styles.sortPillTextActive]}>
+            💰 Most Amount
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sortPill, sortBy === 'orders' && styles.sortPillActive]}
+          onPress={() => setSortBy('orders')}
+        >
+          <Text style={[styles.sortPillText, sortBy === 'orders' && styles.sortPillTextActive]}>
+            📦 Most Orders
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sortPill, sortBy === 'name' && styles.sortPillActive]}
+          onPress={() => setSortBy('name')}
+        >
+          <Text style={[styles.sortPillText, sortBy === 'name' && styles.sortPillTextActive]}>
+            🔤 Name
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Customer Cards List */}
       <FlatList
         style={styles.list}
-        data={filteredCustomers}
+        data={sortedCustomers}
         keyExtractor={(item: Customer) => item.id}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
@@ -184,54 +311,16 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
             tintColor={tokens.colors.primaryContainer}
           />
         }
-        renderItem={({ item: cust }: { item: Customer }) => {
-          const spent = Number(cust.total_spent || 0)
-          const badge = getLoyaltyBadge(spent)
-
-          return (
-            <TouchableOpacity
-              style={styles.customerCard}
-              onPress={() => setSelectedCustomer(cust)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.cardTop}>
-                <View style={styles.avatarBox}>
-                  <Ionicons name="person" size={20} color={tokens.colors.primaryContainer} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.customerName}>{cust.name}</Text>
-                  <Text style={styles.customerPhone}>{cust.phone}</Text>
-                </View>
-                <View style={[styles.loyaltyBadge, { backgroundColor: badge.bg }]}>
-                  <Text style={[styles.loyaltyText, { color: badge.text }]}>{badge.label}</Text>
-                </View>
-              </View>
-
-              <View style={styles.cardDivider} />
-
-              <View style={styles.cardBottom}>
-                <View>
-                  <Text style={styles.metaLabel}>Total Spend</Text>
-                  <Text style={styles.spendVal}>${spent.toFixed(2)}</Text>
-                </View>
-                <View>
-                  <Text style={styles.metaLabel}>Orders</Text>
-                  <Text style={styles.ordersVal}>{cust.total_purchased || 0} completed</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.posActionBtn}
-                  onPress={() => {
-                    if (onSelectCustomerForPOS) onSelectCustomerForPOS(cust)
-                    onNavigate('pos')
-                  }}
-                >
-                  <Ionicons name="cart" size={14} color={tokens.colors.onPrimary} />
-                  <Text style={styles.posActionText}>Start Sale</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          )
-        }}
+        renderItem={({ item: cust }: { item: Customer }) => (
+          <CustomerCard
+            customer={cust}
+            onSelect={handleSelectCustomer}
+            onStartSale={(c) => {
+              if (onSelectCustomerForPOS) onSelectCustomerForPOS(c)
+              onNavigate('pos')
+            }}
+          />
+        )}
         ListEmptyComponent={
           loading && !refreshing && customers.length === 0 ? (
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
@@ -290,33 +379,117 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                   ) : null}
                 </View>
 
-                {/* Purchase Activity Summary */}
-                <Text style={[styles.sectionHeader, { marginTop: 16 }]}>Purchase Activity</Text>
-                {(selectedCustomer.total_purchased || 0) > 0 ? (
-                  <>
-                    <View style={styles.purchaseRow}>
-                      <View>
-                        <Text style={styles.purchaseNum}>Lifetime Orders</Text>
-                        <Text style={styles.purchaseDate}>Total Completed Transactions</Text>
+                {/* Order History & Ordered Products */}
+                <View style={styles.orderSectionHeaderRow}>
+                  <Text style={[styles.sectionHeader, { marginBottom: 0 }]}>Order History & Products</Text>
+                  {detailsLoading && (
+                    <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                  )}
+                </View>
+
+                {sortedModalOrders.length > 0 ? (
+                  sortedModalOrders.map((order) => {
+                    const isExpanded = Boolean(expandedOrders[order.id])
+                    const itemCount = order.items?.length || 0
+                    const totalAmount = Number(order.total_amount || 0)
+                    const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'
+                    const channelName = order.channel?.name || order.salesChannel?.name || 'POS'
+                    const channelMeta = getChannelPlatformMeta(order.channel, order.channel_id || channelName)
+
+                    return (
+                      <View key={order.id} style={styles.orderHistoryCard}>
+                        <TouchableOpacity
+                          style={styles.orderHeaderRow}
+                          onPress={() => toggleOrderExpand(order.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <View style={styles.orderMetaRow}>
+                              <Text style={styles.orderNum}>{order.order_number}</Text>
+                              <View style={[styles.channelBadge, channelMeta?.bg ? { backgroundColor: channelMeta.bg, borderColor: (channelMeta.color || '#2563EB') + '33' } : null]}>
+                                <Ionicons
+                                  name={channelMeta?.icon || 'storefront-outline'}
+                                  size={11}
+                                  color={channelMeta?.color || '#2563EB'}
+                                  style={{ marginRight: 3 }}
+                                />
+                                <Text style={[styles.channelBadgeText, channelMeta?.color ? { color: channelMeta.color } : null]}>
+                                  {channelName}
+                                </Text>
+                              </View>
+                              <View style={[styles.statusBadge, { backgroundColor: order.status === 'completed' || order.status === 'paid' ? '#DCFCE7' : '#FEF3C7' }]}>
+                                <Text style={[styles.statusBadgeText, { color: order.status === 'completed' || order.status === 'paid' ? '#15803D' : '#B45309' }]}>
+                                  {{ completed: 'Completed', paid: 'Paid', pending: 'Pending', cancelled: 'Cancelled' }[order.status] || order.status}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text style={styles.orderDate}>{orderDate} • {itemCount} {itemCount === 1 ? 'product' : 'products'}</Text>
+                          </View>
+
+                          <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
+                            <Text style={styles.orderTotal}>${totalAmount.toFixed(2)}</Text>
+                            <View style={styles.viewProductsToggle}>
+                              <Text style={styles.viewProductsToggleText}>
+                                {isExpanded ? 'Hide' : 'Products'}
+                              </Text>
+                              <Ionicons
+                                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                size={13}
+                                color={tokens.colors.primaryContainer}
+                              />
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* Product Items Breakdown */}
+                        {isExpanded && (
+                          <View style={styles.orderItemsContainer}>
+                            <View style={styles.orderItemsHeader}>
+                              <Text style={styles.orderItemsHeaderText}>ORDERED PRODUCTS</Text>
+                            </View>
+                            {order.items && order.items.length > 0 ? (
+                              order.items.map((item, idx) => {
+                                const prodName = item.product?.name || item.product_name || item.productName || 'Product'
+                                const variantInfo = (item.variant && typeof item.variant === 'object' && 'name' in item.variant && item.variant.name)
+                                  ? item.variant.name
+                                  : (item.sku || (item.variant && typeof item.variant === 'object' && 'sku' in item.variant ? item.variant.sku : '') || '')
+                                const itemQty = item.quantity || 1
+                                const itemPrice = Number(item.unit_price || 0)
+                                const itemTotal = Number(item.total_price || (itemQty * itemPrice))
+
+                                return (
+                                  <View key={item.id || idx} style={[styles.orderItemRow, idx > 0 && styles.orderItemBorder]}>
+                                    <View style={styles.productIconBox}>
+                                      <Ionicons name="cube-outline" size={14} color={tokens.colors.primaryContainer} />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 8 }}>
+                                      <Text style={styles.productNameText} numberOfLines={1}>{prodName}</Text>
+                                      {Boolean(variantInfo) && (
+                                        <Text style={styles.productVariantText} numberOfLines={1}>{variantInfo}</Text>
+                                      )}
+                                      <Text style={styles.productQtyPriceText}>
+                                        {itemQty} × ${itemPrice.toFixed(2)}
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.productItemTotal}>${itemTotal.toFixed(2)}</Text>
+                                  </View>
+                                )
+                              })
+                            ) : (
+                              <Text style={styles.noItemsText}>No product details available</Text>
+                            )}
+                          </View>
+                        )}
                       </View>
-                      <Text style={styles.purchaseAmount}>{selectedCustomer.total_purchased || 0} Orders</Text>
-                    </View>
-                    {Boolean(selectedCustomer.last_purchase_at) && (
-                      <View style={styles.purchaseRow}>
-                        <View>
-                          <Text style={styles.purchaseNum}>Last Order Date</Text>
-                          <Text style={styles.purchaseDate}>Most Recent POS Checkout</Text>
-                        </View>
-                        <Text style={styles.purchaseAmount}>
-                          {selectedCustomer.last_purchase_at ? new Date(selectedCustomer.last_purchase_at).toLocaleDateString() : 'N/A'}
-                        </Text>
-                      </View>
-                    )}
-                  </>
+                    )
+                  })
                 ) : (
-                  <Text style={[styles.infoText, { color: tokens.colors.secondary, marginTop: 4 }]}>
-                    No previous orders recorded for this customer.
-                  </Text>
+                  <View style={styles.emptyOrdersBox}>
+                    <Ionicons name="receipt-outline" size={24} color={tokens.colors.secondary} />
+                    <Text style={styles.emptyOrdersText}>
+                      {detailsLoading ? 'Loading order history...' : 'No orders recorded for this customer.'}
+                    </Text>
+                  </View>
                 )}
 
                 {/* Action Buttons */}
@@ -794,6 +967,195 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: tokens.colors.onPrimary,
     fontSize: 14,
+    fontWeight: '700',
+  },
+  orderSectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  orderHistoryCard: {
+    backgroundColor: tokens.colors.surfaceCard,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  orderHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  orderMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  orderNum: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: tokens.colors.onBackground,
+  },
+  channelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  channelBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  orderDate: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+  },
+  orderTotal: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: tokens.colors.onBackground,
+  },
+  viewProductsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 3,
+  },
+  viewProductsToggleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: tokens.colors.primaryContainer,
+  },
+  orderItemsContainer: {
+    backgroundColor: tokens.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
+    padding: 12,
+  },
+  orderItemsHeader: {
+    marginBottom: 8,
+  },
+  orderItemsHeaderText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: tokens.colors.secondary,
+  },
+  orderItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  orderItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
+  },
+  productIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productNameText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: tokens.colors.onBackground,
+  },
+  productVariantText: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+    marginTop: 1,
+  },
+  productQtyPriceText: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+    marginTop: 2,
+  },
+  productItemTotal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: tokens.colors.onBackground,
+    marginLeft: 8,
+  },
+  noItemsText: {
+    fontSize: 12,
+    color: tokens.colors.secondary,
+    fontStyle: 'italic',
+    paddingVertical: 6,
+  },
+  emptyOrdersBox: {
+    backgroundColor: tokens.colors.surfaceCard,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyOrdersText: {
+    fontSize: 12,
+    color: tokens.colors.secondary,
+    textAlign: 'center',
+  },
+  sortBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: tokens.spacing.md,
+    paddingVertical: 6,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderSubtle,
+    backgroundColor: tokens.colors.surfaceCard,
+  },
+  sortLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+    marginRight: 2,
+  },
+  sortPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: tokens.colors.background,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+  },
+  sortPillActive: {
+    backgroundColor: tokens.colors.primaryContainer,
+    borderColor: tokens.colors.primaryContainer,
+  },
+  sortPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: tokens.colors.secondary,
+  },
+  sortPillTextActive: {
+    color: tokens.colors.onPrimary,
     fontWeight: '700',
   },
 })

@@ -2,6 +2,33 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/api/axios'
+import {
+  Package,
+  Search,
+  RefreshCw,
+  ArrowDownToLine,
+  AlertTriangle,
+  XCircle,
+  DollarSign,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  StatCard,
+  Alert,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  EmptyState,
+  Skeleton,
+} from '@/components/ui'
 
 interface Variant {
   id: string
@@ -117,15 +144,15 @@ function onFilterChange() {
 }
 
 function stockBadge(v: Variant) {
-  if (v.quantity_on_hand === 0) return 'badge--red'
-  if (v.quantity_on_hand <= v.reorder_level) return 'badge--yellow'
-  return 'badge--green'
+  if (v.quantity_on_hand === 0) return 'destructive' as const
+  if (v.quantity_on_hand <= v.reorder_level) return 'warning' as const
+  return 'success' as const
 }
 
 function stockLabel(v: Variant) {
-  if (v.quantity_on_hand === 0) return '✕ Out of Stock'
-  if (v.quantity_on_hand <= v.reorder_level) return '⚠️ Low Stock'
-  return '✓ In Stock'
+  if (v.quantity_on_hand === 0) return 'Out of Stock'
+  if (v.quantity_on_hand <= v.reorder_level) return 'Low Stock'
+  return 'In Stock'
 }
 
 function isRowLowStock(v: Variant) {
@@ -142,261 +169,250 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-col gap-24">
+  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
     <!-- Header & Actions -->
-    <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 16px;">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-10">
-          <h1 class="page-title">Inventory Ledger</h1>
-          <span class="badge badge--blue font-semibold tabular-nums">{{ totalSkus }} SKUs</span>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Inventory Ledger</h1>
+          <Badge variant="info" class="font-mono text-xs px-2.5 py-0.5">
+            {{ totalSkus }} Tracked SKUs
+          </Badge>
         </div>
-        <p class="text-muted text-sm mt-4">
-          Real-time SKU stock levels, reorder thresholds, inventory valuation, and batch intake.
+        <p class="text-xs text-muted-foreground mt-0.5">
+          Real-time SKU stock levels, reorder thresholds, inventory valuation, and batch replenishment.
         </p>
       </div>
 
-      <div class="flex items-center gap-12">
-        <RouterLink to="/restock" class="btn btn--primary" id="btn-goto-restock">
-          <span>📥</span>
-          <span>+ Restock Batch Intake</span>
+      <div class="flex items-center gap-2">
+        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="loading" @click="loadInventory">
+          <RefreshCw :size="14" :class="{ 'animate-spin': loading }" />
+          <span>Refresh</span>
+        </Button>
+        <RouterLink to="/restock">
+          <Button variant="primary" size="sm" class="h-9 px-3.5 gap-1.5">
+            <ArrowDownToLine :size="15" />
+            <span>Restock Intake</span>
+          </Button>
         </RouterLink>
       </div>
     </div>
 
     <!-- KPI Stat Cards -->
-    <div class="grid-4 gap-16">
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--primary">
-            <span>📦</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Catalog SKUs</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums">{{ totalSkus }}</span>
-          <span class="stat-card-label">Tracked SKUs</span>
-          <span class="stat-card-sub">{{ totalInventoryUnits }} total units on hand</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--warning">
-            <span>⚠️</span>
-          </div>
-          <div class="trend-pill trend-pill--warning">
-            <span>Reorder Needed</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-warning);">
-            {{ lowStockCount }}
-          </span>
-          <span class="stat-card-label">Low Stock Warning</span>
-          <span class="stat-card-sub">At or below reorder threshold</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--danger">
-            <span>✕</span>
-          </div>
-          <div class="trend-pill trend-pill--down">
-            <span>Depleted</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-error);">
-            {{ outOfStockCount }}
-          </span>
-          <span class="stat-card-label">Out of Stock</span>
-          <span class="stat-card-sub">0 units available for sale</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--purple">
-            <span>💵</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Valuation</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-purple-text);">
-            {{ fmtMoney(estimatedStockCost) }}
-          </span>
-          <span class="stat-card-label">Inventory Cost Value</span>
-          <span class="stat-card-sub">Calculated from supplier cost</span>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatCard
+        label="Tracked SKUs"
+        :value="totalSkus"
+        :sub="`${totalInventoryUnits} total units on hand`"
+        :icon="Package"
+        icon-variant="primary"
+      />
+      <StatCard
+        label="Reorder Needed"
+        :value="lowStockCount"
+        sub="At or below reorder level"
+        :icon="AlertTriangle"
+        icon-variant="warning"
+      />
+      <StatCard
+        label="Depleted Stock"
+        :value="outOfStockCount"
+        sub="0 units available for sale"
+        :icon="XCircle"
+        icon-variant="error"
+      />
+      <StatCard
+        label="Inventory Cost Value"
+        :value="fmtMoney(estimatedStockCost)"
+        sub="Estimated wholesale cost"
+        :icon="DollarSign"
+        icon-variant="success"
+      />
     </div>
 
     <!-- Filter Bar -->
-    <section class="card">
-      <div class="flex items-center justify-between gap-16" style="flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 260px; max-width: 480px;">
-          <input
-            id="inventory-search"
-            v-model="search"
-            type="text"
-            placeholder="Search by product name, SKU, or barcode…"
-            @input="onSearchInput"
-          />
-        </div>
-
-        <div class="flex items-center gap-12" style="flex-wrap: wrap;">
-          <div class="form-group" style="min-width: 170px;">
-            <select id="inventory-stock-filter" v-model="stockFilter" @change="onFilterChange">
-              <option value="all">All Stock Statuses</option>
-              <option value="in">In Stock Only</option>
-              <option value="low">Low Stock Only</option>
-              <option value="out">Out of Stock Only</option>
-            </select>
-          </div>
-
-          <button id="btn-refresh-inventory" class="btn btn--ghost" @click="loadInventory" title="Refresh">
-            ↺ Refresh
-          </button>
-        </div>
+    <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div class="flex-1 max-w-md">
+        <Input
+          id="inventory-search"
+          v-model="search"
+          type="text"
+          placeholder="Search by product name, SKU, or barcode…"
+          class="bg-surface"
+          @input="onSearchInput"
+        >
+          <template #prefix>
+            <Search :size="16" />
+          </template>
+        </Input>
       </div>
-    </section>
 
-    <!-- Error Alert -->
-    <div v-if="error" class="alert alert--error">
-      <span>⚠️ {{ error }}</span>
-      <button class="btn btn--ghost btn--sm" @click="loadInventory" style="margin-left: auto;">Retry</button>
+      <div class="flex items-center gap-2">
+        <select
+          id="inventory-stock-filter"
+          v-model="stockFilter"
+          class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+          @change="onFilterChange"
+        >
+          <option value="all">All Stock Statuses</option>
+          <option value="in">In Stock Only</option>
+          <option value="low">Low Stock Warning Only</option>
+          <option value="out">Out of Stock Only</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Inventory Table -->
-    <section class="card" style="padding: 0; overflow: hidden;">
-      <div v-if="loading" style="padding: 24px;">
-        <div v-for="i in 5" :key="i" class="skeleton-row"></div>
+    <!-- Error Alert -->
+    <Alert v-if="error" variant="error" class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <AlertCircle :size="16" />
+        <span>{{ error }}</span>
+      </div>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadInventory">Retry</Button>
+    </Alert>
+
+    <!-- Inventory Table Container -->
+    <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+      <div v-if="loading" class="p-6 space-y-3">
+        <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
       </div>
 
-      <div v-else-if="variants.length === 0" class="empty-state">
-        <div class="empty-icon">📦</div>
-        <h3 class="font-bold text-lg mb-8">No inventory items found</h3>
-        <p class="text-muted mb-16">No variants match your search and filter parameters.</p>
-        <RouterLink to="/restock" class="btn btn--primary">
-          Start a Restock Intake
-        </RouterLink>
-      </div>
+      <EmptyState
+        v-else-if="variants.length === 0"
+        :icon="Package"
+        title="No inventory items found"
+        description="No product variants match your search and filter criteria."
+      >
+        <template #action>
+          <RouterLink to="/restock">
+            <Button variant="primary" size="sm" class="gap-1.5">
+              <ArrowDownToLine :size="15" />
+              <span>Start a Restock Intake</span>
+            </Button>
+          </RouterLink>
+        </template>
+      </EmptyState>
 
-      <div v-else class="table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-        <table>
-          <thead>
-            <tr>
-              <th>Product & Category</th>
-              <th>Variant SKU</th>
-              <th>Barcode</th>
-              <th>Quantity On Hand</th>
-              <th>Reorder At</th>
-              <th>Stock Status</th>
-              <th style="text-align: right;">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
+      <div v-else class="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow class="bg-muted/40">
+              <TableHead>Product & Category</TableHead>
+              <TableHead>Variant SKU</TableHead>
+              <TableHead>Barcode</TableHead>
+              <TableHead class="font-mono">Stock on Hand</TableHead>
+              <TableHead class="font-mono">Reorder At</TableHead>
+              <TableHead>Stock Status</TableHead>
+              <TableHead class="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="v in variants"
               :key="v.id"
-              :class="{ 'row-warning': isRowLowStock(v) }"
+              class="hover:bg-surface-subtle/80 transition-colors"
+              :class="{ 'bg-warning/5': isRowLowStock(v) }"
             >
-              <td>
-                <div class="font-semibold">{{ v.product?.name ?? '—' }}</div>
-                <div v-if="v.product?.category" class="text-xs text-muted mt-2">
-                  <span class="badge badge--neutral" style="font-size: 11px; padding: 2px 6px;">
+              <TableCell>
+                <div class="font-semibold text-foreground">{{ v.product?.name ?? '—' }}</div>
+                <div v-if="v.product?.category" class="mt-0.5">
+                  <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
                     {{ v.product.category.name }}
-                  </span>
+                  </Badge>
                 </div>
-              </td>
-              <td>
-                <code class="tabular-nums font-semibold" style="font-size: 13px; color: var(--action-primary); background-color: var(--surface-alt); padding: 3px 8px; border-radius: var(--radius-xs); border: 1px solid var(--border-color);">
-                  {{ v.sku }}
-                </code>
-              </td>
-              <td>
-                <code v-if="v.barcode" class="tabular-nums text-xs" style="background-color: var(--surface-alt); padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              </TableCell>
+
+              <TableCell class="font-mono text-xs font-semibold text-primary">
+                {{ v.sku }}
+              </TableCell>
+
+              <TableCell class="font-mono text-xs">
+                <span v-if="v.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
                   {{ v.barcode }}
-                </code>
-                <span v-else class="text-muted text-xs">—</span>
-              </td>
-              <td>
-                <div class="flex items-center gap-8">
-                  <span class="tabular-nums font-bold" style="font-size: 15px;">
-                    {{ v.quantity_on_hand }}
-                  </span>
-                  <span class="text-xs text-muted">units</span>
-                </div>
-              </td>
-              <td class="tabular-nums text-muted">{{ v.reorder_level }} units</td>
-              <td>
-                <span class="badge" :class="stockBadge(v)">
-                  {{ stockLabel(v) }}
                 </span>
-              </td>
-              <td style="text-align: right;">
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+
+              <TableCell class="font-mono text-base font-bold text-foreground tabular-nums">
+                {{ v.quantity_on_hand }}
+                <span class="text-xs font-normal text-muted-foreground ml-1">units</span>
+              </TableCell>
+
+              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                {{ v.reorder_level }} units
+              </TableCell>
+
+              <TableCell>
+                <Badge :variant="stockBadge(v)" class="text-[11px] px-2 py-0.5">
+                  {{ stockLabel(v) }}
+                </Badge>
+              </TableCell>
+
+              <TableCell class="text-right">
                 <RouterLink
                   v-if="v.quantity_on_hand <= v.reorder_level"
                   to="/restock"
-                  class="btn btn--subtle btn--sm"
-                  style="color: var(--status-warning-text); font-weight: 600;"
                 >
-                  + Restock
+                  <Button variant="outline" size="sm" class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10">
+                    + Restock
+                  </Button>
                 </RouterLink>
-                <span v-else class="text-xs text-muted">Healthy</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <span v-else class="text-xs text-muted-foreground">Healthy</span>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <!-- Pagination -->
       <div
         v-if="meta && meta.last_page > 1"
-        class="pagination"
-        style="padding: 16px 24px; border-top: 1px solid var(--border-color);"
+        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
       >
-        <button
-          class="page-btn"
-          :disabled="page <= 1 || loading"
-          @click="page--; loadInventory()"
-        >
-          ‹ Previous
-        </button>
-        <span class="page-info tabular-nums">
+        <span class="font-mono">
           Page {{ page }} of {{ meta.last_page }} ({{ meta.total }} total)
         </span>
-        <button
-          class="page-btn"
-          :disabled="page >= meta.last_page || loading"
-          @click="page++; loadInventory()"
-        >
-          Next ›
-        </button>
+        <div class="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs gap-1"
+            :disabled="page <= 1 || loading"
+            @click="page--; loadInventory()"
+          >
+            <ChevronLeft :size="14" />
+            <span>Previous</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs gap-1"
+            :disabled="page >= meta.last_page || loading"
+            @click="page++; loadInventory()"
+          >
+            <span>Next</span>
+            <ChevronRight :size="14" />
+          </Button>
+        </div>
       </div>
-    </section>
+    </div>
 
     <!-- Movement Audit Trail Legend -->
-    <section class="card">
-      <div class="flex items-center justify-between mb-12">
-        <h2 class="font-bold text-lg">Stock Movement Types & Audit Reference</h2>
-        <span class="badge badge--green font-semibold">Atomic ACID Ledger</span>
+    <div class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <h3 class="font-display font-bold text-sm text-foreground">Stock Movement Types & Audit Reference</h3>
+        <Badge variant="success" class="text-[10px]">ACID Audit Ledger</Badge>
       </div>
-      <div class="tags mb-12">
-        <span class="badge badge--green">RESTOCK (Supplier Intake)</span>
-        <span class="badge badge--red">SALE (POS / Checkout)</span>
-        <span class="badge badge--yellow">ADJUSTMENT (Audit / Count)</span>
-        <span class="badge badge--blue">RETURN (Customer Return)</span>
-        <span class="badge badge--red">DAMAGE (Defect / Loss)</span>
+      <div class="flex flex-wrap gap-2">
+        <Badge variant="success" class="text-xs">RESTOCK (Supplier Intake)</Badge>
+        <Badge variant="destructive" class="text-xs">SALE (POS / Checkout)</Badge>
+        <Badge variant="warning" class="text-xs">ADJUSTMENT (Audit / Count)</Badge>
+        <Badge variant="info" class="text-xs">RETURN (Customer Return)</Badge>
+        <Badge variant="neutral" class="text-xs">DAMAGE (Loss / Defect)</Badge>
       </div>
-      <p class="text-muted text-sm" style="line-height: 1.5;">
-        All stock mutations in OmniPOS are transactional and strictly recorded in the stock movements ledger with quantity snapshots (before/after).
+      <p class="text-xs text-muted-foreground">
+        All stock mutations in OmniPOS are atomic and strictly recorded in the stock movements ledger with quantity snapshots.
       </p>
-    </section>
+    </div>
   </div>
 </template>

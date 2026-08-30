@@ -2,6 +2,43 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useProductStore, type Product } from '@/stores/productStore'
+import {
+  Plus,
+  Search,
+  RefreshCw,
+  LayoutGrid,
+  List,
+  CheckCircle2,
+  Package,
+  Edit2,
+  Trash2,
+  AlertCircle,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  Switch,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  StatCard,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  EmptyState,
+  Skeleton,
+  Alert,
+} from '@/components/ui'
 
 const router = useRouter()
 const productStore = useProductStore()
@@ -12,6 +49,7 @@ const page = ref(1)
 const viewMode = ref<'table' | 'grid'>('table')
 const deletingProduct = ref<Product | null>(null)
 const deleteLoading = ref(false)
+const isDeleteDialogOpen = ref(false)
 
 // Computed KPIs from loaded products
 const totalProductsCount = computed(() => productStore.meta?.total ?? productStore.products.length)
@@ -49,7 +87,8 @@ function onSearchInput() {
   }, 300)
 }
 
-function onFilterChange() {
+function onFilterChange(filter: string) {
+  activeFilter.value = filter
   page.value = 1
   loadProducts()
 }
@@ -59,8 +98,9 @@ function changePage(newPage: number) {
   loadProducts()
 }
 
-async function handleToggleStatus(product: Product) {
+async function handleToggleStatus(product: Product, checked: boolean) {
   try {
+    product.is_active = checked
     await productStore.toggleProductStatus(product)
   } catch {
     // Error handled in store
@@ -69,10 +109,12 @@ async function handleToggleStatus(product: Product) {
 
 function confirmDelete(product: Product) {
   deletingProduct.value = product
+  isDeleteDialogOpen.value = true
 }
 
 function cancelDelete() {
   deletingProduct.value = null
+  isDeleteDialogOpen.value = false
 }
 
 async function executeDelete() {
@@ -80,6 +122,7 @@ async function executeDelete() {
   deleteLoading.value = true
   try {
     await productStore.deleteProduct(deletingProduct.value.id)
+    isDeleteDialogOpen.value = false
     deletingProduct.value = null
     if (productStore.products.length === 0 && page.value > 1) {
       page.value--
@@ -104,362 +147,395 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-col gap-24">
+  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
     <!-- Header & Action Toolbar -->
-    <div class="flex items-center justify-between" style="flex-wrap: wrap; gap: 16px;">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-10">
-          <h1 class="page-title">Product Catalog</h1>
-          <span class="badge badge--blue tabular-nums font-semibold">{{ totalProductsCount }} Items</span>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Product Catalog</h1>
+          <Badge variant="info" class="tabular-nums font-semibold px-2.5 py-0.5">
+            {{ totalProductsCount }} Items
+          </Badge>
         </div>
-        <p class="text-muted text-sm mt-4">
-          Manage master product lines, barcodes, pricing margins, and variant matrices.
+        <p class="text-muted-foreground text-sm mt-1">
+          Master catalog, barcodes, margin calculations, and multi-tier Cartesian variant matrices.
         </p>
       </div>
 
-      <div class="flex items-center gap-12">
-        <button
-          class="btn btn--ghost btn--sm"
-          :class="{ 'btn--subtle': viewMode === 'table' }"
-          @click="viewMode = 'table'"
-          title="Table View"
+      <div class="flex items-center gap-2.5">
+        <Button
+          id="btn-refresh-products"
+          variant="outline"
+          size="sm"
+          class="h-9 px-3 gap-1.5 text-xs"
+          :disabled="productStore.loading"
+          @click="loadProducts"
         >
-          <span>☰ Table</span>
-        </button>
-        <button
-          class="btn btn--ghost btn--sm"
-          :class="{ 'btn--subtle': viewMode === 'grid' }"
-          @click="viewMode = 'grid'"
-          title="Grid View"
-        >
-          <span>⊞ Cards</span>
-        </button>
+          <RefreshCw :size="14" :class="{ 'animate-spin': productStore.loading }" />
+          <span>Refresh</span>
+        </Button>
 
-        <RouterLink to="/products/create" class="btn btn--primary" id="btn-new-product">
-          <span>+</span>
-          <span>New Product</span>
+        <RouterLink to="/products/create">
+          <Button variant="primary" size="sm" class="h-9 px-3.5 gap-1.5 font-semibold">
+            <Plus :size="15" />
+            <span>New Product</span>
+          </Button>
         </RouterLink>
       </div>
     </div>
 
     <!-- KPI Summary Stat Cards -->
-    <div class="grid-3 gap-16">
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--primary">
-            <span>🏷️</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Master Catalog</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums">{{ totalProductsCount }}</span>
-          <span class="stat-card-label">Total Products</span>
-          <span class="stat-card-sub">Items configured in system</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--success">
-            <span>✓</span>
-          </div>
-          <div class="trend-pill trend-pill--up">
-            <span>● Active in POS</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-success);">
-            {{ activeProductsCount }}
-          </span>
-          <span class="stat-card-label">Active For Sale</span>
-          <span class="stat-card-sub">Available on POS & channels</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-header">
-          <div class="icon-badge icon-badge--warning">
-            <span>📦</span>
-          </div>
-          <div class="trend-pill trend-pill--neutral">
-            <span>Cartesian Matrix</span>
-          </div>
-        </div>
-        <div class="stat-card-body">
-          <span class="stat-card-value tabular-nums" style="color: var(--status-warning);">
-            {{ totalVariantsCount }}
-          </span>
-          <span class="stat-card-label">Total Variant SKUs</span>
-          <span class="stat-card-sub">Combinations across active products</span>
-        </div>
-      </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <StatCard
+        label="Total Master Products"
+        :value="totalProductsCount"
+        sub="Items configured in system"
+        :icon="Package"
+        icon-variant="primary"
+      />
+      <StatCard
+        label="Active for Sale"
+        :value="activeProductsCount"
+        sub="Enabled for POS & channels"
+        :icon="CheckCircle2"
+        icon-variant="success"
+      />
+      <StatCard
+        label="Variant Matrix SKUs"
+        :value="totalVariantsCount"
+        sub="Total size/color combinations"
+        :icon="Layers"
+        icon-variant="warning"
+      />
     </div>
 
-    <!-- Filter & Search Toolbar -->
-    <section class="card">
-      <div class="flex items-center justify-between gap-16" style="flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 260px; max-width: 480px;">
-          <input
-            id="product-search-input"
-            v-model="search"
-            type="text"
-            placeholder="Search by product name, barcode, or SKU…"
-            @input="onSearchInput"
-          />
+    <!-- Filter & Search Controls -->
+    <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div class="flex-1 max-w-md">
+        <Input
+          id="product-search-input"
+          v-model="search"
+          type="text"
+          placeholder="Search by product name, barcode, or SKU…"
+          class="bg-surface"
+          @input="onSearchInput"
+        >
+          <template #prefix>
+            <Search :size="16" />
+          </template>
+        </Input>
+      </div>
+
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <!-- Status Filter Segmented Control -->
+        <div class="inline-flex h-9 items-center rounded-lg border border-border bg-surface p-0.5">
+          <button
+            v-for="filter in [
+              { label: 'All', val: 'all' },
+              { label: 'Active', val: 'active' },
+              { label: 'Inactive', val: 'inactive' }
+            ]"
+            :key="filter.val"
+            class="h-7.5 px-3 flex items-center rounded-md text-xs font-medium transition-colors"
+            :class="activeFilter === filter.val ? 'bg-card text-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'"
+            @click="onFilterChange(filter.val)"
+          >
+            {{ filter.label }}
+          </button>
         </div>
 
-        <div class="flex items-center gap-12" style="flex-wrap: wrap;">
-          <div class="form-group" style="min-width: 150px;">
-            <select id="product-status-filter" v-model="activeFilter" @change="onFilterChange">
-              <option value="all">All Statuses</option>
-              <option value="active">Active Only</option>
-              <option value="inactive">Inactive Only</option>
-            </select>
-          </div>
-
-          <button id="btn-refresh-products" class="btn btn--ghost" @click="loadProducts" title="Refresh Catalog">
-            ↺ Refresh
+        <!-- View Mode Segmented Control -->
+        <div class="inline-flex h-9 items-center rounded-lg border border-border bg-surface p-0.5">
+          <button
+            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors"
+            :class="viewMode === 'table' ? 'bg-card text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'table'"
+            title="Table View"
+          >
+            <List :size="14" />
+            <span>Table</span>
+          </button>
+          <button
+            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors"
+            :class="viewMode === 'grid' ? 'bg-card text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'grid'"
+            title="Cards View"
+          >
+            <LayoutGrid :size="14" />
+            <span>Cards</span>
           </button>
         </div>
       </div>
-    </section>
-
-    <!-- Error Alert -->
-    <div v-if="productStore.error" class="alert alert--error">
-      <span>⚠️ {{ productStore.error }}</span>
-      <button class="btn btn--ghost btn--sm" @click="loadProducts" style="margin-left: auto;">Retry</button>
     </div>
 
-    <!-- Products Content (Table View / Grid View) -->
-    <section class="card" style="padding: 0; overflow: hidden;">
-      <div v-if="productStore.loading" style="padding: 24px;">
-        <div v-for="i in 5" :key="i" class="skeleton-row"></div>
+    <!-- Error Alert -->
+    <Alert v-if="productStore.error" variant="error" class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <AlertCircle :size="16" />
+        <span>{{ productStore.error }}</span>
+      </div>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadProducts">Retry</Button>
+    </Alert>
+
+    <!-- Main Content Container -->
+    <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+      <!-- Loading Skeleton -->
+      <div v-if="productStore.loading" class="p-6 space-y-3">
+        <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
       </div>
 
-      <div v-else-if="productStore.products.length === 0" class="empty-state">
-        <div class="empty-icon">🏷️</div>
-        <h3 class="font-bold text-lg mb-8">No products found</h3>
-        <p class="text-muted mb-16">No products match your current search and filter criteria.</p>
-        <RouterLink to="/products/create" class="btn btn--primary">
-          Create Your First Product
-        </RouterLink>
-      </div>
+      <!-- Empty State -->
+      <EmptyState
+        v-else-if="productStore.products.length === 0"
+        :icon="Package"
+        title="No products found"
+        description="No products match your current search query or filter criteria. Try adjusting your search or add a new product line."
+      >
+        <template #action>
+          <RouterLink to="/products/create">
+            <Button variant="primary" size="sm" class="gap-1.5">
+              <Plus :size="15" />
+              <span>Create First Product</span>
+            </Button>
+          </RouterLink>
+        </template>
+      </EmptyState>
 
       <!-- Table View -->
-      <div v-else-if="viewMode === 'table'" class="table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 64px;">Image</th>
-              <th>Product Name</th>
-              <th>Master Barcode</th>
-              <th>Variants</th>
-              <th>Purchase Price</th>
-              <th>Selling Price</th>
-              <th>Active</th>
-              <th style="text-align: right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in productStore.products" :key="p.id">
-              <td>
-                <div
-                  style="width: 40px; height: 40px; border-radius: var(--radius-md); background-color: var(--surface-alt); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);"
-                >
+      <div v-else-if="viewMode === 'table'" class="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow class="bg-muted/40">
+              <TableHead class="w-14">Image</TableHead>
+              <TableHead>Product Name</TableHead>
+              <TableHead>Barcode</TableHead>
+              <TableHead>Variants</TableHead>
+              <TableHead>Cost Price</TableHead>
+              <TableHead>Selling Price</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead class="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="p in productStore.products"
+              :key="p.id"
+              class="hover:bg-surface-subtle/80 transition-colors"
+            >
+              <TableCell>
+                <div class="w-10 h-10 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
                   <img
                     v-if="p.image_url"
                     :src="p.image_url"
                     :alt="p.name"
-                    style="width: 100%; height: 100%; object-fit: cover;"
+                    class="w-full h-full object-cover"
                     @error="($event.target as HTMLElement).style.display='none'"
                   />
-                  <span v-else style="font-size: 18px; color: var(--text-disabled);">🏷️</span>
+                  <Package v-else :size="18" class="text-muted-foreground/60" />
                 </div>
-              </td>
-              <td>
-                <div class="font-semibold" style="font-size: 14.5px;">{{ p.name }}</div>
-                <div v-if="p.category" class="text-xs text-muted mt-2">
-                  <span class="badge badge--neutral" style="font-size: 11px; padding: 2px 6px;">
+              </TableCell>
+
+              <TableCell>
+                <div class="font-semibold text-foreground hover:text-primary cursor-pointer" @click="router.push(`/products/${p.id}/edit`)">
+                  {{ p.name }}
+                </div>
+                <div v-if="p.category" class="mt-0.5">
+                  <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
                     {{ p.category.name }}
-                  </span>
+                  </Badge>
                 </div>
-              </td>
-              <td>
-                <code v-if="p.barcode" class="tabular-nums" style="font-size: 12px; background-color: var(--surface-alt); padding: 3px 8px; border-radius: var(--radius-xs); border: 1px solid var(--border-color);">
+              </TableCell>
+
+              <TableCell class="font-mono text-xs">
+                <span v-if="p.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
                   {{ p.barcode }}
-                </code>
-                <span v-else class="text-muted text-xs">—</span>
-              </td>
-              <td>
-                <span class="badge badge--blue tabular-nums">
-                  {{ p.variants ? p.variants.length : 0 }} variants
                 </span>
-              </td>
-              <td class="tabular-nums text-muted">{{ fmtMoney(p.purchase_price) }}</td>
-              <td class="tabular-nums font-bold" style="font-size: 14.5px; color: var(--action-primary);">
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+
+              <TableCell>
+                <Badge variant="info" class="font-mono text-[11px] px-2 py-0.5">
+                  {{ p.variants ? p.variants.length : 0 }} variants
+                </Badge>
+              </TableCell>
+
+              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                {{ fmtMoney(p.purchase_price) }}
+              </TableCell>
+
+              <TableCell class="font-mono text-sm font-bold text-primary tabular-nums">
                 {{ fmtMoney(p.selling_price) }}
-              </td>
-              <td>
-                <label class="toggle-switch" :title="p.is_active ? 'Active' : 'Inactive'">
-                  <input
-                    type="checkbox"
-                    :checked="p.is_active"
-                    :disabled="productStore.mutating"
-                    @change="handleToggleStatus(p)"
-                  />
-                  <span class="toggle-slider"></span>
-                </label>
-              </td>
-              <td style="text-align: right;">
-                <div class="flex items-center justify-end gap-8">
-                  <button
+              </TableCell>
+
+              <TableCell>
+                <Switch
+                  :checked="p.is_active"
+                  :disabled="productStore.mutating"
+                  @update:checked="(checked) => handleToggleStatus(p, checked)"
+                />
+              </TableCell>
+
+              <TableCell class="text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                  <Button
                     :id="`btn-edit-product-${p.id}`"
-                    class="btn btn--ghost btn--sm"
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 px-2.5 text-xs gap-1"
                     @click="router.push(`/products/${p.id}/edit`)"
                   >
-                    Edit
-                  </button>
-                  <button
+                    <Edit2 :size="13" />
+                    <span>Edit</span>
+                  </Button>
+                  <Button
                     :id="`btn-delete-product-${p.id}`"
-                    class="btn btn--ghost btn--sm"
-                    style="color: var(--action-destructive);"
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     @click="confirmDelete(p)"
                   >
-                    Delete
-                  </button>
+                    <Trash2 :size="14" />
+                  </Button>
                 </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
-      <!-- Grid Cards View -->
-      <div v-else style="padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+      <!-- Cards Grid View -->
+      <div v-else class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div
           v-for="p in productStore.products"
           :key="p.id"
-          class="card flex-col gap-12"
-          style="padding: 16px; border-color: var(--border-color); background-color: var(--surface-base);"
+          class="rounded-lg border border-border bg-surface p-4 flex flex-col justify-between gap-3 hover:shadow-xs hover:border-border-strong transition-all"
         >
-          <div class="flex items-start justify-between gap-12">
-            <div
-              style="width: 52px; height: 52px; border-radius: var(--radius-md); background-color: var(--surface-alt); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color); flex-shrink: 0;"
-            >
+          <div class="flex items-start justify-between gap-3">
+            <div class="w-12 h-12 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
               <img
                 v-if="p.image_url"
                 :src="p.image_url"
                 :alt="p.name"
-                style="width: 100%; height: 100%; object-fit: cover;"
+                class="w-full h-full object-cover"
                 @error="($event.target as HTMLElement).style.display='none'"
               />
-              <span v-else style="font-size: 24px; color: var(--text-disabled);">🏷️</span>
+              <Package v-else :size="22" class="text-muted-foreground/60" />
             </div>
 
-            <div class="flex-col items-end gap-4">
-              <span class="badge" :class="p.is_active ? 'badge--green' : 'badge--neutral'">
+            <div class="flex flex-col items-end gap-1">
+              <Badge :variant="p.is_active ? 'success' : 'neutral'" class="text-[10px] px-2 py-0.5">
                 {{ p.is_active ? 'Active' : 'Inactive' }}
-              </span>
-              <span class="badge badge--blue tabular-nums" style="font-size: 11px;">
+              </Badge>
+              <Badge variant="info" class="text-[10px] font-mono px-1.5 py-0">
                 {{ p.variants ? p.variants.length : 0 }} variants
-              </span>
+              </Badge>
             </div>
           </div>
 
           <div>
-            <div class="font-bold text-base">{{ p.name }}</div>
-            <div v-if="p.barcode" class="text-xs text-muted tabular-nums mt-2">
-              Barcode: <code>{{ p.barcode }}</code>
+            <h3 class="font-semibold text-sm text-foreground line-clamp-1 hover:text-primary cursor-pointer" @click="router.push(`/products/${p.id}/edit`)">
+              {{ p.name }}
+            </h3>
+            <div v-if="p.barcode" class="text-xs font-mono text-muted-foreground mt-0.5">
+              Barcode: {{ p.barcode }}
             </div>
           </div>
 
-          <div class="flex items-center justify-between pt-8" style="border-top: 1px solid var(--border-subtle);">
+          <div class="flex items-center justify-between pt-2 border-t border-border/60">
             <div>
-              <span class="text-xs text-muted block">Selling Price</span>
-              <span class="font-bold tabular-nums text-lg" style="color: var(--action-primary);">
+              <span class="text-[10px] text-muted-foreground block uppercase font-medium">Selling Price</span>
+              <span class="font-mono font-bold text-base text-primary tabular-nums">
                 {{ fmtMoney(p.selling_price) }}
               </span>
             </div>
             <div class="text-right">
-              <span class="text-xs text-muted block">Cost</span>
-              <span class="tabular-nums text-sm text-muted">
+              <span class="text-[10px] text-muted-foreground block uppercase font-medium">Cost</span>
+              <span class="font-mono text-xs text-muted-foreground tabular-nums">
                 {{ fmtMoney(p.purchase_price) }}
               </span>
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-8 pt-8" style="border-top: 1px solid var(--border-subtle);">
-            <button
-              :id="`btn-edit-product-${p.id}`"
-              class="btn btn--ghost btn--sm"
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs gap-1"
               @click="router.push(`/products/${p.id}/edit`)"
             >
-              Edit
-            </button>
-            <button
-              :id="`btn-delete-product-${p.id}`"
-              class="btn btn--ghost btn--sm"
-              style="color: var(--action-destructive);"
+              <Edit2 :size="12" />
+              <span>Edit</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
               @click="confirmDelete(p)"
             >
-              Delete
-            </button>
+              <Trash2 :size="13" />
+            </Button>
           </div>
         </div>
       </div>
 
-      <!-- Pagination Footer -->
+      <!-- Pagination Bar -->
       <div
         v-if="productStore.meta && productStore.meta.last_page > 1"
-        class="pagination"
-        style="padding: 16px 24px; border-top: 1px solid var(--border-color);"
+        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
       >
-        <button
-          class="page-btn"
-          :disabled="page <= 1 || productStore.loading"
-          @click="changePage(page - 1)"
-        >
-          ‹ Previous
-        </button>
-        <span class="page-info tabular-nums">
+        <span class="font-mono">
           Page {{ productStore.meta.current_page }} of {{ productStore.meta.last_page }} ({{ productStore.meta.total }} total)
         </span>
-        <button
-          class="page-btn"
-          :disabled="page >= productStore.meta.last_page || productStore.loading"
-          @click="changePage(page + 1)"
-        >
-          Next ›
-        </button>
-      </div>
-    </section>
-
-    <!-- Delete Confirmation Modal -->
-    <div v-if="deletingProduct" class="modal-backdrop" @click.self="cancelDelete">
-      <div class="modal">
-        <h2 class="modal-title" style="color: var(--action-destructive);">Confirm Product Deletion</h2>
-        <p class="mb-16 text-secondary">
-          Are you sure you want to delete product <strong>"{{ deletingProduct.name }}"</strong>?
-          This action will remove the product from active catalogs and soft-delete its associated variant matrices.
-        </p>
-
-        <div class="flex justify-end gap-12">
-          <button class="btn btn--ghost" :disabled="deleteLoading" @click="cancelDelete">
-            Cancel
-          </button>
-          <button
-            id="btn-confirm-delete-product"
-            class="btn btn--destructive"
-            :disabled="deleteLoading"
-            @click="executeDelete"
+        <div class="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs gap-1"
+            :disabled="page <= 1 || productStore.loading"
+            @click="changePage(page - 1)"
           >
-            <span v-if="deleteLoading" class="spinner"></span>
-            {{ deleteLoading ? 'Deleting…' : 'Delete Product' }}
-          </button>
+            <ChevronLeft :size="14" />
+            <span>Previous</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs gap-1"
+            :disabled="page >= productStore.meta.last_page || productStore.loading"
+            @click="changePage(page + 1)"
+          >
+            <span>Next</span>
+            <ChevronRight :size="14" />
+          </Button>
         </div>
       </div>
     </div>
+
+    <!-- Radix Delete Confirmation Dialog -->
+    <Dialog :open="isDeleteDialogOpen" @update:open="(val) => { isDeleteDialogOpen = val; if (!val) cancelDelete(); }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="text-destructive font-display">Confirm Product Deletion</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete product <strong>"{{ deletingProduct?.name }}"</strong>?
+            This will soft-delete the master line and remove associated SKU variant combinations from active POS registers.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2 sm:gap-0 mt-4">
+          <Button variant="outline" :disabled="deleteLoading" @click="cancelDelete">
+            Cancel
+          </Button>
+          <Button
+            id="btn-confirm-delete-product"
+            variant="destructive"
+            :disabled="deleteLoading"
+            @click="executeDelete"
+          >
+            <span v-if="deleteLoading" class="animate-spin mr-1.5">⏳</span>
+            <span>{{ deleteLoading ? 'Deleting…' : 'Delete Product' }}</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

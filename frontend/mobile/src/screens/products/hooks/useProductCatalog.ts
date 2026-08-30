@@ -5,7 +5,7 @@ import { useCollapsibleHeader } from '../../../hooks/useCollapsibleHeader'
 import { useProducts, useCategories, useAttributes, ProductFilters } from '../../../hooks/queries/useProductsQuery'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../../../api/queryKeys'
-import type { Product, ProductCategory, AttributeTaxonomy } from '../../../types'
+import type { Product, ProductCategory, AttributeTaxonomy, ScannedAttributeValue } from '../../../types'
 
 const CATALOG_PRODUCT_FILTERS: ProductFilters = { include_inactive: true }
 
@@ -41,31 +41,33 @@ export function useProductCatalog() {
   const [managedCategories, setManagedCategories] = useState<ProductCategory[]>([])
   const [managedAttributes, setManagedAttributes] = useState<AttributeTaxonomy[]>([])
 
-  const prevRawCategoriesRef = useRef<any[] | undefined>(undefined)
+  const prevRawCategoriesRef = useRef<ProductCategory[] | undefined>(undefined)
   useEffect(() => {
     if (Array.isArray(rawCategories) && rawCategories !== prevRawCategoriesRef.current) {
       prevRawCategoriesRef.current = rawCategories
       const mappedCats: ProductCategory[] = rawCategories.map((item: any) => ({
-        id: item.id || `cat-${item.name}`,
-        name: item.name,
-        code: item.code || item.name.substring(0, 3).toUpperCase(),
-        description: item.description || '',
-        productCount: item.products_count ?? item.product_count ?? 0,
+        id: String(item.id || `cat-${item.name}`),
+        name: String(item.name || ''),
+        code: String(item.code || (item.name ? item.name.substring(0, 3).toUpperCase() : '')),
+        description: item.description ? String(item.description) : '',
+        productCount: Number(item.products_count ?? item.product_count ?? 0),
       }))
       setManagedCategories(mappedCats)
     }
   }, [rawCategories])
 
-  const prevRawAttributesRef = useRef<any[] | undefined>(undefined)
+  const prevRawAttributesRef = useRef<AttributeTaxonomy[] | undefined>(undefined)
   useEffect(() => {
     if (Array.isArray(rawAttributes) && rawAttributes !== prevRawAttributesRef.current) {
       prevRawAttributesRef.current = rawAttributes
       const formatted: AttributeTaxonomy[] = rawAttributes.map((attr: any) => ({
-        id: attr.id,
-        name: attr.name,
-        code: attr.code || attr.name.toUpperCase().replace(/\s+/g, '_'),
-        values: attr.values?.map((v: any) => v.value_name || v.value || v) || [],
-        productCount: attr.product_count || 0,
+        id: String(attr.id || ''),
+        name: String(attr.name || ''),
+        code: String(attr.code || (attr.name ? attr.name.toUpperCase().replace(/\s+/g, '_') : '')),
+        values: Array.isArray(attr.values)
+          ? attr.values.map((v: any) => String(v.value_name || v.value || v))
+          : [],
+        productCount: Number(attr.product_count || 0),
       }))
       setManagedAttributes(formatted)
     }
@@ -151,8 +153,7 @@ export function useProductCatalog() {
             (v.sku && v.sku.toLowerCase().includes(q)) ||
             (v.barcode && v.barcode.toLowerCase().includes(q)) ||
             v.attribute_values?.some(
-              (av: any) =>
-                (av.value && av.value.toLowerCase().includes(q)) ||
+              (av: ScannedAttributeValue) =>
                 (av.value_name && av.value_name.toLowerCase().includes(q)) ||
                 (av.attribute?.name && av.attribute.name.toLowerCase().includes(q))
             )

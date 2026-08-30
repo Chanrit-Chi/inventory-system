@@ -2,6 +2,31 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api, { ApiError } from '@/api/axios'
 
+export interface CustomerOrderItem {
+  id: string
+  product_id: string
+  variant_id?: string | null
+  quantity: number
+  unit_price: number | string
+  total_price: number | string
+  subtotal?: number | string
+  discount_amount?: number | string
+  final_amount?: number | string
+  product?: {
+    id: string
+    name: string
+    sku?: string
+    unit?: string
+    barcode?: string
+  }
+  variant?: {
+    id: string
+    sku?: string
+    name?: string
+    option_values?: Record<string, string>
+  }
+}
+
 export interface CustomerOrder {
   id: string
   order_number: string
@@ -11,6 +36,7 @@ export interface CustomerOrder {
   total_amount: number | string
   created_at: string
   channel?: { id: string; name: string }
+  items?: CustomerOrderItem[]
   payments?: Array<{
     id: string
     payment_method: string

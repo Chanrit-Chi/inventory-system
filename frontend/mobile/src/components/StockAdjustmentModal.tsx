@@ -24,6 +24,7 @@ import type {
   Product,
   ProductVariant,
   ScannedVariant,
+  ScannedAttributeValue,
   StockAdjustmentReason,
   StockAdjustmentPayload,
 } from '../types'
@@ -134,7 +135,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
       } else if (isRealProduct) {
         if (product.variants && product.variants.length > 0) {
           const initItems: StockAdjustmentItem[] = product.variants.map((v, idx) => {
-            const attrSummary = v.attribute_values?.map((av: any) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
+            const attrSummary = v.attribute_values?.map((av: ScannedAttributeValue) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
             const varName = v.name || attrSummary || v.sku
             return {
               id: `adj-${v.id || idx}-${Date.now()}`,
@@ -223,7 +224,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
           product_id: prod.id,
           sku: prod.sku,
           barcode: prod.barcode ?? null,
-          quantity_on_hand: (prod as any).quantity_on_hand ?? 0,
+          quantity_on_hand: ((prod as Product & { quantity_on_hand?: number }).quantity_on_hand ?? 0),
           selling_price_override: null,
           selling_price: String(prod.selling_price),
         })
@@ -773,6 +774,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
       <CameraScannerModal
         visible={scannerOpen}
         isLoading={scanLoading}
+        title="Stock Adjustment Scanner"
+        primaryActionLabel="Done & Review"
+        primaryActionIcon="checkmark-circle-outline"
         onClose={() => setScannerOpen(false)}
         onScanCode={async (code) => { await handleScanCode(code) }}
       />

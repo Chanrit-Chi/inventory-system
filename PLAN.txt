@@ -1,0 +1,124 @@
+TypeScript any usage cleanup plan:
+
+We will fix the remaining `any` types in the frontend/mobile/src directory by replacing them with proper types.
+
+Files to fix (in order):
+
+1. StockAdjustmentModal.tsx
+   - Line 137: Replace `(av: any)` with `(av: AttributeValue)` (or appropriate type)
+   - Line 178: Same as above
+   - Line 198: Same as above
+
+2. HomeScreen.tsx
+   - Line 142: Replace `err: any` with `err: unknown` and adjust error handling
+
+3. ExpenseCalendarModal.tsx
+   - Line 170: Replace `day: any` with `day: { dateString: string }`
+
+4. StockInModal.tsx
+   - Line 178: Replace `(av: any)` with proper type
+   - Line 198: Replace `(av: any)` with proper type
+
+5. InvoicesScreen.tsx
+   - Line 322: Replace `error: any` with `error: unknown`
+   - Line 344: Replace `err: any` with `err: unknown`
+
+6. CheckoutStep2Form.tsx
+   - Line 40: Replace `loyaltyInfo?: any` with `loyaltyInfo?: LoyaltyInfo` (or appropriate type)
+
+7. QuotationsScreen.tsx
+   - Line 92: Replace `error: any` with `error: unknown`
+   - Line 127: Replace `(av: any)` with proper type
+   - Line 199: Replace `(av: any)` with proper type
+
+8. ProductsScreen.tsx
+   - Line 44: Replace `(variant?: any)` with `(variant?: ProductVariant | null)`
+   - Line 45: Same as above
+   - Line 293: Replace `err: any` with `err: unknown`
+   - Line 387: Replace `(prev: any[])` with `(prev: ProductAttribute[])`
+
+9. PosCheckoutModal.tsx
+   - Line 49: Replace `loyaltyInfo: any` with `loyaltyInfo: LoyaltyInfo`
+   - We also need to check for other `any` in this file (like onScroll: any) - but note we saw onScroll: any in the grep? Let's check the file.
+
+   Actually, from the grep we saw:
+     D:\GitCode\inventory-system\frontend\mobile\src\screens\pos\components\PosCheckoutModal.tsx:49:  loyaltyInfo: any
+   And we also saw:
+     D:\GitCode\inventory-system\frontend\mobile\src\screens\pos\components\PosCheckoutModal.tsx:2:  onScroll: any
+   So we need to fix both.
+
+10. SpringScaleCard.tsx
+    - Line 9: Replace `style?: any` with `style?: ViewStyle` (or appropriate)
+    - Line 10: Replace `touchStyle?: any` with `touchStyle?: ViewStyle` (or appropriate)
+
+11. ProductCatalogTab.tsx
+    - Line 37: Replace `onLayoutHeader: (e: any) => void` with `onLayoutHeader: (e: LayoutChangeEvent) => void`
+    - Line 38: Replace `onScroll: (...args: any[]) => void` with `onScroll: (...args: any[]) => void` (we can leave the args as any? Actually, we can type the event? But note: the onScroll event in React Native is a synthetic event. We can type it as `onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void` but we don't want to overcomplicate. Alternatively, we can leave the args as any? But we are trying to remove any. We can type the event as `any` but that's not removing the any. We can try to find the correct type.
+
+    However, note: we are in a hurry and we can use `any` for the event if we cannot find the type? But the goal is to remove any. Let's see if we can find the type in the react-native types.
+
+    We can do: `onScroll: (event: React.NativeSyntheticEvent<React.NativeScrollEvent>) => void` but we need to import.
+
+    Alternatively, we can change to `onScroll: (event: any) => void` and then fix it later? But we are trying to remove any.
+
+    Let's leave it as `onScroll: (event: any) => void` for now and come back? But that doesn't fix the any.
+
+    We can try to look up the type. Since we are in the plan phase, we can note that we need to find the correct type for the onScroll event.
+
+    Similarly for the onScroll in other files.
+
+    We'll come back to these events after we fix the easier ones.
+
+    For now, let's note that we need to fix the onScroll events in multiple files.
+
+    We'll do:
+
+    - Line 37: Fix onLayoutHeader
+    - Line 38: We'll leave the onScroll for now and mark it as TODO? Or we can fix it by typing the event as `any` but that doesn't help. We can change to `onScroll: (event: NativeSyntheticEvent<NodeScrollEvent>) => void` but we don't know the exact type.
+
+    Let's check the ProductDetailModal.tsx for similar onScroll? We see in the grep:
+        D:\GitCode\inventory-system\frontend\mobile\src\screens\products\components\ProductDetailModal.tsx:1:  onScroll: any
+
+    So there are multiple onScroll: any.
+
+    We'll create a separate task for fixing the onScroll events by finding the correct type from React Native.
+
+    But note: we are in the plan phase and we are allowed to explore.
+
+    We can do a quick search for the type of onScroll in React Native.
+
+    However, to save time, we can assume that the onScroll event is of type `NativeSyntheticEvent<NativeScrollEvent>`.
+
+    We'll import { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+
+    And then type the onScroll accordingly.
+
+    We'll do that for all onScroll events.
+
+12. ProductDetailModal.tsx
+    - Line 21: Replace `(variant?: any)` with `(variant?: ProductVariant | null)`
+    - Line 22: Same as above
+    - Line 211: Replace `(av: any)` with proper type
+
+13. TransactionListFeed.tsx
+    - Line 30: Replace `onScroll: any` with proper type (as above)
+    - Line 1: Replace `onScroll: any` with proper type (as above)
+
+14. ProductFormModal.tsx
+    - Line 65: Replace `(errors: any)` with `(errors: FieldError<ExpenseFormValues> | FieldError<ProductFormValues>)`? Actually, we need to see the context.
+    - Line 1: Replace `onScroll: any` with proper type
+
+15. PODetailModal.tsx
+    - Line 35: Replace `items: any[]` with `items: POItem[]` (or appropriate type)
+
+16. TransactionFilterBar.tsx
+    - Line 26: Replace `onLayoutHeader: (e: any) => void` with `onLayoutHeader: (e: LayoutChangeEvent) => void`
+    - Line 1: Replace `onScroll: any` with proper type
+
+... and so on for the remaining files.
+
+We will continue until all `any` are fixed.
+
+We will start by fixing the first file: StockAdjustmentModal.tsx.
+
+Let's create a task for that.

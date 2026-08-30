@@ -5,18 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Api\BaseApiController;
 use App\Http\Requests\Api\V1\StoreProductRequest;
 use App\Http\Requests\Api\V1\UpdateProductRequest;
-use App\Models\Attribute;
-use App\Models\AttributeValue;
 use App\Models\Product;
-use App\Models\ProductAttribute;
 use App\Models\ProductVariant;
-use App\Models\VariantAttributeValue;
 use App\Services\VariantGeneratorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class ProductController extends BaseApiController
 {
@@ -30,8 +25,7 @@ class ProductController extends BaseApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::with(['variants.attributeValues.attribute', 'category'])
-            ->whereNull('deleted_at');
+        $query = Product::forListing();
 
         if ($request->filled('search')) {
             $search = '%' . $request->string('search') . '%';
@@ -83,96 +77,13 @@ class ProductController extends BaseApiController
 
             // 1. Explicit variants array provided from client
             if (!empty($validated['variants']) && is_array($validated['variants'])) {
-                foreach ($validated['variants'] as $vData) {
-                    $sku = !empty($vData['sku']) ? $vData['sku'] : ('SKU-' . strtoupper(Str::random(6)));
-                    $baseSku = $sku;
-                    $attempt = 0;
-                    while (ProductVariant::where('sku', $sku)->withTrashed()->exists()) {
-                        $attempt++;
-                        $sku = $baseSku . '-' . $attempt;
-                    }
-
-                    $costP = isset($vData['cost_price']) ? (float)$vData['cost_price'] : (float)$product->purchase_price;
-                    $sellP = isset($vData['selling_price']) ? (float)$vData['selling_price'] : (float)$product->selling_price;
-
-                    $variant = ProductVariant::create([
-                        'product_id'             => $product->id,
-                        'name'                   => $vData['name'] ?? 'Standard',
-                        'sku'                    => $sku,
-                        'barcode'                => !empty($vData['barcode']) ? $vData['barcode'] : null,
-                        'cost_price'             => $costP,
-                        'selling_price'          => $sellP,
-                        'cost_price_override'    => !empty($vData['cost_price_override']) ? (float)$vData['cost_price_override'] : null,
-                        'selling_price_override' => !empty($vData['selling_price_override']) ? (float)$vData['selling_price_override'] : null,
-                        'quantity_on_hand'       => (int) ($vData['quantity_on_hand'] ?? $vData['stock'] ?? 0),
-                        'reorder_level'          => (int) ($vData['reorder_level'] ?? $product->default_reorder_level ?? 5),
-                        'is_active'              => isset($vData['is_active']) ? (bool) $vData['is_active'] : true,
-                    ]);
-
-                    // Attach variant attribute values
-                    if (!empty($vData['attribute_values']) && is_array($vData['attribute_values'])) {
-                        foreach ($vData['attribute_values'] as $av) {
-                            $attrValId = null;
-                            if (is_array($av)) {
-                                $attrValId = $av['id'] ?? $av['attribute_value_id'] ?? null;
-                                $attrName = $av['attribute']['name'] ?? $av['attribute_name'] ?? null;
-                                $valName = $av['value_name'] ?? $av['value'] ?? null;
-
-                                if (!$attrValId && $attrName && $valName) {
-                                    $attribute = Attribute::firstOrCreate(
-                                        ['name' => $attrName],
-                                        ['code' => strtoupper(Str::slug($attrName, '_'))]
-                                    );
-                                    $attrVal = AttributeValue::firstOrCreate(
-                                        ['attribute_id' => $attribute->id, 'value_name' => $valName]
-                                    );
-                                    $attrValId = $attrVal->id;
-                                }
-                            } elseif (is_string($av) && Str::isUuid($av)) {
-                                $attrValId = $av;
-                            }
-
-                            if ($attrValId && AttributeValue::where('id', $attrValId)->exists()) {
-                                VariantAttributeValue::firstOrCreate([
-                                    'variant_id'         => $variant->id,
-                                    'attribute_value_id' => $attrValId,
-                                ]);
-                                $valModel = AttributeValue::find($attrValId);
-                                if ($valModel) {
-                                    ProductAttribute::firstOrCreate([
-                                        'product_id'   => $product->id,
-                                        'attribute_id' => $valModel->attribute_id,
-                                    ]);
-                                }
-                            }
-                        }
-                    }
-                }
+                $this->variantGenerator->createExplicitVariants($product, $validated['variants']);
             } elseif (!empty($validated['attributes'])) {
                 // 2. Generate variants from taxonomy matrix
                 $this->variantGenerator->generate($product, $validated['attributes']);
             } else {
                 // 3. Simple Product default single variant
-                $initialStock = (int) ($validated['quantity_on_hand'] ?? $validated['stock'] ?? $validated['simple_stock'] ?? 0);
-                $sku = !empty($validated['sku']) ? $validated['sku'] : ($product->name ? (Str::slug($product->name) . '-' . strtoupper(Str::random(4))) : ('SKU-' . strtoupper(Str::random(6))));
-                $baseSku = $sku;
-                $attempt = 0;
-                while (ProductVariant::where('sku', $sku)->withTrashed()->exists()) {
-                    $attempt++;
-                    $sku = $baseSku . '-' . $attempt;
-                }
-
-                ProductVariant::create([
-                    'product_id'        => $product->id,
-                    'name'              => 'Standard',
-                    'sku'               => $sku,
-                    'barcode'           => $product->barcode,
-                    'cost_price'        => $product->purchase_price,
-                    'selling_price'     => $product->selling_price,
-                    'quantity_on_hand'  => $initialStock,
-                    'reorder_level'     => $product->default_reorder_level ?? 5,
-                    'is_active'         => true,
-                ]);
+                $this->variantGenerator->createSimpleVariant($product, $validated);
             }
 
             return $product->fresh(['variants.attributeValues.attribute', 'category']);
@@ -190,9 +101,7 @@ class ProductController extends BaseApiController
      */
     public function show(string $id): JsonResponse
     {
-        $product = Product::with(['variants.attributeValues.attribute', 'category'])
-            ->whereNull('deleted_at')
-            ->findOrFail($id);
+        $product = Product::forDetail()->findOrFail($id);
 
         return $this->successResponse($product);
     }
@@ -230,7 +139,7 @@ class ProductController extends BaseApiController
                     $baseUpdates['barcode'] = $validated['barcode'];
                 }
                 if (isset($validated['quantity_on_hand']) || isset($validated['stock']) || isset($validated['simple_stock'])) {
-                    $baseUpdates['quantity_on_hand'] = (int) ($validated['quantity_on_hand'] ?? $validated['stock'] ?? $validated['simple_stock']);
+                    $baseUpdates['quantity_on_hand'] = $this->variantGenerator->resolveInitialStock($validated, 'simple_stock');
                 }
                 if (isset($validated['purchase_price'])) {
                     $baseUpdates['cost_price'] = (float) $validated['purchase_price'];
@@ -248,127 +157,7 @@ class ProductController extends BaseApiController
 
             // If variant updates/creations were provided (variable product or multi-variant)
             if (!empty($validated['variants']) && is_array($validated['variants'])) {
-                $hadSingleSimpleVariant = $product->variants()->count() === 1 && $product->variants()->first()->attributeValues()->count() === 0;
-                $oldSimpleVariantId = $hadSingleSimpleVariant ? $product->variants()->first()->id : null;
-                $processedVariantIds = [];
-
-                foreach ($validated['variants'] as $varData) {
-                    if (!empty($varData['id']) && Str::isUuid($varData['id'])) {
-                        $variant = ProductVariant::where('product_id', $product->id)->find($varData['id']);
-                        if ($variant) {
-                            $processedVariantIds[] = $variant->id;
-                            $variantUpdate = [];
-                            if (array_key_exists('barcode', $varData)) {
-                                $variantUpdate['barcode'] = $varData['barcode'];
-                            }
-                            if (array_key_exists('sku', $varData) && !empty($varData['sku'])) {
-                                $variantUpdate['sku'] = $varData['sku'];
-                            }
-                            if (array_key_exists('name', $varData) && !empty($varData['name'])) {
-                                $variantUpdate['name'] = $varData['name'];
-                            }
-                            if (isset($varData['quantity_on_hand']) || isset($varData['stock'])) {
-                                $variantUpdate['quantity_on_hand'] = (int) ($varData['quantity_on_hand'] ?? $varData['stock']);
-                            }
-                            if (isset($varData['selling_price'])) {
-                                $variantUpdate['selling_price'] = (float) $varData['selling_price'];
-                            }
-                            if (isset($varData['cost_price'])) {
-                                $variantUpdate['cost_price'] = (float) $varData['cost_price'];
-                            }
-                            if (isset($varData['selling_price_override'])) {
-                                $variantUpdate['selling_price_override'] = !empty($varData['selling_price_override']) ? (float)$varData['selling_price_override'] : null;
-                            }
-                            if (isset($varData['cost_price_override'])) {
-                                $variantUpdate['cost_price_override'] = !empty($varData['cost_price_override']) ? (float)$varData['cost_price_override'] : null;
-                            }
-                            if (isset($varData['reorder_level'])) {
-                                $variantUpdate['reorder_level'] = (int) $varData['reorder_level'];
-                            }
-                            if (array_key_exists('is_active', $varData)) {
-                                $variantUpdate['is_active'] = (bool) $varData['is_active'];
-                            }
-                            if (!empty($variantUpdate)) {
-                                $variant->update($variantUpdate);
-                            }
-                        }
-                    } else {
-                        // Create new variant for this product
-                        $sku = !empty($varData['sku']) ? $varData['sku'] : ('SKU-' . strtoupper(Str::random(6)));
-                        $baseSku = $sku;
-                        $attempt = 0;
-                        while (ProductVariant::where('sku', $sku)->withTrashed()->exists()) {
-                            $attempt++;
-                            $sku = $baseSku . '-' . $attempt;
-                        }
-
-                        $newVar = ProductVariant::create([
-                            'product_id'             => $product->id,
-                            'name'                   => $varData['name'] ?? 'Standard',
-                            'sku'                    => $sku,
-                            'barcode'                => !empty($varData['barcode']) ? $varData['barcode'] : null,
-                            'cost_price'             => isset($varData['cost_price']) ? (float)$varData['cost_price'] : (float)$product->purchase_price,
-                            'selling_price'          => isset($varData['selling_price']) ? (float)$varData['selling_price'] : (float)$product->selling_price,
-                            'cost_price_override'    => !empty($varData['cost_price_override']) ? (float)$varData['cost_price_override'] : null,
-                            'selling_price_override' => !empty($varData['selling_price_override']) ? (float)$varData['selling_price_override'] : null,
-                            'quantity_on_hand'       => (int) ($varData['quantity_on_hand'] ?? $varData['stock'] ?? 0),
-                            'reorder_level'          => (int) ($varData['reorder_level'] ?? $product->default_reorder_level ?? 5),
-                            'is_active'              => isset($varData['is_active']) ? (bool) $varData['is_active'] : true,
-                        ]);
-
-                        $processedVariantIds[] = $newVar->id;
-
-                        if (!empty($varData['attribute_values']) && is_array($varData['attribute_values'])) {
-                            foreach ($varData['attribute_values'] as $av) {
-                                $attrValId = null;
-                                if (is_array($av)) {
-                                    $attrValId = $av['id'] ?? $av['attribute_value_id'] ?? null;
-                                    $attrName = $av['attribute']['name'] ?? $av['attribute_name'] ?? null;
-                                    $valName = $av['value_name'] ?? $av['value'] ?? null;
-
-                                    if (!$attrValId && $attrName && $valName) {
-                                        $attribute = Attribute::firstOrCreate(
-                                            ['name' => $attrName],
-                                            ['code' => strtoupper(Str::slug($attrName, '_'))]
-                                        );
-                                        $attrVal = AttributeValue::firstOrCreate(
-                                            ['attribute_id' => $attribute->id, 'value_name' => $valName]
-                                        );
-                                        $attrValId = $attrVal->id;
-                                    }
-                                } elseif (is_string($av) && Str::isUuid($av)) {
-                                    $attrValId = $av;
-                                }
-
-                                if ($attrValId && AttributeValue::where('id', $attrValId)->exists()) {
-                                    VariantAttributeValue::firstOrCreate([
-                                        'variant_id'         => $newVar->id,
-                                        'attribute_value_id' => $attrValId,
-                                    ]);
-                                    $valModel = AttributeValue::find($attrValId);
-                                    if ($valModel) {
-                                        ProductAttribute::firstOrCreate([
-                                            'product_id'   => $product->id,
-                                            'attribute_id' => $valModel->attribute_id,
-                                        ]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // If product transitioned from single simple product to variable product with new variants, clean up old simple placeholder variant
-                if ($oldSimpleVariantId && !in_array($oldSimpleVariantId, $processedVariantIds) && count($processedVariantIds) > 0) {
-                    $oldVar = ProductVariant::find($oldSimpleVariantId);
-                    if ($oldVar) {
-                        $oldVar->update([
-                            'is_active'        => false,
-                            'quantity_on_hand' => 0,
-                        ]);
-                        $oldVar->delete(); // Soft-deletes so historical OrderItems, Receipts & StockMovements remain 100% intact
-                    }
-                }
+                $this->variantGenerator->syncVariantsForUpdate($product, $validated['variants'], $validated);
             }
 
             return $product->fresh(['variants.attributeValues.attribute', 'category']);
@@ -383,28 +172,28 @@ class ProductController extends BaseApiController
 
     /**
      * DELETE /api/v1/products/{id}
+     * Soft-deletes a product and its variants if unlinked, or deactivates them if transaction history exists.
      */
     public function destroy(string $id): JsonResponse
     {
         $product = Product::whereNull('deleted_at')->findOrFail($id);
 
-        $variantIds = $product->variants()->pluck('id')->toArray();
-        $hasLinkedRecords = \App\Models\OrderItem::whereIn('variant_id', $variantIds)->orWhere('product_id', $product->id)->exists()
-            || \App\Models\StockMovement::whereIn('variant_id', $variantIds)->orWhere('product_id', $product->id)->exists()
-            || \App\Models\RestockDetail::whereIn('variant_id', $variantIds)->orWhere('product_id', $product->id)->exists()
-            || \App\Models\InvoiceItem::whereIn('variant_id', $variantIds)->orWhere('product_id', $product->id)->exists()
-            || \App\Models\QuotationItem::whereIn('variant_id', $variantIds)->orWhere('product_id', $product->id)->exists();
+        $hasOrders = DB::table('order_items')
+            ->whereIn('variant_id', $product->variants()->withTrashed()->pluck('id'))
+            ->exists();
 
-        if ($hasLinkedRecords) {
-            DB::transaction(function () use ($product) {
-                $product->update(['is_active' => false]);
-                $product->variants()->update(['is_active' => false]);
-            });
+        $hasMovements = DB::table('stock_movements')
+            ->whereIn('variant_id', $product->variants()->withTrashed()->pluck('id'))
+            ->exists();
+
+        if ($hasOrders || $hasMovements) {
+            $product->update(['is_active' => false]);
+            $product->variants()->update(['is_active' => false]);
 
             return $this->successResponse([
-                'deactivated' => true,
-                'product'     => $product->fresh(['variants.attributeValues.attribute', 'category']),
-            ], 'Product has historical transaction records and has been deactivated instead of deleted.');
+                'product' => $product->fresh(['variants']),
+                'action'  => 'deactivated',
+            ], 'Product has historical transactions and has been deactivated instead of deleted.');
         }
 
         DB::transaction(function () use ($product) {

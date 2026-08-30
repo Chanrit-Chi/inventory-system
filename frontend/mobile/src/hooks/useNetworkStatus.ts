@@ -73,9 +73,10 @@ export function useNetworkStatus(): NetworkStatus {
       setErrorMessage(null)
       setIsChecking(false)
       return true
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { message?: string }
       setIsBackendReachable(false)
-      setErrorMessage(err.message || 'Cannot reach backend server.')
+      setErrorMessage(error.message || 'Cannot reach backend server.')
       setIsChecking(false)
       return false
     }

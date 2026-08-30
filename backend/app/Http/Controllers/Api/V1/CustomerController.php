@@ -41,8 +41,19 @@ class CustomerController extends BaseApiController
             return $this->successResponse($customers);
         }
 
+        $sortBy = $request->input('sort_by', 'total_spent');
+        if ($sortBy === 'total_purchased') {
+            $query->orderByDesc('total_purchased')->orderByDesc('total_spent')->latest();
+        } elseif ($sortBy === 'name') {
+            $query->orderBy('name');
+        } elseif ($sortBy === 'latest') {
+            $query->latest();
+        } else {
+            $query->orderByDesc('total_spent')->orderByDesc('total_purchased')->latest();
+        }
+
         $perPage = min(100, max(1, (int) $request->input('per_page', 15)));
-        $customers = $query->latest()->paginate($perPage);
+        $customers = $query->paginate($perPage);
 
         return $this->paginatedResponse($customers);
     }
@@ -53,9 +64,11 @@ class CustomerController extends BaseApiController
     public function show(string $id): JsonResponse
     {
         $customer = Customer::with([
-            'orders' => fn ($q) => $q->latest()->limit(10),
+            'orders' => fn ($q) => $q->orderByDesc('total_amount')->latest()->limit(10),
             'orders.channel',
             'orders.payments',
+            'orders.items.product',
+            'orders.items.variant',
         ])->findOrFail($id);
 
         return $this->successResponse($customer);

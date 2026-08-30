@@ -29,6 +29,7 @@ class User extends Authenticatable
         'is_active',
         'permission_group',
         'notes',
+        'must_change_password',
     ];
 
     protected $hidden = [
@@ -39,10 +40,11 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
-            'is_active'         => 'boolean',
-            'hire_date'         => 'date',
+            'email_verified_at'    => 'datetime',
+            'password'             => 'hashed',
+            'is_active'            => 'boolean',
+            'must_change_password' => 'boolean',
+            'hire_date'            => 'date',
         ];
     }
 

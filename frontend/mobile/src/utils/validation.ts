@@ -118,9 +118,10 @@ export type SalesChannelFormValues = z.infer<typeof salesChannelSchema>
 
 export const posCheckoutSchema = z.object({
   channelId: z.string().min(1, 'Sales channel is required'),
-  customerName: z.string().min(1, 'Name is required'),
-  customerPhone: z.string().min(1, 'Phone is required'),
-  isDelivery: z.boolean().default(true),
+  sellerId: z.string().optional().or(z.literal('')),
+  customerName: z.string().optional().default(''),
+  customerPhone: z.string().optional().default(''),
+  isDelivery: z.boolean().default(false),
   discountType: z.enum(['flat', 'percentage']).default('flat'),
   discountInput: z.string().optional().refine(val => !val || !isNaN(Number(val)), { message: 'Must be a valid number' }),
   taxType: z.enum(['flat', 'percentage']).default('flat'),
@@ -146,7 +147,7 @@ export const posCheckoutSchema = z.object({
     if (!data.deliveryAddress || data.deliveryAddress.trim().length < 3) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Delivery address is required (minimum 3 characters)',
+        message: 'Delivery address is required for delivery orders (minimum 3 characters)',
         path: ['deliveryAddress'],
       })
     }
@@ -173,7 +174,14 @@ export const productVariantSchema = z.object({
   stock: z.coerce.number().min(0, 'Stock cannot be negative').default(0),
   priceOverride: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined ? String(v) : '')),
   costOverride: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined ? String(v) : '')),
-  attribute_values: z.any().array().optional().default([]),
+  attribute_values: z.array(z.object({
+    id: z.string().optional(),
+    value_name: z.string(),
+    attribute: z.object({
+      id: z.string().optional(),
+      name: z.string().optional(),
+    }).optional()
+  })).optional().default([]),
 })
 
 export const productAttributeSchema = z.object({

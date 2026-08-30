@@ -89,4 +89,28 @@ class ProductVariant extends Model
     {
         return $query->where('is_active', true);
     }
+
+    /**
+     * Scope to eager load product with category.
+     */
+    public function scopeWithProduct($query)
+    {
+        return $query->with(['product.category']);
+    }
+
+    /**
+     * Scope to eager load attribute values with attributes.
+     */
+    public function scopeWithAttributeValues($query)
+    {
+        return $query->with(['attributeValues.attribute']);
+    }
+
+    /**
+     * Scope for variant listing with common relations.
+     */
+    public function scopeForListing($query)
+    {
+        return $query->with(['product.category', 'attributeValues.attribute']);
+    }
 }

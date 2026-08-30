@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient, QueryKey } from '@tanstack/react-query'
 import { PaginatedData, ApiResponse } from '../../types'
 
-function createDebounce<A extends any[]>(fn: (...args: A) => void, waitMs: number) {
+function createDebounce<A extends unknown[]>(fn: (...args: A) => void, waitMs: number) {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   return (...args: A) => {
     if (timeoutId) clearTimeout(timeoutId)
@@ -10,7 +10,7 @@ function createDebounce<A extends any[]>(fn: (...args: A) => void, waitMs: numbe
   }
 }
 
-export interface UseEntityListOptions<T, F extends Record<string, any> = Record<string, any>> {
+export interface UseEntityListOptions<T, F extends Record<string, unknown> = Record<string, unknown>> {
   queryKeyFactory: (params: { page: number; search?: string; filters?: F }) => QueryKey
   queryFn: (params: { page: number; search?: string; filters?: F }) => Promise<ApiResponse<PaginatedData<T>> | ApiResponse<T[]> | T[]>
   initialFilters?: F
@@ -18,7 +18,7 @@ export interface UseEntityListOptions<T, F extends Record<string, any> = Record<
   enabled?: boolean
 }
 
-export interface UseEntityListResult<T, F extends Record<string, any> = Record<string, any>> {
+export interface UseEntityListResult<T, F extends Record<string, unknown> = Record<string, unknown>> {
   items: T[]
   loading: boolean
   isRefreshing: boolean
@@ -32,14 +32,14 @@ export interface UseEntityListResult<T, F extends Record<string, any> = Record<s
   setPage: (page: number) => void
   hasMore: boolean
   onRefresh: () => Promise<void>
-  refetch: () => Promise<any>
+  refetch: () => Promise<unknown>
 }
 
 /**
  * Generalized TanStack Query hook for list management across mobile entities.
  * Handles debounced search, filtering, pagination, and pull-to-refresh.
  */
-export function useEntityList<T, F extends Record<string, any> = Record<string, any>>({
+export function useEntityList<T, F extends Record<string, unknown> = Record<string, unknown>>({
   queryKeyFactory,
   queryFn,
   initialFilters = {} as F,

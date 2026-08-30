@@ -23,7 +23,7 @@ class ThirteenthMonthPayout extends Model
     ];
 
     protected $casts = [
-        'amount' => 'float',
+        'amount' => 'decimal:2',
         'payout_date' => 'date:Y-m-d',
     ];
 

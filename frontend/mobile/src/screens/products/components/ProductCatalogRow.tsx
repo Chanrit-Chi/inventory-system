@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../ProductsScreen.styles'
-import { CopyableBadge } from '../../../components/CopyableBadge'
 import type { Product, ScannedAttributeValue } from '../../../types'
 
 interface ProductCatalogRowProps {
@@ -35,7 +34,6 @@ export const ProductCatalogRow = React.memo(({ product, onPress, onQuickScanBarc
     ? product.variants?.filter((v) => !v.barcode).length || 0
     : 0
   const simpleBarcode = product.barcode || (!isVariable ? product.variants?.[0]?.barcode : null)
-  const simpleSku = product.sku || (!isVariable || totalVariants === 1 ? product.variants?.[0]?.sku : null)
   const hasSimpleBarcode = !isVariable && !!simpleBarcode
 
   return (
@@ -64,26 +62,9 @@ export const ProductCatalogRow = React.memo(({ product, onPress, onQuickScanBarc
         )}
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.prodName} numberOfLines={1}>{product.name || 'Product'}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 3 }}>
-            <Text style={styles.prodMeta}>
-              {product.category?.name || 'General'}
-            </Text>
-            {Boolean(simpleSku) && (
-              <CopyableBadge
-                type="sku"
-                value={simpleSku}
-                compact
-              />
-            )}
-            {Boolean(simpleBarcode) && (
-              <CopyableBadge
-                type="barcode"
-                value={simpleBarcode}
-                compact
-                prefixIcon
-              />
-            )}
-          </View>
+          <Text style={[styles.prodMeta, { marginTop: 3 }]}>
+            {product.category?.name || 'General'}
+          </Text>
         </View>
         <View style={[styles.stockBadge, isLowStock ? styles.stockBadgeLow : styles.stockBadgeOk]}>
           <Text style={[styles.stockBadgeText, isLowStock ? styles.stockTextLow : styles.stockTextOk]}>

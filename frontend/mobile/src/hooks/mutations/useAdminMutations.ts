@@ -15,7 +15,18 @@ export function useCreateUserMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: any) => createUser(payload),
+    mutationFn: (payload: {
+        name: string
+        email: string
+        phone?: string
+        role: string
+        password: string
+        department?: string
+        hire_date?: string
+        notes?: string
+        base_salary?: number
+        salary_reason?: string
+    }) => createUser(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
     },
@@ -29,7 +40,18 @@ export function useUpdateUserMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => updateUser(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<{
+      name: string
+      email: string
+      phone: string
+      role: string
+      department: string
+      hire_date: string
+      notes: string
+      base_salary: number
+      salary_reason: string
+      isActive: boolean
+    }> }) => updateUser(id, payload),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(variables.id) })

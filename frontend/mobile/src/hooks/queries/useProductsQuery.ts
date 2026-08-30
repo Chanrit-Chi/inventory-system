@@ -8,7 +8,7 @@ import {
   fetchAttributes,
   scanBarcode,
 } from '../../api/endpoints'
-import type { Product, ScanResult } from '../../types'
+import type { Product, ScanResult, ProductCategory, AttributeTaxonomy } from '../../types'
 
 export interface ProductFilters {
   search?: string
@@ -43,7 +43,7 @@ export function useProducts(filters?: ProductFilters) {
       if (Array.isArray(raw)) {
         return raw as Product[]
       }
-      return ((raw as any)?.data ?? []) as Product[]
+      return (raw as { data?: Product[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 2, // 2 mins
   })
@@ -69,7 +69,7 @@ export function useProduct(id: string | null | undefined) {
       }
       const res = await getProducts({ search: id })
       const raw = res.data
-      const list = Array.isArray(raw) ? raw : (raw as any)?.data ?? []
+      const list = Array.isArray(raw) ? raw : (raw as { data?: Product[] })?.data ?? []
       return list.find((p: Product) => p.id === id) ?? null
     },
     enabled: Boolean(id),
@@ -84,7 +84,7 @@ export function useCategories() {
     queryKey: queryKeys.categories.list(),
     queryFn: async () => {
       const res = await fetchCategories()
-      return Array.isArray(res.data) ? res.data : (res as any)?.data ?? []
+      return Array.isArray(res.data) ? res.data : (res.data as unknown as { data?: ProductCategory[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 5, // 5 mins
   })
@@ -98,7 +98,7 @@ export function useAttributes() {
     queryKey: queryKeys.attributes.list(),
     queryFn: async () => {
       const res = await fetchAttributes()
-      return Array.isArray(res.data) ? res.data : (res as any)?.data ?? []
+      return Array.isArray(res.data) ? res.data : (res.data as unknown as { data?: AttributeTaxonomy[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 5,
   })

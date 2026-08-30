@@ -18,7 +18,7 @@ export function useCreateProductMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: any) => createProduct(payload),
+    mutationFn: (payload: FormData | Record<string, unknown>) => createProduct(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
@@ -33,7 +33,7 @@ export function useUpdateProductMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => updateProduct(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: FormData | Record<string, unknown> }) => updateProduct(id, payload),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.products.detail(variables.id) })

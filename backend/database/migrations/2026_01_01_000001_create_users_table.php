@@ -16,7 +16,11 @@ return new class extends Migration
             $table->string('name');
             $table->string('email')->unique();
             $table->string('password');
-            $table->enum('role', ['admin', 'cashier'])->default('cashier');
+            $table->string('role')->default('SELLER');
+            $table->string('phone')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('must_change_password')->default(false);
+            $table->string('permission_group')->nullable();
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();

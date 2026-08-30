@@ -12,11 +12,17 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 15000,
 })
 
+// Module-level token getter — set by AuthContext on mount
+let _getToken: (() => string | null) | null = null
+
+export function setTokenGetter(getter: () => string | null): void {
+  _getToken = getter
+}
+
 // Request interceptor — attach bearer token when available
 apiClient.interceptors.request.use(
   (config) => {
-    const { getToken } = require('../context/AuthContext')
-    const token: string | null = getToken()
+    const token: string | null = _getToken ? _getToken() : null
     if (token) {
       config.headers = config.headers ?? {}
       config.headers['Authorization'] = `Bearer ${token}`
@@ -34,6 +40,26 @@ export function onConnectionChange(listener: ConnectionListener): () => void {
   return () => {
     connectionListeners.delete(listener)
   }
+}
+
+type UnauthorizedListener = (reason?: string) => void
+const unauthorizedListeners = new Set<UnauthorizedListener>()
+
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener)
+  return () => {
+    unauthorizedListeners.delete(listener)
+  }
+}
+
+function notifyUnauthorized(reason?: string): void {
+  unauthorizedListeners.forEach((listener) => {
+    try {
+      listener(reason)
+    } catch {
+      // ignore
+    }
+  })
 }
 
 function notifyConnectionChange(isReachable: boolean, error?: Error) {
@@ -60,14 +86,28 @@ apiClient.interceptors.response.use(
       errorMessage =
         'Cannot reach the server. Please check your network connection and ensure the backend is running.'
       const networkError = new Error(errorMessage)
-      ;(networkError as any).isNetworkError = true
+      ;(networkError as Error & { isNetworkError?: boolean }).isNetworkError = true
       notifyConnectionChange(false, networkError)
       return Promise.reject(networkError)
     } else {
+      const status = error.response.status
+
+      if (status === 401) {
+        // Exclude login requests so bad credentials don't trigger session expiry flow
+        const requestUrl = error.config?.url || ''
+        const isAuthEndpoint = requestUrl.includes('/login') || requestUrl.includes('/auth')
+
+        if (!isAuthEndpoint) {
+          notifyUnauthorized(
+            'Your session was terminated because another device signed into this account, or your session has expired.'
+          )
+        }
+      }
+
       // If 502/503/504 Bad Gateway / Service Unavailable, also notify unreachable
-      if (error.response.status >= 500) {
-        const serverError = new Error(`Server error (${error.response.status})`)
-        ;(serverError as any).isServerError = true
+      if (status >= 500) {
+        const serverError = new Error(`Server error (${status})`)
+        ;(serverError as Error & { isServerError?: boolean }).isServerError = true
         notifyConnectionChange(false, serverError)
       } else {
         // Successful contact with server (business error like 400/404/422)
@@ -79,7 +119,7 @@ apiClient.interceptors.response.use(
         ? Object.values(data.errors).flat()[0] as string | undefined
         : undefined
 
-      errorMessage = fieldError ?? data?.message ?? `Server error (${error.response.status})`
+      errorMessage = fieldError ?? data?.message ?? `Server error (${status})`
     }
 
     return Promise.reject(new Error(errorMessage))

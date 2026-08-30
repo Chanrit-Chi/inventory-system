@@ -22,7 +22,7 @@ export function useInvoices(filters?: InvoiceFilters) {
       if (Array.isArray(raw)) {
         return raw as Invoice[]
       }
-      return (raw as any)?.data ?? [] as Invoice[]
+      return (raw as { data?: Invoice[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 2,
   })
@@ -38,7 +38,7 @@ export function useInvoice(id: string | null | undefined) {
       if (!id) return null
       const res = await fetchInvoices({ search: id })
       const raw = res.data
-      const list = Array.isArray(raw) ? raw : (raw as any)?.data ?? []
+      const list = Array.isArray(raw) ? raw : (raw as { data?: Invoice[] })?.data ?? []
       return list.find((inv: Invoice) => inv.id === id) ?? null
     },
     enabled: Boolean(id),
@@ -57,7 +57,7 @@ export function useQuotations(filters?: { search?: string; status?: string; page
       if (Array.isArray(raw)) {
         return raw as Quotation[]
       }
-      return (raw as any)?.data ?? [] as Quotation[]
+      return (raw as { data?: Quotation[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 2,
   })

@@ -25,6 +25,7 @@ import {
   updateDeliveryCompany,
   deleteDeliveryCompany,
 } from '../api/endpoints'
+import { useToast } from '../context/ToastContext'
 
 export interface DeliveryCompaniesScreenProps {
   onNavigate: (tab: TabType) => void
@@ -43,15 +44,14 @@ const COLOR_OPTIONS = [
 ]
 
 const ICON_OPTIONS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
-  { icon: 'car', label: 'Van / Car' },
-  { icon: 'bus', label: 'Bus Cargo' },
-  { icon: 'bicycle', label: 'Motorbike' },
-  { icon: 'cube', label: 'Parcel' },
+  { icon: 'car', label: 'Truck / Car' },
+  { icon: 'bicycle', label: 'Bike' },
   { icon: 'airplane', label: 'Air Freight' },
   { icon: 'boat', label: 'Boat' },
 ]
 
 export const DeliveryCompaniesScreen: React.FC<DeliveryCompaniesScreenProps> = ({ onNavigate }) => {
+  const { showToast } = useToast()
   const [companies, setCompanies] = useState<DeliveryCompany[]>(INITIAL_DELIVERY_COMPANIES)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -130,7 +130,7 @@ export const DeliveryCompaniesScreen: React.FC<DeliveryCompaniesScreenProps> = (
         }
         await updateDeliveryCompany(editingId, payload)
         await loadCompanies()
-        Alert.alert('Updated', `Delivery company "${data.name}" updated successfully.`)
+        showToast(`Delivery company "${data.name}" updated.`, 'success')
       } else {
         const payload: Partial<DeliveryCompany> = {
           name: data.name.trim(),
@@ -143,12 +143,12 @@ export const DeliveryCompaniesScreen: React.FC<DeliveryCompaniesScreenProps> = (
         }
         await createDeliveryCompany(payload)
         await loadCompanies()
-        Alert.alert('Company Added', `"${data.name}" added to your delivery partners.`)
+        showToast(`"${data.name}" added to delivery partners.`, 'success')
       }
       setModalVisible(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save delivery company.'
-      Alert.alert('Error', msg)
+      showToast(msg, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -164,9 +164,10 @@ export const DeliveryCompaniesScreen: React.FC<DeliveryCompaniesScreenProps> = (
           try {
             await deleteDeliveryCompany(id)
             await loadCompanies()
+            showToast(`${compName} removed.`, 'success')
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to delete delivery company.'
-            Alert.alert('Error', msg)
+            showToast(msg, 'error')
           }
         },
       },

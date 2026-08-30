@@ -30,6 +30,7 @@ import {
   deleteAttribute,
 } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
 
 export interface CategoriesAttributesScreenProps {
   onNavigate: (tab: TabType) => void
@@ -40,6 +41,7 @@ export const INITIAL_CATEGORIES: ProductCategory[] = []
 export const INITIAL_ATTRIBUTES: AttributeTaxonomy[] = []
 
 export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProps> = ({ onNavigate }) => {
+  const { showToast } = useToast()
   const { can } = usePermissions()
   const [activeTab, setActiveTab] = useState<'categories' | 'attributes'>('categories')
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -68,19 +70,39 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    interface ApiCategoryItem {
+      id?: string;
+      name?: string;
+      code?: string;
+      description?: string;
+      products_count?: number;
+      product_count?: number;
+    }
+    interface ApiAttributeItem {
+      id?: string;
+      name?: string;
+      code?: string;
+      values?: unknown[];
+      bound_variants_count?: number;
+      product_count?: number;
+      products_count?: number;
+    }
     try {
       // 1. Fetch Categories
       try {
         const catRes = await fetchCategories()
-        const rawCats = Array.isArray(catRes) ? catRes : catRes.data || []
+        const rawCats = Array.isArray(catRes) ? (catRes as ApiCategoryItem[]) : ((catRes.data || []) as ApiCategoryItem[])
         if (Array.isArray(rawCats)) {
-          const mappedCats: ProductCategory[] = rawCats.map((item: any) => ({
-            id: item.id || `cat-${Date.now()}`,
-            name: item.name,
-            code: item.code || item.name.substring(0, 3).toUpperCase(),
-            description: item.description || '',
-            productCount: item.products_count ?? item.product_count ?? 0,
-          }))
+          const mappedCats: ProductCategory[] = rawCats.map((item) => {
+            const name = item.name || 'Unnamed Category'
+            return {
+              id: item.id || `cat-${Date.now()}`,
+              name,
+              code: item.code || name.substring(0, 3).toUpperCase(),
+              description: item.description || '',
+              productCount: item.products_count ?? item.product_count ?? 0,
+            }
+          })
           setCategories(mappedCats)
         } else {
           setCategories([])
@@ -94,12 +116,12 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
         const res = await fetchAttributes()
         const rawList = Array.isArray(res) ? res : res.data || []
         if (Array.isArray(rawList)) {
-          const mapped: AttributeTaxonomy[] = rawList.map((item: any) => ({
+          const mapped: AttributeTaxonomy[] = rawList.map((item: import('../types').AttributeTaxonomy & { value_name?: string; bound_variants_count?: number; products_count?: number; product_count?: number }) => ({
             id: item.id || `tax-${Date.now()}`,
             name: item.name,
             code: item.code || item.name.substring(0, 3).toUpperCase(),
             values: Array.isArray(item.values)
-              ? item.values.map((v: any) => (typeof v === 'string' ? v : v.value_name || v.name))
+              ? item.values.map((v: string | { value_name?: string; name?: string }) => (typeof v === 'string' ? v : v.value_name || v.name || ''))
               : [],
             productCount: item.bound_variants_count ?? item.product_count ?? item.products_count ?? 0,
           }))
@@ -177,7 +199,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
       } catch {
         // Fallback optimistic
       }
-      Alert.alert('Success', `Category "${data.name}" updated.`)
+      showToast(`Category "${data.name}" updated.`, 'success')
     } else {
       const newCat: ProductCategory = {
         id: `cat-${Date.now()}`,
@@ -199,7 +221,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
       } catch {
         // Fallback optimistic
       }
-      Alert.alert('Success', `New category "${data.name}" created.`)
+      showToast(`New category "${data.name}" created.`, 'success')
     }
 
     setCatModalOpen(false)
@@ -227,11 +249,12 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
             setCatModalOpen(false)
             try {
               await deleteCategory(cat.id)
-            } catch (err: any) {
-              const msg = err.response?.data?.message || 'Failed to delete category from server.'
-              Alert.alert('Notice', msg)
+            } catch (err: unknown) {
+              const error = err as { response?: { data?: { message?: string } } }
+              const msg = error.response?.data?.message || 'Failed to delete category from server.'
+              showToast(msg, 'warning')
             }
-            Alert.alert('Deleted', `Category "${cat.name}" has been deleted.`)
+            showToast(`Category "${cat.name}" has been deleted.`, 'success')
           },
         },
       ]
@@ -267,7 +290,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
         values: rawValues,
       }
       setAttributes(attributes.map((a) => (a.id === editingAttr.id ? updated : a)))
-      Alert.alert('Success', `Attribute "${data.name}" updated.`)
+      showToast(`Attribute "${data.name}" updated.`, 'success')
     } else {
       const newAttr: AttributeTaxonomy = {
         id: `tax-${Date.now()}`,
@@ -282,7 +305,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
       } catch {
         // Fallback optimistic
       }
-      Alert.alert('Success', `New attribute "${data.name}" created.`)
+      showToast(`New attribute "${data.name}" created.`, 'success')
     }
 
     setAttrModalOpen(false)
@@ -310,11 +333,12 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
             setAttrModalOpen(false)
             try {
               await deleteAttribute(attr.id)
-            } catch (err: any) {
-              const msg = err.response?.data?.message || 'Failed to delete attribute from server.'
-              Alert.alert('Notice', msg)
+            } catch (err: unknown) {
+              const error = err as { response?: { data?: { message?: string } } }
+              const msg = error.response?.data?.message || 'Failed to delete attribute from server.'
+              showToast(msg, 'warning')
             }
-            Alert.alert('Deleted', `Attribute "${attr.name}" has been deleted.`)
+            showToast(`Attribute "${attr.name}" has been deleted.`, 'success')
           },
         },
       ]

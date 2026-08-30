@@ -12,9 +12,11 @@ import {
   Alert,
   Platform,
   FlatList,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'
 import { tokens } from '../theme/tokens'
 import { getProducts, fetchSuppliers, scanBarcode, createSupplier } from '../api/endpoints'
 import { ProductPickerModal, SelectedProductItem, ExistingPickerItem } from './ProductPickerModal'
@@ -22,7 +24,11 @@ import { ProductGroupHeader } from './ProductGroupHeader'
 import { CopyableBadge } from './CopyableBadge'
 import { CameraScannerModal } from './CameraScannerModal'
 import { SupplierFormModal } from '../screens/products/components/SupplierFormModal'
+import { POCard } from './purchase_order/POCard'
+import { PODetailModal } from './purchase_order/PODetailModal'
 import { useBarcodeScan } from '../hooks/useBarcodeScan'
+import { useToast } from '../context/ToastContext'
+import { emitGlobalToast } from '../utils/clipboard'
 import type { PurchaseOrder, PurchaseOrderItem, Product, Supplier, ProductVariant, ScannedVariant, ScannedAttributeValue } from '../types'
 
 export interface PurchaseOrderModalProps {
@@ -64,6 +70,35 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
   const [poItems, setPoItems] = useState<PurchaseOrderItem[]>([])
   const [showMetaCard, setShowMetaCard] = useState(true)
 
+  // Expected Delivery Date Native Date Picker State
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [pickerDate, setPickerDate] = useState(new Date())
+
+  // Date Presets and Helper
+  const getRelativeDateLabel = useCallback((dateStr: string) => {
+    if (!dateStr) return ''
+    const target = new Date(dateStr + 'T00:00:00')
+    if (isNaN(target.getTime())) return ''
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    target.setHours(0, 0, 0, 0)
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Tomorrow'
+    if (diffDays > 1) return `In ${diffDays} days`
+    if (diffDays === -1) return 'Yesterday'
+    return `${Math.abs(diffDays)}d ago`
+  }, [])
+
+  const applyDatePreset = useCallback((days: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + days)
+    const iso = d.toISOString().split('T')[0]
+    setPickerDate(d)
+    setPoExpectedDate(iso)
+    setShowDatePicker(false)
+  }, [])
+
   // Inline Supplier Creation Modal State
   const [newSupModalOpen, setNewSupModalOpen] = useState(false)
   const [newSupName, setNewSupName] = useState('')
@@ -79,7 +114,7 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
       return
     }
     try {
-      const res: any = await createSupplier({
+      const res = await createSupplier({
         name: newSupName.trim(),
         contact_person: newSupContact.trim() || undefined,
         phone: newSupPhone.trim() || 'N/A',
@@ -88,9 +123,9 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
         lead_time_days: parseInt(newSupLeadTime, 10) || 3,
       })
       const createdSup: Supplier = {
-        id: res?.data?.data?.id || res?.data?.id || res?.id || `sup-${Date.now()}`,
-        name: res?.data?.data?.name || res?.data?.name || res?.name || newSupName.trim() || 'New Supplier',
-        phone: res?.data?.data?.phone || res?.data?.phone || res?.phone || newSupPhone.trim() || '',
+        id: res.id || `sup-${Date.now()}`,
+        name: res.name || newSupName.trim() || 'New Supplier',
+        phone: res.phone || newSupPhone.trim() || '',
         leadTimeDays: parseInt(newSupLeadTime, 10) || 3,
       }
       setSuppliers((prev) => [createdSup, ...prev.filter((s) => s.id !== createdSup.id)])
@@ -103,14 +138,18 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
       setNewSupAddress('')
       setNewSupLeadTime('')
       showToast(`Supplier "${createdSup.name}" created and selected!`)
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to create supplier.')
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create supplier.')
     }
   }
 
   // Catalog Picker & Barcode Scanner State
+  const globalToast = useToast()
   const [catalogPickerOpen, setCatalogPickerOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'info' | 'warning' | 'error'>('success')
+  const toastTranslateY = useRef(new Animated.Value(-60)).current
+  const toastOpacity = useRef(new Animated.Value(0)).current
   const [barcodeInput, setBarcodeInput] = useState('')
   const hardwareInputRef = useRef<TextInput>(null)
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -118,11 +157,56 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
   // PO Detail View Modal State
   const [selectedPoDetail, setSelectedPoDetail] = useState<PurchaseOrder | null>(null)
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg)
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
-    toastTimeoutRef.current = setTimeout(() => setToastMessage(''), 3000)
-  }, [])
+  const showToast = useCallback(
+    (msg: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
+      if (!msg) return
+      setToastMessage(msg)
+      setToastType(type)
+
+      if (globalToast && globalToast.showToast) {
+        globalToast.showToast(msg, { type })
+      } else {
+        emitGlobalToast(msg, type)
+      }
+
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+
+      toastTranslateY.setValue(-60)
+      toastOpacity.setValue(0)
+
+      Animated.parallel([
+        Animated.spring(toastTranslateY, {
+          toValue: 0,
+          friction: 8,
+          tension: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(toastOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start()
+
+      toastTimeoutRef.current = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(toastTranslateY, {
+            toValue: -60,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(toastOpacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setToastMessage('')
+        })
+      }, 2600)
+    },
+    [globalToast, toastTranslateY, toastOpacity]
+  )
 
   // Sync mode and pre-selected supplier when modal opens
   useEffect(() => {
@@ -144,7 +228,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
       ])
 
       if (supRes.status === 'fulfilled' && supRes.value) {
-        const supList: Supplier[] = Array.isArray(supRes.value) ? supRes.value : (supRes.value as any)?.data || []
+        // fetchSuppliers now returns Supplier[] directly
+        const supList: Supplier[] = Array.isArray(supRes.value) ? supRes.value : []
         setSuppliers(supList)
         if (supList.length > 0 && !selectedSupplierId && !preSelectedSupplierId) {
           setSelectedSupplierId(supList[0].id)
@@ -152,7 +237,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
       }
 
       if (prodRes.status === 'fulfilled' && prodRes.value) {
-        const prodList: Product[] = Array.isArray(prodRes.value) ? prodRes.value : (prodRes.value as any)?.data || []
+        // getProducts returns ApiResponse<Product[]> - access .data
+        const prodList: Product[] = Array.isArray(prodRes.value.data) ? prodRes.value.data : []
         setProducts(prodList)
       }
     } catch {
@@ -503,17 +589,52 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
     if (selectedPoDetail && selectedPoDetail.id === poId) {
       setSelectedPoDetail({ ...selectedPoDetail, status: 'RECEIVED' })
     }
-    Alert.alert('PO Received', 'Purchase order status updated to RECEIVED.')
+    showToast('Purchase order marked as RECEIVED.', 'success')
   }
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <SafeAreaView style={styles.safeArea}>
         {/* Floating Toast Notification */}
-        {!!toastMessage && (
-          <View style={styles.toastContainer}>
-            <Text style={styles.toastText}>{toastMessage}</Text>
-          </View>
+        {Boolean(toastMessage) && (
+          <Animated.View
+            style={[
+              styles.toastContainer,
+              {
+                transform: [{ translateY: toastTranslateY }],
+                opacity: toastOpacity,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.toastPill}>
+              <Ionicons
+                name={
+                  toastType === 'success'
+                    ? 'checkmark-circle'
+                    : toastType === 'warning'
+                    ? 'warning'
+                    : toastType === 'error'
+                    ? 'alert-circle'
+                    : 'information-circle'
+                }
+                size={18}
+                color={
+                  toastType === 'success'
+                    ? '#34D399'
+                    : toastType === 'warning'
+                    ? '#FBBF24'
+                    : toastType === 'error'
+                    ? '#F87171'
+                    : tokens.colors.primaryContainer
+                }
+                style={styles.toastIcon}
+              />
+              <Text style={styles.toastText} numberOfLines={2}>
+                {toastMessage}
+              </Text>
+            </View>
+          </Animated.View>
         )}
 
         {/* Inline Supplier Registration Modal */}
@@ -557,8 +678,125 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
           onRefreshCatalog={loadData}
         />
 
+      {/* Expected Delivery Date Native Date Picker (Android Native Dialog / iOS Bottom Sheet) */}
+      {showDatePicker && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={pickerDate}
+          mode="date"
+          minimumDate={new Date()}
+          onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+            setShowDatePicker(false)
+            if (event.type === 'set' && selectedDate) {
+              setPickerDate(selectedDate)
+              const iso = selectedDate.toISOString().split('T')[0]
+              setPoExpectedDate(iso)
+            }
+          }}
+        />
+      )}
+
+      {showDatePicker && Platform.OS === 'ios' && (
+        <Modal
+          visible={showDatePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.datePickerOverlay}
+            activeOpacity={1}
+            onPress={() => setShowDatePicker(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={styles.datePickerSheet}
+              onPress={() => {}}
+            >
+              <View style={styles.sheetHandle} />
+              <View style={styles.datePickerSheetHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Expected Delivery Date</Text>
+                  <Text style={styles.modalSubtitle}>Pick when this order should arrive from vendor</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowDatePicker(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.datePickerCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color={tokens.colors.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Preset Buttons inside iOS picker sheet */}
+              <View style={styles.datePickerPresetsRow}>
+                {[
+                  { label: '+3 Days', days: 3 },
+                  { label: '+7 Days', days: 7 },
+                  { label: '+14 Days', days: 14 },
+                  { label: '+30 Days', days: 30 },
+                ].map((preset) => (
+                  <TouchableOpacity
+                    key={preset.label}
+                    style={styles.datePickerPresetChip}
+                    onPress={() => applyDatePreset(preset.days)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.datePickerPresetChipText}>{preset.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <DateTimePicker
+                value={pickerDate}
+                mode="date"
+                display="inline"
+                minimumDate={new Date()}
+                themeVariant="light"
+                onChange={(_event: DateTimePickerEvent, selectedDate?: Date) => {
+                  if (selectedDate) {
+                    setPickerDate(selectedDate)
+                    const iso = selectedDate.toISOString().split('T')[0]
+                    setPoExpectedDate(iso)
+                  }
+                }}
+              />
+
+              <View style={styles.datePickerSheetFooter}>
+                {Boolean(poExpectedDate) && (
+                  <TouchableOpacity
+                    style={styles.datePickerClearBtn}
+                    onPress={() => {
+                      setPoExpectedDate('')
+                      setShowDatePicker(false)
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="trash-outline" size={14} color={tokens.colors.statusError} />
+                    <Text style={styles.datePickerClearBtnText}>Clear Date</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.datePickerSetBtn}
+                  onPress={() => {
+                    if (!poExpectedDate) {
+                      const iso = pickerDate.toISOString().split('T')[0]
+                      setPoExpectedDate(iso)
+                    }
+                    setShowDatePicker(false)
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="checkmark" size={16} color={tokens.colors.onPrimary} />
+                  <Text style={styles.datePickerSetBtnText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
         <View style={styles.container}>
-          {/* Header Bar matching StockInModal */}
+          {/* Header Bar matching Modern Mobile Spec */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <View style={styles.badgeRow}>
@@ -570,7 +808,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 </View>
                 {selectedSupplier ? (
                   <View style={styles.poBadge}>
-                    <Text style={styles.poBadgeText}>{selectedSupplier.name}</Text>
+                    <Ionicons name="business" size={10} color={tokens.colors.primary} style={{ marginRight: 3 }} />
+                    <Text style={styles.poBadgeText} numberOfLines={1}>{selectedSupplier.name}</Text>
                   </View>
                 ) : null}
               </View>
@@ -636,8 +875,15 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 color={mode === 'create' ? tokens.colors.onPrimary : tokens.colors.secondary}
               />
               <Text style={[styles.subTabPillText, mode === 'create' && styles.subTabPillTextActive]}>
-                New PO Draft {poItems.length > 0 ? `(${poItems.length})` : ''}
+                New PO Draft
               </Text>
+              {poItems.length > 0 && (
+                <View style={[styles.tabBadge, mode === 'create' && styles.tabBadgeActive]}>
+                  <Text style={[styles.tabBadgeText, mode === 'create' && styles.tabBadgeTextActive]}>
+                    {poItems.length}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -650,8 +896,13 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 color={mode === 'list' ? tokens.colors.onPrimary : tokens.colors.secondary}
               />
               <Text style={[styles.subTabPillText, mode === 'list' && styles.subTabPillTextActive]}>
-                All Orders ({purchaseOrders.length})
+                All Orders
               </Text>
+              <View style={[styles.tabBadge, mode === 'list' && styles.tabBadgeActive]}>
+                <Text style={[styles.tabBadgeText, mode === 'list' && styles.tabBadgeTextActive]}>
+                  {purchaseOrders.length}
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -667,10 +918,14 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 <View style={styles.supplierBanner}>
                   <View style={styles.supplierBannerHeader}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="business-outline" size={16} color={tokens.colors.primaryContainer} />
+                      <View style={styles.bannerIconCircle}>
+                        <Ionicons name="business" size={14} color={tokens.colors.primaryContainer} />
+                      </View>
                       <Text style={styles.supplierBannerTitle}>Target Supplier / Vendor *</Text>
                     </View>
-                    <Text style={styles.supplierBannerHint}>Select vendor for pricing</Text>
+                    <Text style={styles.supplierBannerHint}>
+                      {suppliers.length} vendor{suppliers.length !== 1 ? 's' : ''} available
+                    </Text>
                   </View>
 
                   <ScrollView
@@ -684,12 +939,18 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                       onPress={() => setNewSupModalOpen(true)}
                       activeOpacity={0.75}
                     >
-                      <Ionicons name="add-circle" size={16} color={tokens.colors.primaryContainer} />
-                      <Text style={styles.addSupplierChipBtnText}>+ New Supplier</Text>
+                      <View style={styles.addSupplierIconWrap}>
+                        <Ionicons name="add" size={16} color={tokens.colors.primaryContainer} />
+                      </View>
+                      <View>
+                        <Text style={styles.addSupplierChipBtnText}>+ New Supplier</Text>
+                        <Text style={styles.addSupplierChipBtnSub}>Register vendor</Text>
+                      </View>
                     </TouchableOpacity>
 
                     {suppliers.map((s) => {
                       const active = selectedSupplierId === s.id
+                      const initial = s.name ? s.name.trim().charAt(0).toUpperCase() : 'V'
                       return (
                         <TouchableOpacity
                           key={s.id}
@@ -698,14 +959,32 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                           activeOpacity={0.75}
                         >
                           <View style={styles.supplierChipTop}>
-                            <Text style={[styles.supplierChipName, active && styles.supplierChipNameActive]}>
-                              {s.name}
-                            </Text>
-                            {Boolean(active) && <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" />}
+                            <View style={[styles.supplierAvatar, active && styles.supplierAvatarActive]}>
+                              <Text style={[styles.supplierAvatarText, active && styles.supplierAvatarTextActive]}>
+                                {initial}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.supplierChipName, active && styles.supplierChipNameActive]} numberOfLines={1}>
+                                {s.name}
+                              </Text>
+                              <View style={styles.leadTimeBadgeRow}>
+                                <Ionicons
+                                  name="flash-outline"
+                                  size={10}
+                                  color={active ? '#FFFFFF' : tokens.colors.primaryContainer}
+                                />
+                                <Text style={[styles.supplierChipMeta, active && styles.supplierChipMetaActive]}>
+                                  {s.leadTimeDays ? `${s.leadTimeDays}d lead time` : 'Standard Lead'}
+                                </Text>
+                              </View>
+                            </View>
+                            {Boolean(active) && (
+                              <View style={styles.activeCheckPill}>
+                                <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                              </View>
+                            )}
                           </View>
-                          <Text style={[styles.supplierChipMeta, active && styles.supplierChipMetaActive]}>
-                            {s.leadTimeDays ? `${s.leadTimeDays}d lead time` : 'Standard Lead'}
-                          </Text>
                         </TouchableOpacity>
                       )
                     })}
@@ -715,19 +994,117 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 {/* Delivery & Order Metadata Card */}
                 {Boolean(showMetaCard) && (
                   <View style={styles.metaCard}>
-                    <View style={styles.metaRow}>
-                      <View style={styles.metaCol}>
-                        <Text style={styles.noteLabel}>EXPECTED DELIVERY DATE</Text>
-                        <TextInput
-                          style={styles.metaInput}
-                          value={poExpectedDate}
-                          onChangeText={setPoExpectedDate}
-                          placeholder="YYYY-MM-DD (e.g. 2026-09-01)"
-                          placeholderTextColor={tokens.colors.textDisabled}
-                        />
+                    {/* Line 1: Expected Delivery Date (Full Width) */}
+                    <View style={styles.metaFieldBlock}>
+                      <View style={styles.fieldHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons name="calendar-outline" size={13} color={tokens.colors.primaryContainer} />
+                          <Text style={styles.noteLabel}>EXPECTED DELIVERY DATE</Text>
+                        </View>
+                        {Boolean(poExpectedDate) && (
+                          <View style={styles.dateRelativePill}>
+                            <Text style={styles.dateRelativePillText}>
+                              {getRelativeDateLabel(poExpectedDate)}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                      <View style={styles.metaCol}>
-                        <Text style={styles.noteLabel}>ORDER REF / INVOICE #</Text>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.dateFieldBtn,
+                          Boolean(poExpectedDate) && styles.dateFieldBtnSelected,
+                        ]}
+                        onPress={() => {
+                          if (poExpectedDate) {
+                            const parsed = new Date(poExpectedDate + 'T00:00:00')
+                            if (!isNaN(parsed.getTime())) {
+                              setPickerDate(parsed)
+                            }
+                          }
+                          setShowDatePicker(true)
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.dateFieldLeft}>
+                          <View style={[styles.dateIconWrap, Boolean(poExpectedDate) && styles.dateIconWrapActive]}>
+                            <Ionicons
+                              name="calendar"
+                              size={15}
+                              color={poExpectedDate ? tokens.colors.primaryContainer : tokens.colors.secondary}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.dateFieldText,
+                              !poExpectedDate && { color: tokens.colors.textDisabled },
+                            ]}
+                          >
+                            {poExpectedDate
+                              ? (() => {
+                                  const d = new Date(poExpectedDate + 'T00:00:00')
+                                  const valid = !isNaN(d.getTime())
+                                  return valid
+                                    ? d.toLocaleDateString('en-US', {
+                                        weekday: 'short',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                      })
+                                    : poExpectedDate
+                                })()
+                              : 'Select target arrival date...'}
+                          </Text>
+                        </View>
+
+                        {Boolean(poExpectedDate) ? (
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation()
+                              setPoExpectedDate('')
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={styles.dateClearIconBtn}
+                          >
+                            <Ionicons name="close-circle" size={18} color={tokens.colors.secondary} />
+                          </TouchableOpacity>
+                        ) : (
+                          <Ionicons name="chevron-down" size={16} color={tokens.colors.secondary} />
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Quick Presets Under Date Input */}
+                      <View style={styles.quickPresetRow}>
+                        <Text style={styles.quickPresetLeadText}>Quick set:</Text>
+                        {[
+                          { label: '+3 Days', days: 3 },
+                          { label: '+7 Days (1 Wk)', days: 7 },
+                          { label: '+14 Days (2 Wks)', days: 14 },
+                          { label: '+30 Days (1 Mo)', days: 30 },
+                        ].map((p) => (
+                          <TouchableOpacity
+                            key={p.label}
+                            style={styles.quickPresetBtn}
+                            onPress={() => applyDatePreset(p.days)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.quickPresetBtnText}>{p.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Line 2: Order Reference Number (Full Width) */}
+                    <View style={styles.metaFieldBlock}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                        <Ionicons name="pricetag-outline" size={13} color={tokens.colors.primaryContainer} />
+                        <Text style={styles.noteLabel}>ORDER REFERENCE / INVOICE #</Text>
+                      </View>
+                      <View style={styles.autoRefContainer}>
+                        <View style={styles.autoRefBadge}>
+                          <Ionicons name="lock-closed" size={11} color={tokens.colors.primaryContainer} />
+                          <Text style={styles.autoRefBadgeText}>AUTO-GENERATED</Text>
+                        </View>
                         <TextInput
                           style={styles.metaInput}
                           placeholder="Auto-generated PO"
@@ -736,14 +1113,20 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                           value={`PO-${new Date().getFullYear()}-AUTO`}
                         />
                       </View>
+                      <Text style={styles.autoRefHint}>Assigned automatically upon issuing this purchase order</Text>
                     </View>
 
-                    <View style={{ marginTop: tokens.spacing.sm }}>
-                      <Text style={styles.noteLabel}>ORDER NOTES / INSTRUCTIONS (OPTIONAL)</Text>
+                    {/* Line 3: Order Notes Field */}
+                    <View style={styles.metaFieldBlockLast}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                        <Ionicons name="document-text-outline" size={13} color={tokens.colors.secondary} />
+                        <Text style={styles.noteLabel}>ORDER NOTES & INSTRUCTIONS (OPTIONAL)</Text>
+                      </View>
                       <TextInput
-                        style={styles.metaInput}
+                        style={[styles.metaInput, styles.metaNotesInput]}
                         value={poNotes}
                         onChangeText={setPoNotes}
+                        multiline
                         placeholder="Payment terms, delivery instructions, shipping reference..."
                         placeholderTextColor={tokens.colors.textDisabled}
                       />
@@ -754,7 +1137,12 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 {/* Line Items Header & Action Buttons */}
                 <View style={styles.sectionHeaderRow}>
                   <View>
-                    <Text style={styles.sectionTitle}>Order Items ({poItems.length})</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.sectionTitle}>Order Items</Text>
+                      <View style={styles.sectionCountBadge}>
+                        <Text style={styles.sectionCountBadgeText}>{poItems.length}</Text>
+                      </View>
+                    </View>
                     <Text style={styles.sectionSub}>Verify quantities and unit cost prices</Text>
                   </View>
 
@@ -771,7 +1159,9 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 {/* Empty State */}
                 {poItems.length === 0 ? (
                   <View style={styles.emptyIntakeContainer}>
-                    <Ionicons name="cube-outline" size={52} color={tokens.colors.primaryFixedDim} />
+                    <View style={styles.emptyIconCircle}>
+                      <Ionicons name="cube-outline" size={40} color={tokens.colors.primaryContainer} />
+                    </View>
                     <Text style={styles.emptyIntakeTitle}>No Items in Purchase Order</Text>
                     <Text style={styles.emptyIntakeSub}>
                       Browse the product catalog with supplier costs or scan barcodes with your camera.
@@ -782,7 +1172,7 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                         onPress={() => setCatalogPickerOpen(true)}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="list" size={18} color={tokens.colors.onPrimary} />
+                        <Ionicons name="list" size={16} color={tokens.colors.onPrimary} />
                         <Text style={styles.emptyActionBtnPrimaryText}>Browse Catalog</Text>
                       </TouchableOpacity>
 
@@ -791,7 +1181,7 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                         onPress={() => setScannerOpen(true)}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="barcode-outline" size={18} color={tokens.colors.primaryContainer} />
+                        <Ionicons name="barcode-outline" size={16} color={tokens.colors.primaryContainer} />
                         <Text style={styles.emptyActionBtnSecondaryText}>Scan Barcode</Text>
                       </TouchableOpacity>
                     </View>
@@ -810,11 +1200,15 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                         />
 
                         {group.items.map((item) => (
-                          <View key={item.id} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                          <View key={item.id} style={styles.poItemCardRow}>
                             {/* Item Top Row */}
                             <View style={styles.itemTopRow}>
                               <View style={[styles.thumbnailBox, isMultiVariant && { width: 32, height: 32 }]}>
-                                <Ionicons name={isMultiVariant ? 'git-branch-outline' : 'cube-outline'} size={isMultiVariant ? 16 : 22} color={tokens.colors.primaryContainer} />
+                                <Ionicons
+                                  name={isMultiVariant ? 'git-branch-outline' : 'cube-outline'}
+                                  size={isMultiVariant ? 16 : 20}
+                                  color={tokens.colors.primaryContainer}
+                                />
                               </View>
 
                               <View style={styles.itemInfoCol}>
@@ -875,21 +1269,24 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                               {/* Unit Cost */}
                               <View style={styles.inputCol}>
                                 <Text style={styles.fieldLabel}>UNIT COST ($)</Text>
-                                <TextInput
-                                  style={styles.textInput}
-                                  value={String(item.unitCost)}
-                                  onChangeText={(text) => handleUpdateItemCost(item.id, text)}
-                                  keyboardType="decimal-pad"
-                                  placeholder="0.00"
-                                  placeholderTextColor={tokens.colors.textDisabled}
-                                />
+                                <View style={styles.costInputWrapper}>
+                                  <Text style={styles.costPrefix}>$</Text>
+                                  <TextInput
+                                    style={styles.costInput}
+                                    value={String(item.unitCost)}
+                                    onChangeText={(text) => handleUpdateItemCost(item.id, text)}
+                                    keyboardType="decimal-pad"
+                                    placeholder="0.00"
+                                    placeholderTextColor={tokens.colors.textDisabled}
+                                  />
+                                </View>
                               </View>
 
                               {/* Line Total Display */}
                               <View style={styles.inputCol}>
                                 <Text style={styles.fieldLabel}>LINE TOTAL</Text>
-                                <View style={[styles.textInput, { justifyContent: 'center', backgroundColor: '#F1F5F9' }]}>
-                                  <Text style={[styles.boldText, { color: tokens.colors.primaryContainer, fontSize: 12 }]}>
+                                <View style={styles.lineTotalBadge}>
+                                  <Text style={styles.lineTotalText}>
                                     ${item.totalCost.toFixed(2)}
                                   </Text>
                                 </View>
@@ -918,9 +1315,11 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
               {/* Sticky Bottom Summary Bar matching StockInModal */}
               <View style={styles.footer}>
                 <View style={styles.summaryLeft}>
-                  <Text style={styles.summaryLoggedText}>
-                    {totalLoggedItems} item(s) • {totalUnits} total units
-                  </Text>
+                  <View style={styles.summaryBadgePill}>
+                    <Text style={styles.summaryLoggedText}>
+                      {totalLoggedItems} item{totalLoggedItems !== 1 ? 's' : ''} • {totalUnits} total unit{totalUnits !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
                   <Text style={styles.summaryValueText}>
                     Total Value: <Text style={styles.valueHighlight}>${totalValue.toFixed(2)}</Text>
                   </Text>
@@ -1017,7 +1416,9 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                   showsVerticalScrollIndicator={false}
                   ListEmptyComponent={
                     <View style={styles.emptyIntakeContainer}>
-                      <Ionicons name="document-text-outline" size={52} color={tokens.colors.primaryFixedDim} />
+                      <View style={styles.emptyIconCircle}>
+                        <Ionicons name="document-text-outline" size={40} color={tokens.colors.primaryContainer} />
+                      </View>
                       <Text style={styles.emptyIntakeTitle}>No Purchase Orders Found</Text>
                       <Text style={styles.emptyIntakeSub}>
                         {search.length > 0 || statusFilter !== 'ALL'
@@ -1035,211 +1436,36 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                       )}
                     </View>
                   }
-                  renderItem={({ item: po }) => {
-                    const isReceived = po.status === 'RECEIVED'
-                    const isOrdered = po.status === 'ORDERED'
-                    const firstItem = po.items[0]
-                    const totalPoUnits = po.items.reduce((s, it) => s + it.quantity, 0)
-
-                    return (
-                      <TouchableOpacity
-                        style={styles.itemCard}
-                        onPress={() => setSelectedPoDetail(po)}
-                        activeOpacity={0.8}
-                      >
-                        <View style={styles.itemTopRow}>
-                          <View style={styles.thumbnailBox}>
-                            <Ionicons name="document-text" size={22} color={tokens.colors.primaryContainer} />
-                          </View>
-                          <View style={styles.itemInfoCol}>
-                            <Text style={styles.itemName}>{po.poNumber}</Text>
-                            <View style={styles.itemMetaRow}>
-                              <View style={styles.itemSkuBadge}>
-                                <Text style={styles.itemSkuText}>{po.supplierName}</Text>
-                              </View>
-                              <Text style={styles.expectedText}>
-                                Ordered: <Text style={styles.boldText}>{po.orderDate}</Text>
-                              </Text>
-                            </View>
-                          </View>
-
-                          <View
-                            style={[
-                              styles.statusPill,
-                              isReceived && { backgroundColor: tokens.colors.badgeSuccessBg },
-                              isOrdered && { backgroundColor: '#FEF3C7' },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.statusPillText,
-                                isReceived && { color: tokens.colors.statusSuccess },
-                                isOrdered && { color: '#B45309' },
-                              ]}
-                            >
-                              {po.status}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Items Summary */}
-                        <View style={styles.poSummaryBox}>
-                          <Text style={styles.poSummaryText} numberOfLines={1}>
-                            {firstItem ? `${firstItem.productName} (${firstItem.sku})` : 'Procurement Batch'}
-                            {po.items.length > 1 ? ` + ${po.items.length - 1} more items` : ''}
-                          </Text>
-                          <Text style={styles.poSummaryMeta}>
-                            {totalPoUnits} units total • Expected: {po.expectedDeliveryDate || 'Standard'}
-                          </Text>
-                        </View>
-
-                        {/* Card Footer */}
-                        <View style={styles.poCardFooter}>
-                          <View>
-                            <Text style={styles.fieldLabel}>TOTAL VALUE</Text>
-                            <Text style={styles.valueHighlight}>${po.totalCost.toFixed(2)}</Text>
-                          </View>
-
-                          <View style={{ flexDirection: 'row', gap: 8 }}>
-                            {Boolean(isOrdered && onOpenStockIn) && (
-                              <TouchableOpacity
-                                style={styles.stockInActionBtn}
-                                onPress={(e) => {
-                                  e.stopPropagation()
-                                  onClose()
-                                  onOpenStockIn?.()
-                                }}
-                              >
-                                <Ionicons name="enter-outline" size={14} color={tokens.colors.onPrimary} />
-                                <Text style={styles.stockInActionText}>Stock In</Text>
-                              </TouchableOpacity>
-                            )}
-
-                            <TouchableOpacity
-                              style={styles.detailsBtn}
-                              onPress={() => setSelectedPoDetail(po)}
-                            >
-                              <Text style={styles.detailsBtnText}>Details</Text>
-                              <Ionicons name="chevron-forward" size={12} color={tokens.colors.primaryContainer} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    )
-                  }}
+                  renderItem={({ item: po }) => (
+                    <POCard
+                      po={po}
+                      styles={styles}
+                      onSelect={(p) => setSelectedPoDetail(p)}
+                      onOpenStockIn={(p) => {
+                        onClose()
+                        onOpenStockIn?.()
+                      }}
+                      onMarkReceived={handleMarkReceived}
+                    />
+                  )}
                 />
               )}
             </View>
           )}
 
           {/* PO Detail Sub-Modal */}
-          {selectedPoDetail ? (
-            <Modal
-              visible={!!selectedPoDetail}
-              transparent
-              animationType="slide"
-              onRequestClose={() => setSelectedPoDetail(null)}
-            >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalSheet}>
-                  <View style={styles.sheetHeader}>
-                    <View>
-                      <Text style={styles.modalTitle}>{selectedPoDetail.poNumber}</Text>
-                      <Text style={styles.modalSubtitle}>Supplier: {selectedPoDetail.supplierName}</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setSelectedPoDetail(null)}>
-                      <Ionicons name="close" size={24} color={tokens.colors.secondary} />
-                    </TouchableOpacity>
-                  </View>
-
-                  <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
-                    <View style={styles.detailSummaryBox}>
-                      <View style={styles.detailMetricCol}>
-                        <Text style={styles.detailMetricLabel}>STATUS</Text>
-                        <Text
-                          style={[
-                            styles.detailMetricVal,
-                            selectedPoDetail.status === 'RECEIVED'
-                              ? { color: tokens.colors.statusSuccess }
-                              : { color: tokens.colors.primaryContainer },
-                          ]}
-                        >
-                          {selectedPoDetail.status}
-                        </Text>
-                      </View>
-                      <View style={styles.detailMetricCol}>
-                        <Text style={styles.detailMetricLabel}>TOTAL COST</Text>
-                        <Text style={styles.detailMetricVal}>${selectedPoDetail.totalCost.toFixed(2)}</Text>
-                      </View>
-                      <View style={styles.detailMetricCol}>
-                        <Text style={styles.detailMetricLabel}>ORDER DATE</Text>
-                        <Text style={styles.detailMetricVal}>{selectedPoDetail.orderDate}</Text>
-                      </View>
-                    </View>
-
-                    {Boolean(selectedPoDetail.notes) && (
-                      <View style={styles.detailNotesBox}>
-                        <Text style={styles.detailNotesLabel}>Notes:</Text>
-                        <Text style={styles.detailNotesText}>{selectedPoDetail.notes}</Text>
-                      </View>
-                    )}
-
-                    <Text style={styles.sectionTitle}>Ordered Items ({selectedPoDetail.items.length})</Text>
-                    {selectedPoDetail.items.map((item, idx) => (
-                      <View key={item.id || idx} style={styles.detailItemRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemName}>{item.productName}</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                            {Boolean(item.sku) && (
-                              <CopyableBadge
-                                type="sku"
-                                value={item.sku}
-                                compact
-                              />
-                            )}
-                          </View>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={styles.expectedText}>
-                            {item.quantity} × ${item.unitCost.toFixed(2)}
-                          </Text>
-                          <Text style={styles.boldText}>${item.totalCost.toFixed(2)}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
-
-                  <View style={styles.sheetFooter}>
-                    {selectedPoDetail.status === 'ORDERED' && (
-                      <View style={{ flexDirection: 'row', gap: 10 }}>
-                        {Boolean(onOpenStockIn) && (
-                          <TouchableOpacity
-                            style={[styles.completeBtn, { flex: 1, backgroundColor: tokens.colors.statusSuccess }]}
-                            onPress={() => {
-                              setSelectedPoDetail(null)
-                              onClose()
-                              onOpenStockIn?.()
-                            }}
-                          >
-                            <Ionicons name="enter-outline" size={16} color={tokens.colors.onPrimary} />
-                            <Text style={styles.completeBtnText}>Receive with Stock In</Text>
-                          </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                          style={[styles.completeBtn, { flex: 1 }]}
-                          onPress={() => handleMarkReceived(selectedPoDetail.id)}
-                        >
-                          <Ionicons name="checkmark-circle-outline" size={16} color={tokens.colors.onPrimary} />
-                          <Text style={styles.completeBtnText}>Mark Received</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-            </Modal>
-          ) : null}
+          <PODetailModal
+            visible={Boolean(selectedPoDetail)}
+            po={selectedPoDetail}
+            styles={styles}
+            onClose={() => setSelectedPoDetail(null)}
+            onOpenStockIn={() => {
+              setSelectedPoDetail(null)
+              onClose()
+              onOpenStockIn?.()
+            }}
+            onMarkReceived={handleMarkReceived}
+          />
         </View>
       </SafeAreaView>
     </Modal>
@@ -1276,10 +1502,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   poBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: tokens.colors.primaryFixed,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: tokens.borderRadius.xs,
+    maxWidth: 160,
   },
   poBadgeText: {
     color: tokens.colors.primary,
@@ -1379,6 +1608,23 @@ const styles = StyleSheet.create({
     color: tokens.colors.onPrimary,
     fontWeight: '700',
   },
+  tabBadge: {
+    backgroundColor: tokens.colors.surfaceContainerLow,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  tabBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+  },
+  tabBadgeTextActive: {
+    color: tokens.colors.onPrimary,
+  },
   scrollArea: {
     flex: 1,
   },
@@ -1386,82 +1632,14 @@ const styles = StyleSheet.create({
     padding: tokens.spacing.md,
     paddingBottom: tokens.spacing.xxl,
   },
-  addSupplierChipBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: tokens.colors.primaryContainer,
-    borderRadius: tokens.borderRadius.card,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  bannerIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: tokens.colors.primaryFixed,
     justifyContent: 'center',
-  },
-  addSupplierChipBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: tokens.colors.primaryContainer,
-  },
-  parentGroupCard: {
-    backgroundColor: tokens.colors.surfaceCard,
-    borderRadius: tokens.borderRadius.card,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: tokens.colors.borderSubtle,
-    overflow: 'hidden',
-  },
-  parentGroupHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
   },
-  parentGroupTitleCol: {
-    flex: 1,
-    marginRight: 10,
-  },
-  parentGroupTitle: {
-    fontSize: 13.5,
-    fontWeight: '800',
-    color: tokens.colors.onBackground,
-  },
-  parentGroupMeta: {
-    fontSize: 10.5,
-    color: tokens.colors.secondary,
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  removeAllVariantsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: tokens.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  removeAllVariantsText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  itemCardNested: {
-    borderRadius: 0,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    marginBottom: 0,
-    padding: 12,
-  },
-
   supplierBanner: {
     backgroundColor: tokens.colors.surfaceContainerLowest,
     borderRadius: tokens.borderRadius.card,
@@ -1469,6 +1647,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     marginBottom: tokens.spacing.md,
+    ...tokens.shadows.card,
   },
   supplierBannerHeader: {
     flexDirection: 'row',
@@ -1478,7 +1657,7 @@ const styles = StyleSheet.create({
   },
   supplierBannerTitle: {
     color: tokens.colors.onBackground,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   supplierBannerHint: {
@@ -1487,14 +1666,47 @@ const styles = StyleSheet.create({
   },
   supplierChipsList: {
     gap: 8,
+    paddingVertical: 2,
+  },
+  addSupplierChipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: tokens.colors.primaryContainer,
+    borderRadius: tokens.borderRadius.card,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  addSupplierIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFEDD5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addSupplierChipBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.primaryContainer,
+  },
+  addSupplierChipBtnSub: {
+    fontSize: 10,
+    color: tokens.colors.secondary,
+    marginTop: 1,
   },
   supplierChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: tokens.borderRadius.md,
+    borderRadius: tokens.borderRadius.card,
     backgroundColor: tokens.colors.surfaceAlt,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
+    minWidth: 130,
   },
   supplierChipActive: {
     backgroundColor: tokens.colors.primaryContainer,
@@ -1503,7 +1715,26 @@ const styles = StyleSheet.create({
   supplierChipTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+  },
+  supplierAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: tokens.colors.primaryFixed,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  supplierAvatarActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  supplierAvatarText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: tokens.colors.primary,
+  },
+  supplierAvatarTextActive: {
+    color: '#FFFFFF',
   },
   supplierChipName: {
     fontSize: 12,
@@ -1513,13 +1744,27 @@ const styles = StyleSheet.create({
   supplierChipNameActive: {
     color: tokens.colors.onPrimary,
   },
+  leadTimeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
   supplierChipMeta: {
     fontSize: 10,
     color: tokens.colors.secondary,
-    marginTop: 2,
   },
   supplierChipMetaActive: {
-    color: tokens.colors.onPrimary + 'CC',
+    color: tokens.colors.onPrimary + 'D9',
+  },
+  activeCheckPill: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
   },
   metaCard: {
     backgroundColor: tokens.colors.surfaceContainerLowest,
@@ -1528,31 +1773,147 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     marginBottom: tokens.spacing.md,
+    ...tokens.shadows.card,
   },
-  metaRow: {
+  metaFieldBlock: {
+    marginBottom: tokens.spacing.md,
+  },
+  metaFieldBlockLast: {
+    marginBottom: 0,
+  },
+  fieldHeaderRow: {
     flexDirection: 'row',
-    gap: tokens.spacing.sm,
-  },
-  metaCol: {
-    flex: 1,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   noteLabel: {
     color: tokens.colors.secondary,
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 4,
+  },
+  dateRelativePill: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  dateRelativePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: tokens.colors.primaryContainer,
+  },
+  dateFieldBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: tokens.colors.surfaceAlt,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    height: 44,
+    paddingHorizontal: 12,
+  },
+  dateFieldBtnSelected: {
+    borderColor: tokens.colors.primaryFixedDim,
+    backgroundColor: '#FFFFFF',
+  },
+  dateFieldLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  dateIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: tokens.colors.surfaceContainerLow,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateIconWrapActive: {
+    backgroundColor: tokens.colors.primaryFixed,
+  },
+  dateFieldText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: tokens.colors.onBackground,
+  },
+  dateClearIconBtn: {
+    padding: 4,
+  },
+  quickPresetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  quickPresetLeadText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: tokens.colors.secondary,
+    marginRight: 2,
+  },
+  quickPresetBtn: {
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+  },
+  quickPresetBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: tokens.colors.primaryContainer,
+  },
+  autoRefContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  autoRefBadge: {
+    position: 'absolute',
+    right: 10,
+    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.primaryFixed,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: tokens.borderRadius.xs,
+    gap: 4,
+  },
+  autoRefBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: tokens.colors.primaryContainer,
+    letterSpacing: 0.3,
+  },
+  autoRefHint: {
+    fontSize: 10.5,
+    color: tokens.colors.secondary,
+    marginTop: 4,
   },
   metaInput: {
     backgroundColor: tokens.colors.surfaceAlt,
     borderRadius: tokens.borderRadius.md,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
-    height: 38,
+    height: 40,
     paddingHorizontal: 10,
     color: tokens.colors.onBackground,
     fontSize: 12,
     fontWeight: '600',
+  },
+  metaNotesInput: {
+    height: 60,
+    textAlignVertical: 'top',
+    paddingTop: 8,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1569,14 +1930,26 @@ const styles = StyleSheet.create({
     color: tokens.colors.secondary,
     fontSize: 12,
   },
+  sectionCountBadge: {
+    backgroundColor: tokens.colors.primaryFixed,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: tokens.borderRadius.pill,
+  },
+  sectionCountBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: tokens.colors.primaryContainer,
+  },
   browseProductsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: tokens.colors.primaryContainer,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: tokens.borderRadius.pill,
     gap: 4,
+    ...tokens.shadows.card,
   },
   browseProductsBtnText: {
     color: tokens.colors.onPrimary,
@@ -1592,6 +1965,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: tokens.spacing.sm,
+    ...tokens.shadows.card,
+  },
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   emptyIntakeTitle: {
     fontSize: 15,
@@ -1641,12 +2024,118 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  poOrderCard: {
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+    borderRadius: tokens.borderRadius.card,
+    padding: tokens.spacing.md,
+    marginBottom: tokens.spacing.sm,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    gap: 8,
+    ...tokens.shadows.card,
+  },
+  poCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  poNumberGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  poNumberIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: tokens.colors.primaryFixed,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  poCardNumberText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: tokens.colors.onBackground,
+    letterSpacing: -0.2,
+  },
+  poSupplierRowBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: tokens.borderRadius.xs,
+  },
+  poSupplierIconWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  poSupplierNameText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: tokens.colors.onBackground,
+    flex: 1,
+  },
+  poDatesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  poDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: tokens.borderRadius.xs,
+  },
+  poDateChipLabel: {
+    fontSize: 10.5,
+    color: tokens.colors.secondary,
+    fontWeight: '600',
+  },
+  poDateChipValue: {
+    fontSize: 11,
+    color: tokens.colors.onBackground,
+    fontWeight: '700',
+  },
+  poExpectedDateChip: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  poExpectedDateChipLabel: {
+    fontSize: 10.5,
+    color: tokens.colors.primaryContainer,
+    fontWeight: '700',
+  },
+  poExpectedDateChipValue: {
+    fontSize: 11,
+    color: tokens.colors.primaryContainer,
+    fontWeight: '800',
+  },
   itemCard: {
     backgroundColor: tokens.colors.surfaceContainerLowest,
     borderRadius: tokens.borderRadius.card,
     padding: tokens.spacing.md,
     marginBottom: tokens.spacing.sm,
-    ...tokens.shadows.cardInnerDepth,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    ...tokens.shadows.card,
+  },
+  poItemCardRow: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   itemTopRow: {
     flexDirection: 'row',
@@ -1654,8 +2143,8 @@ const styles = StyleSheet.create({
     marginBottom: tokens.spacing.sm,
   },
   thumbnailBox: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: tokens.borderRadius.thumbnail,
     backgroundColor: tokens.colors.surfaceContainerLow,
     justifyContent: 'center',
@@ -1674,7 +2163,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 2,
+    marginTop: 3,
   },
   itemSkuBadge: {
     backgroundColor: tokens.colors.surfaceAlt,
@@ -1697,7 +2186,12 @@ const styles = StyleSheet.create({
     color: tokens.colors.onBackground,
   },
   trashBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputsGrid: {
     flexDirection: 'row',
@@ -1705,6 +2199,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.colors.borderSubtle,
     paddingTop: tokens.spacing.sm,
+    alignItems: 'flex-end',
   },
   inputCol: {
     flex: 1,
@@ -1739,16 +2234,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  textInput: {
+  costInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: tokens.colors.surfaceAlt,
     borderRadius: tokens.borderRadius.md,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     height: 38,
     paddingHorizontal: 8,
+  },
+  costPrefix: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+    marginRight: 2,
+  },
+  costInput: {
+    flex: 1,
     color: tokens.colors.onBackground,
     fontSize: 12,
     fontWeight: '600',
+    padding: 0,
+  },
+  lineTotalBadge: {
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
+    paddingHorizontal: 6,
+  },
+  lineTotalText: {
+    color: tokens.colors.primaryContainer,
+    fontWeight: '800',
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
   },
   addUnexpectedBtn: {
     flexDirection: 'row',
@@ -1782,6 +2305,14 @@ const styles = StyleSheet.create({
   },
   summaryLeft: {
     flex: 1,
+  },
+  summaryBadgePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.pill,
+    marginBottom: 2,
   },
   summaryLoggedText: {
     color: tokens.colors.secondary,
@@ -1952,6 +2483,15 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     maxHeight: '85%',
   },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2035,18 +2575,124 @@ const styles = StyleSheet.create({
   },
   toastContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 20,
-    right: 20,
-    backgroundColor: tokens.colors.primary,
-    padding: 12,
-    borderRadius: 8,
+    top: Platform.OS === 'ios' ? 52 : 36,
+    left: 16,
+    right: 16,
     alignItems: 'center',
-    zIndex: 9999,
+    zIndex: 99999,
+    elevation: 99999,
+  },
+  toastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: tokens.borderRadius.pill,
+    maxWidth: '92%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  toastIcon: {
+    marginRight: 8,
   },
   toastText: {
-    color: '#FFF',
-    fontSize: 14,
+    color: '#F8FAFC',
+    fontSize: 13,
     fontWeight: '600',
+    letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  // Date Picker Sheet Styles (iOS & modal)
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  datePickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: tokens.spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingTop: 8,
+  },
+  datePickerCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: tokens.colors.surfaceAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: tokens.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderSubtle,
+  },
+  datePickerPresetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: tokens.spacing.sm + 2,
+    justifyContent: 'center',
+  },
+  datePickerPresetChip: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  datePickerPresetChipText: {
+    color: tokens.colors.primaryContainer,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  datePickerSheetFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: tokens.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
+  },
+  datePickerClearBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    height: 44,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: '#FEE2E2',
+  },
+  datePickerClearBtnText: {
+    color: tokens.colors.statusError,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  datePickerSetBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: tokens.colors.primaryContainer,
+    ...tokens.shadows.card,
+  },
+  datePickerSetBtnText: {
+    color: tokens.colors.onPrimary,
+    fontSize: 13,
+    fontWeight: '700',
   },
 })

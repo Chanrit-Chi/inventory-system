@@ -1,26 +1,36 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import type { Order } from '../types';
+import type { Order, Product, ProductVariant, Customer, PurchaseOrder, UserAccount, TabType, QuotationItem, CartItem } from '../types';
+import type { useCart } from '../hooks/useCart';
+import type { useOfflineQueue } from '../hooks/useOfflineQueue';
+
+export interface CartCheckoutPreset {
+  discount?: number | string;
+  customerName?: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
+  notes?: string;
+}
 
 export interface AppContextType {
-  onNavigate: (tab: any) => void;
+  onNavigate: (tab: TabType) => void;
   onOpenScanner: () => void;
-  onOpenStockIn: (product?: any, variant?: any) => void;
-  onOpenStockAdjustment: (product?: any, variant?: any) => void;
+  onOpenStockIn: (product?: Product, variant?: ProductVariant) => void;
+  onOpenStockAdjustment: (product?: Product, variant?: ProductVariant) => void;
   onOpenPurchaseOrder: (opts?: { mode?: 'list' | 'create'; supplierId?: string }) => void;
   onOpenPurchaseOrders?: () => void;
   productsSubTab?: 'catalog' | 'movements' | 'purchaseOrders';
   setProductsSubTab?: (tab: 'catalog' | 'movements' | 'purchaseOrders') => void;
   onSelectOrder: (order: Order) => void;
-  onConvertQuoteToCart: (quoteItems: any[], quoteNumber?: string, preset?: any) => void;
+  onConvertQuoteToCart: (quoteItems: QuotationItem[], quoteNumber?: string, preset?: CartCheckoutPreset) => void;
   onCheckoutStateChange: (isActive: boolean) => void;
   onAuthModalOpen: () => void;
-  onSelectCustomerForPOS?: (customer: any) => void;
-  cartHook: any;
-  offlineQueueHook: any;
-  purchaseOrders: any[];
-  addPurchaseOrder: any;
-  markPoReceived: any;
-  currentUser: any;
+  onSelectCustomerForPOS?: (customer: Customer) => void;
+  cartHook: ReturnType<typeof useCart>;
+  offlineQueueHook: ReturnType<typeof useOfflineQueue>;
+  purchaseOrders: PurchaseOrder[];
+  addPurchaseOrder: (po: PurchaseOrder) => void;
+  markPoReceived: (poId: string) => Promise<any> | void;
+  currentUser: UserAccount | null;
   orderRefreshTrigger: number;
 }
 

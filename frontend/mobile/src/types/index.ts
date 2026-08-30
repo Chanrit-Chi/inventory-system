@@ -47,6 +47,7 @@ export interface ScannedAttributeValue {
 export interface ScannedProduct {
   id: string
   name: string
+  sku?: string | null
   barcode?: string | null
   selling_price: string
   image_url?: string | null
@@ -127,6 +128,15 @@ export interface Product {
   updated_at?: string
 }
 
+export interface PoGroup {
+  groupKey: string
+  parentName: string
+  imageUrl?: string
+  items: PurchaseOrderItem[]
+  totalQty: number
+  totalCost: number
+}
+
 export interface CartItem {
   variantId: string
   sku: string
@@ -149,6 +159,7 @@ export interface Customer {
   total_spent?: string | number
   last_purchase_at?: string | null
   created_at?: string
+  orders?: Order[]
 }
 
 export interface SalesChannel {
@@ -199,8 +210,9 @@ export interface CheckoutPayload {
 
 export interface OrderItem {
   id: string
-  order_id: string
-  variant_id: string
+  order_id?: string
+  product_id?: string
+  variant_id?: string
   quantity: number
   unit_price: string | number
   total_price?: string | number
@@ -208,7 +220,20 @@ export interface OrderItem {
   product_name?: string
   productName?: string
   sku?: string
-  variant?: ScannedVariant | ProductVariant
+  product?: {
+    id?: string
+    name?: string
+    sku?: string
+    unit?: string
+    barcode?: string
+  }
+  variant?: ScannedVariant | ProductVariant | {
+    id?: string
+    sku?: string
+    name?: string
+    attribute_values?: ScannedAttributeValue[]
+    option_values?: Record<string, string>
+  }
 }
 
 export interface OrderPayment {
@@ -231,6 +256,7 @@ export interface Order {
   customer?: Customer | null
   user_id?: string | null
   user?: { id: string; name: string; role?: string } | null
+  seller_id?: string | null
   seller?: { id: string; name: string; role?: string } | null
   status: string
   payment_status?: string
@@ -366,6 +392,7 @@ export type TabType =
   | 'settings'
   | 'hub'
   | 'payroll'
+  | 'daily-settlements'
 
 export interface AttributeTaxonomy {
   id: string
@@ -383,6 +410,8 @@ export interface UserAccount {
   email: string
   role: UserRole
   isActive: boolean
+  must_change_password?: boolean
+  mustChangePassword?: boolean
   avatarUrl?: string
   phone?: string
   hire_date?: string
@@ -677,9 +706,30 @@ export interface DailySalesGoal {
 
 export type OfflineMutationPayload =
   | { type: 'CHECKOUT'; data: CheckoutPayload }
-  | { type: 'STOCK_ADJUSTMENT'; data: { variant_id: string; type: string; quantity: number; reason: string; client_mutation_id: string } }
-  | { type: 'STOCK_IN'; data: { items: Array<{ variant_id: string; quantity: number; cost_price?: number; unit_cost?: number }>; notes?: string; reference_number?: string; client_mutation_id: string } }
-  | { type: 'UPDATE_ORDER_STATUS'; data: { orderId: string; status: string } }
+  | {
+      type: 'STOCK_ADJUSTMENT'
+      data: {
+        variant_id: string
+        type: string
+        quantity: number
+        current_quantity?: number
+        difference?: number
+        reason: string
+        notes?: string
+        adjusted_at?: string
+        client_mutation_id: string
+      }
+    }
+  | {
+      type: 'STOCK_IN'
+      data: {
+        items: Array<{ variant_id: string; quantity: number; cost_price?: number; unit_cost?: number }>
+        notes?: string
+        reference_number?: string
+        client_mutation_id: string
+      }
+    }
+  | { type: 'UPDATE_ORDER_STATUS'; data: { orderId: string; status: string; client_mutation_id?: string } }
 
 export interface OfflineMutation {
   id: string
@@ -714,6 +764,8 @@ export interface StoreBranding {
   invoice_header?: string | null
   quotation_header?: string | null
   receipt_footer?: string | null
+  invoice_footer?: string | null
+  quotation_footer?: string | null
   show_tax?: boolean
   updated_at?: string
 }
@@ -880,5 +932,85 @@ export interface SalaryHistoryResponse {
   }
   current_salary: number
   history: SalaryHistoryEntry[]
+}
+
+export interface SellerSettlementOrderItem {
+  id: string
+  order_number: string
+  status: string
+  total_amount: number
+  incentive: number
+  items_count: number
+  customer_name: string
+  channel_name: string
+  created_at: string
+  input_by_user?: { id: string; name: string; role?: string } | null
+  is_assisted: boolean
+}
+
+export interface SellerDailySettlementRecord {
+  id: string
+  seller_id: string
+  confirmed_date: string
+  total_orders_count: number
+  total_sales_amount: number
+  total_incentive_amount: number
+  status: 'CONFIRMED' | 'REVISED' | string
+  confirmed_at: string
+  confirmed_by: string
+  confirmer?: { id: string; name: string }
+  order_ids?: string[]
+  notes?: string
+}
+
+export interface SellerDailySettlementSummary {
+  seller: { id: string; name: string; role?: string }
+  date: string
+  is_today: boolean
+  total_orders_count: number
+  direct_orders_count: number
+  assisted_orders_count: number
+  total_sales_amount: number
+  total_incentive_amount: number
+  direct_orders: SellerSettlementOrderItem[]
+  assisted_orders: SellerSettlementOrderItem[]
+  settlement: SellerDailySettlementRecord | null
+  is_confirmed: boolean
+}
+
+export interface TeamSellerStatusItem {
+  seller: {
+    id: string
+    name: string
+    role: string
+    email?: string
+    department?: string
+  }
+  total_orders_count: number
+  direct_orders_count: number
+  assisted_orders_count: number
+  total_sales_amount: number
+  total_incentive_amount: number
+  is_confirmed: boolean
+  status: 'CONFIRMED' | 'PENDING' | 'REVISED' | 'NO_SALES' | string
+  settlement?: {
+    id: string
+    status: string
+    confirmed_at?: string
+    confirmed_by?: { id: string; name: string } | null
+    notes?: string | null
+  } | null
+}
+
+export interface TeamDailySettlementSummary {
+  date: string
+  is_today: boolean
+  total_sellers_count: number
+  active_sellers_with_sales: number
+  confirmed_sellers_count: number
+  total_team_sales_amount: number
+  total_team_incentive_amount: number
+  total_team_orders_count: number
+  sellers: TeamSellerStatusItem[]
 }
 

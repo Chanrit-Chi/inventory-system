@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   Platform,
+  Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { CartItemRow } from './CartItemRow'
@@ -31,6 +32,52 @@ export const CartList: React.FC<CartListProps> = ({
   onSetQuantity,
   onClearCart,
 }) => {
+  const handleClearCart = () => {
+    Alert.alert(
+      'Clear Cart',
+      'Are you sure you want to remove all items from the cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: onClearCart,
+        },
+      ]
+    )
+  }
+
+  const handleRemoveItem = (variantId: string, productName: string) => {
+    Alert.alert(
+      'Remove Item',
+      `Are you sure you want to remove "${productName}" from the cart?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => onRemove(variantId),
+        },
+      ]
+    )
+  }
+
+  const handleDecreaseItem = (variantId: string, productName: string, currentQty: number) => {
+    if (currentQty <= 1) {
+      handleRemoveItem(variantId, productName)
+    } else {
+      onDecrease(variantId)
+    }
+  }
+
+  const handleSetQuantity = (variantId: string, productName: string, qty: number) => {
+    if (qty <= 0) {
+      handleRemoveItem(variantId, productName)
+    } else if (onSetQuantity) {
+      onSetQuantity(variantId, qty)
+    }
+  }
+
   if (cart.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -66,8 +113,9 @@ export const CartList: React.FC<CartListProps> = ({
         </View>
 
         <TouchableOpacity
+          testID="btn-clear-cart"
           style={styles.clearBtn}
-          onPress={onClearCart}
+          onPress={handleClearCart}
           accessibilityRole="button"
           accessibilityLabel="Clear all items in cart"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -93,9 +141,9 @@ export const CartList: React.FC<CartListProps> = ({
             item={item}
             warning={stockWarnings[item.variantId]}
             onIncrease={onIncrease}
-            onDecrease={onDecrease}
-            onRemove={onRemove}
-            onSetQuantity={onSetQuantity}
+            onDecrease={() => handleDecreaseItem(item.variantId, item.productName, item.quantity)}
+            onRemove={() => handleRemoveItem(item.variantId, item.productName)}
+            onSetQuantity={(id, qty) => handleSetQuantity(id, item.productName, qty)}
           />
         )}
       />

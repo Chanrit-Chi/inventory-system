@@ -9,7 +9,16 @@ export interface CartCheckoutPreset {
   discount?: number | string
   customerName?: string
   customerPhone?: string
+  deliveryAddress?: string
   notes?: string
+}
+
+export interface AddVariantResult {
+  success: boolean
+  reason?: 'out_of_stock' | 'max_stock_reached'
+  currentQuantity?: number
+  availableStock: number
+  productName: string
 }
 
 export function useCart() {
@@ -70,46 +79,100 @@ export function useCart() {
     }
   }, [checkoutPreset])
 
-  const addVariantToCart = useCallback((variant: ScannedVariant, productName: string, productImageUrl?: string | null) => {
-    const rawPrice = variant.selling_price_override ?? variant.selling_price ?? variant.product?.selling_price ?? '0'
-    const unitPrice = parseFloat(rawPrice) || 0
-    const availableStock = variant.quantity_on_hand ?? 0
-    if (availableStock <= 0) {
-      return
-    }
-    const attrs = variant.attribute_values?.map(av => `${av.attribute?.name ? av.attribute.name + ': ' : ''}${av.value_name}`).join(', ')
+  const addVariantToCart = useCallback(
+    (
+      variant: ScannedVariant,
+      productName: string,
+      productImageUrl?: string | null
+    ): AddVariantResult => {
+      const prodTitle = productName || variant.name || variant.product?.name || 'Product'
+      const rawPrice =
+        variant.selling_price_override ??
+        variant.selling_price ??
+        variant.product?.selling_price ??
+        '0'
+      const unitPrice = parseFloat(rawPrice) || 0
+      const availableStock = variant.quantity_on_hand !== undefined ? variant.quantity_on_hand : 0
 
-    setCart(prevCart => {
-      const existingIndex = prevCart.findIndex(item => item.variantId === variant.id)
-      if (existingIndex >= 0) {
-        const current = prevCart[existingIndex]
-        if (current.quantity >= availableStock) {
-          return prevCart
+      if (availableStock <= 0) {
+        return {
+          success: false,
+          reason: 'out_of_stock',
+          availableStock: 0,
+          productName: prodTitle,
         }
-        const updated = [...prevCart]
-        updated[existingIndex] = {
-          ...current,
-          quantity: current.quantity + 1,
-          availableStock, // refresh stock count
-        }
-        return updated
       }
 
-      return [
-        ...prevCart,
-        {
-          variantId: variant.id,
-          sku: variant.sku,
-          productName: productName || variant.product?.name || 'Product',
-          quantity: 1,
-          unitPrice,
+      let opResult: AddVariantResult = {
+        success: true,
+        currentQuantity: 1,
+        availableStock,
+        productName: prodTitle,
+      }
+
+      setCart((prevCart) => {
+        const existingIndex = prevCart.findIndex((item) => item.variantId === variant.id)
+        if (existingIndex >= 0) {
+          const current = prevCart[existingIndex]
+          if (current.quantity >= availableStock) {
+            opResult = {
+              success: false,
+              reason: 'max_stock_reached',
+              currentQuantity: current.quantity,
+              availableStock,
+              productName: prodTitle,
+            }
+            return prevCart
+          }
+          const updated = [...prevCart]
+          const nextQty = current.quantity + 1
+          updated[existingIndex] = {
+            ...current,
+            quantity: nextQty,
+            availableStock, // refresh stock count
+          }
+          opResult = {
+            success: true,
+            currentQuantity: nextQty,
+            availableStock,
+            productName: prodTitle,
+          }
+          return updated
+        }
+
+        const attrs = variant.attribute_values
+          ?.map(
+            (av) =>
+              `${av.attribute?.name ? av.attribute.name + ': ' : ''}${av.value_name}`
+          )
+          .join(', ')
+
+        opResult = {
+          success: true,
+          currentQuantity: 1,
           availableStock,
-          attributesSummary: attrs || undefined,
-          imageUrl: productImageUrl || variant.product?.image_url || undefined,
-        },
-      ]
-    })
-  }, [])
+          productName: prodTitle,
+        }
+
+        return [
+          ...prevCart,
+          {
+            variantId: variant.id,
+            sku: variant.sku,
+            productName: prodTitle,
+            quantity: 1,
+            unitPrice,
+            availableStock,
+            attributesSummary: attrs || undefined,
+            imageUrl: productImageUrl || variant.product?.image_url || undefined,
+          },
+        ]
+      })
+
+      return opResult
+    },
+    []
+  )
 
   const addMultipleItemsToCart = useCallback((items: Array<{
     variantId: string

@@ -4,6 +4,8 @@ import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import { useBranding } from '../context/BrandingContext'
+import { getChannelPlatformMeta } from './TransactionCard'
+import type { Order } from '../types'
 import ViewShot from 'react-native-view-shot'
 
 export interface ReceiptItem {
@@ -37,6 +39,9 @@ export interface DigitalReceiptProps {
   dueDate?: string
   validUntil?: string
   discount?: number
+  deliveryCost?: number
+  deliveryCompany?: string
+  deliveryAddress?: string
   
   storeName?: string
   receiptHeader?: string
@@ -55,13 +60,19 @@ export interface DigitalReceiptProps {
   
   // Specific for Receipts: simple payment method text
   paymentMethod?: string
+  orderDate?: string
+  createdAt?: string
   channelName?: string
+  channel?: Order['channel'] | null
+  channelId?: string | null
+  sellerName?: string
+  cashierName?: string
   
   // Specific for Invoices: detailed payment history
   payments?: ReceiptPayment[]
 }
 
-export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) => {
+export const DigitalReceipt = forwardRef<ViewShot, DigitalReceiptProps>((props, ref) => {
   const { branding } = useBranding()
   const {
     documentType,
@@ -70,6 +81,9 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
     dueDate,
     validUntil,
     discount,
+    deliveryCost,
+    deliveryCompany,
+    deliveryAddress,
     storeName,
     receiptHeader,
     footerMessage,
@@ -82,13 +96,47 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
     amountPaid,
     balanceDue,
     paymentMethod,
+    orderDate,
+    createdAt,
     channelName,
+    channel,
+    channelId,
+    sellerName,
+    cashierName,
     payments,
   } = props
 
   const isReceipt = documentType === 'Receipt'
   const isQuotation = documentType === 'Quotation'
   const isShowTax = showTax !== undefined ? showTax : !!branding.show_tax
+  const channelMeta = isReceipt ? getChannelPlatformMeta(channel, channelId || channelName) : null
+
+  const formattedDateTime = React.useMemo(() => {
+    if (orderDate) return orderDate
+    if (createdAt) {
+      try {
+        const d = new Date(createdAt)
+        return d.toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+      } catch {
+        return createdAt
+      }
+    }
+    return new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+  }, [orderDate, createdAt])
 
   const getDocumentSubtitle = () => {
     if (receiptHeader) return receiptHeader
@@ -98,7 +146,7 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
     if (isReceipt) {
       return branding.receipt_header || 'Official Digital Tax Receipt'
     }
-    return branding.invoice_header || branding.receipt_header || 'Official Tax Invoice'
+    return branding.invoice_header || 'Official Tax Invoice'
   }
 
   const getDocumentNumberLabel = () => {
@@ -140,9 +188,25 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>{getDocumentNumberLabel()}</Text>
           {isReceipt ? (
-            <View style={styles.channelBadge}>
-              <View style={styles.channelDot} />
-              <Text style={styles.channelBadgeText}>{channelName || 'Store POS'}</Text>
+            <View
+              style={[
+                styles.channelBadge,
+                channelMeta?.bg ? { backgroundColor: channelMeta.bg } : null,
+              ]}
+            >
+              <Ionicons
+                name={channelMeta?.icon || 'storefront-outline'}
+                size={12}
+                color={channelMeta?.color || tokens.colors.primary}
+              />
+              <Text
+                style={[
+                  styles.channelBadgeText,
+                  channelMeta?.color ? { color: channelMeta.color } : null,
+                ]}
+              >
+                {channelName || channelMeta?.label || 'Store POS'}
+              </Text>
             </View>
           ) : (
             <Text style={styles.infoValue}>{documentNumber}</Text>
@@ -150,20 +214,38 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
         </View>
 
         {isReceipt ? (
-          <View style={[styles.infoRow, { marginTop: 4 }]}>
-            <Text style={styles.infoLabel}>Order Number</Text>
-            <Text style={styles.infoValue}>{documentNumber}</Text>
-          </View>
+          <>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Order Number</Text>
+              <Text style={styles.infoValue}>{documentNumber}</Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Date & Time</Text>
+              <Text style={styles.infoValue}>{formattedDateTime}</Text>
+            </View>
+          </>
         ) : isQuotation ? (
-          <View style={[styles.infoRow, { marginTop: 4 }]}>
-            <Text style={styles.infoLabel}>Valid Until</Text>
-            <Text style={styles.infoValue}>{validUntil || dueDate || '14 Days'}</Text>
-          </View>
+          <>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Date</Text>
+              <Text style={styles.infoValue}>{formattedDateTime}</Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Valid Until</Text>
+              <Text style={styles.infoValue}>{validUntil || dueDate || '14 Days'}</Text>
+            </View>
+          </>
         ) : (
-          <View style={[styles.infoRow, { marginTop: 4 }]}>
-            <Text style={styles.infoLabel}>Due Date</Text>
-            <Text style={styles.infoValue}>{dueDate}</Text>
-          </View>
+          <>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Invoice Date</Text>
+              <Text style={styles.infoValue}>{formattedDateTime}</Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 4 }]}>
+              <Text style={styles.infoLabel}>Due Date</Text>
+              <Text style={styles.infoValue}>{dueDate}</Text>
+            </View>
+          </>
         )}
 
         {Boolean(referenceNumber) && (
@@ -172,15 +254,42 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
             <Text style={styles.infoValue}>{referenceNumber}</Text>
           </View>
         )}
+
+        {Boolean(sellerName) && (
+          <View style={[styles.infoRow, { marginTop: 4 }]}>
+            <Text style={styles.infoLabel}>Sold By</Text>
+            <Text style={styles.infoValue}>{sellerName}</Text>
+          </View>
+        )}
+
+        {Boolean(cashierName && cashierName !== sellerName) && (
+          <View style={[styles.infoRow, { marginTop: 4 }]}>
+            <Text style={styles.infoLabel}>Cashier</Text>
+            <Text style={styles.infoValue}>{cashierName}</Text>
+          </View>
+        )}
       </View>
 
-      {/* Bill To Customer */}
+      {/* Bill To Customer & Fulfillment */}
       <View style={styles.customerCard}>
         <Text style={styles.customerCardTitle}>{isQuotation ? 'PREPARED FOR' : 'BILL TO'}</Text>
         <Text style={styles.customerName}>{customerName}</Text>
         {customerPhone ? (
           <Text style={styles.customerPhone}>{customerPhone}</Text>
         ) : null}
+        {Boolean(deliveryAddress || deliveryCompany) && (
+          <View style={styles.deliveryInfoContainer}>
+            <View style={styles.deliveryBadge}>
+              <Ionicons name="bicycle-outline" size={11} color={tokens.colors.primary} />
+              <Text style={styles.deliveryBadgeText}>{deliveryCompany || 'Delivery'}</Text>
+            </View>
+            {Boolean(deliveryAddress) && (
+              <Text style={styles.deliveryAddressText} numberOfLines={2}>
+                {deliveryAddress}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Dashed Line */}
@@ -219,7 +328,7 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
 
       {/* Financial Breakdown */}
       <View style={styles.totalBreakdown}>
-        {Boolean(!isReceipt || (discount !== undefined && discount > 0) || tax > 0) && (
+        {Boolean(!isReceipt || (discount !== undefined && discount > 0) || (deliveryCost !== undefined && deliveryCost > 0) || tax > 0) && (
           <View style={styles.breakdownRow}>
             <Text style={styles.breakdownLabel}>Subtotal</Text>
             <Text style={styles.breakdownValue}>${subtotal.toFixed(2)}</Text>
@@ -232,6 +341,13 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
             <Text style={[styles.breakdownValue, { color: tokens.colors.statusSuccess }]}>
               -${(discount ?? 0).toFixed(2)}
             </Text>
+          </View>
+        )}
+
+        {Boolean(deliveryCost !== undefined && deliveryCost > 0) && (
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Delivery Fee{deliveryCompany ? ` (${deliveryCompany})` : ''}</Text>
+            <Text style={styles.breakdownValue}>+${(deliveryCost ?? 0).toFixed(2)}</Text>
           </View>
         )}
         
@@ -302,7 +418,13 @@ export const DigitalReceipt = forwardRef<any, DigitalReceiptProps>((props, ref) 
       {/* Footer Section */}
       <View style={styles.thankYouSection}>
         <Text style={styles.thankYouText}>
-          {footerMessage || 'Thank you for your business!'}
+          {footerMessage ||
+            (isReceipt
+              ? branding.receipt_footer
+              : isQuotation
+              ? branding.quotation_footer || branding.receipt_footer
+              : branding.invoice_footer || branding.receipt_footer) ||
+            'Thank you for your business!'}
         </Text>
       </View>
     </ViewShot>
@@ -415,6 +537,33 @@ const styles = StyleSheet.create({
   customerPhone: {
     color: tokens.colors.secondary,
     fontSize: tokens.typography.caption.fontSize,
+  },
+  deliveryInfoContainer: {
+    marginTop: tokens.spacing.xs,
+    paddingTop: tokens.spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.borderSubtle,
+    gap: 4,
+  },
+  deliveryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: tokens.colors.primaryFixed,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.pill,
+    gap: 4,
+  },
+  deliveryBadgeText: {
+    color: tokens.colors.primary,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  deliveryAddressText: {
+    color: tokens.colors.onBackground,
+    fontSize: tokens.typography.caption.fontSize,
+    lineHeight: 16,
   },
   tearLineContainer: {
     position: 'relative',

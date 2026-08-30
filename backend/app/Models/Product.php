@@ -103,4 +103,41 @@ class Product extends Model
     {
         return $query->where('is_composite', true);
     }
+
+    /**
+     * Scope to eager load variants with attribute values.
+     */
+    public function scopeWithVariants($query)
+    {
+        return $query->with(['variants.attributeValues.attribute']);
+    }
+
+    /**
+     * Scope to eager load category.
+     */
+    public function scopeWithCategory($query)
+    {
+        return $query->with('category');
+    }
+
+    /**
+     * Scope for product listing with common relations.
+     */
+    public function scopeForListing($query)
+    {
+        return $query->with(['variants.attributeValues.attribute', 'category'])
+            ->whereNull('deleted_at');
+    }
+
+    /**
+     * Scope for product detail with full relations.
+     */
+    public function scopeForDetail($query)
+    {
+        return $query->with([
+            'variants.attributeValues.attribute',
+            'category',
+            'productAttributes.attribute',
+        ])->whereNull('deleted_at');
+    }
 }

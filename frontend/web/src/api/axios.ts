@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios'
+import type { InternalAxiosRequestConfig } from 'axios'
 
 export interface ApiErrorPayload {
   message: string
@@ -19,12 +20,24 @@ export class ApiError extends Error {
 }
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://backend.test/api/v1',
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 })
+
+// Request interceptor - inject auth token from localStorage
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem('omnipos_token')
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error: unknown) => Promise.reject(error)
+)
 
 // Response interceptor — standardizes error envelope
 api.interceptors.response.use(
@@ -34,6 +47,13 @@ api.interceptors.response.use(
     const status = error.response?.status
     const message = data?.message || error.message || 'An unexpected error occurred.'
     const errors = data?.errors
+
+    // Clear auth on 401 Unauthorized
+    if (status === 401) {
+      localStorage.removeItem('omnipos_token')
+      localStorage.removeItem('omnipos_user')
+    }
+
     return Promise.reject(new ApiError(message, errors, status))
   }
 )

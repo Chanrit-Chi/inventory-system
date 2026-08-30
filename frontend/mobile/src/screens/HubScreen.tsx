@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -142,6 +142,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
     {
       title: 'Administration',
       items: [
+        { tab: 'daily-settlements', label: 'Daily Settlements', icon: 'shield-checkmark', color: '#059669', badge: newBadge },
         { tab: 'admin', label: 'Staff & Permissions', icon: 'shield-checkmark', color: '#6366F1' },
         { tab: 'payroll', label: 'Staff Payroll', icon: 'cash', color: '#10B981', badge: newBadge },
         { tab: 'roles', label: 'Role Permissions', icon: 'key', color: '#8B5CF6', badge: 'Super Admin' },
@@ -199,82 +200,17 @@ export const HubScreen: React.FC<HubScreenProps> = ({
         </TouchableOpacity>
 
         {/* My Personal Performance & Commissions Card */}
-        <TouchableOpacity
-          style={styles.myPerfCard}
-          activeOpacity={0.88}
-          onPress={() => setPerfModalVisible(true)}
-        >
-          <View style={styles.myPerfHeader}>
-            <View style={styles.myPerfTitleRow}>
-              <View style={styles.myPerfIconBox}>
-                <Ionicons name="stats-chart" size={14} color={tokens.colors.primaryContainer} />
-              </View>
-              <View>
-                <Text style={styles.myPerfTitle}>My Performance & Earnings</Text>
-                <Text style={styles.myPerfSubtitle}>
-                  {myPerfPeriod === 'today' ? "Today's Shift" : myPerfPeriod === '7d' ? 'Last 7 Days' : 'This Month'} • Sales, Orders & Commission
-                </Text>
-              </View>
-            </View>
-            <View style={styles.myPerfActionBtn}>
-              <Text style={styles.myPerfActionBtnText}>Full Details</Text>
-              <Ionicons name="chevron-forward" size={12} color={tokens.colors.primaryContainer} />
-            </View>
-          </View>
-
-          {/* Quick Period Selector */}
-          <View style={styles.perfPeriodRow}>
-            {(
-              [
-                { key: 'today', label: 'Today' },
-                { key: '7d', label: '7 Days' },
-                { key: 'month', label: 'This Month' },
-              ] as const
-            ).map((p) => (
-              <TouchableOpacity
-                key={p.key}
-                style={[styles.perfPeriodChip, myPerfPeriod === p.key && styles.perfPeriodChipActive]}
-                onPress={(e) => {
-                  e.stopPropagation?.()
-                  setMyPerfPeriod(p.key)
-                }}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    styles.perfPeriodChipText,
-                    myPerfPeriod === p.key && styles.perfPeriodChipTextActive,
-                  ]}
-                >
-                  {p.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.myPerfMetricsRow}>
-            <View style={styles.myPerfMetricCol}>
-              <Text style={styles.myPerfMetricLabel}>SALES REVENUE</Text>
-              <Text style={styles.myPerfMetricValue}>
-                ${myPerfData ? (myPerfData.summary?.total_revenue ?? myPerfData.total_revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-              </Text>
-            </View>
-            <View style={styles.myPerfMetricDivider} />
-            <View style={styles.myPerfMetricCol}>
-              <Text style={styles.myPerfMetricLabel}>ORDERS</Text>
-              <Text style={styles.myPerfMetricValue}>
-                {myPerfData ? (myPerfData.summary?.total_orders ?? myPerfData.total_orders ?? 0) : 0}
-              </Text>
-            </View>
-            <View style={styles.myPerfMetricDivider} />
-            <View style={styles.myPerfMetricCol}>
-              <Text style={styles.myPerfMetricLabel}>COMMISSION</Text>
-              <Text style={[styles.myPerfMetricValue, { color: tokens.colors.statusSuccess }]}>
-                +${myPerfData ? (myPerfData.summary?.total_incentive ?? myPerfData.total_incentive ?? 0).toFixed(2) : '0.00'}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+        <StaffPerformanceCard
+          performance={myPerfData}
+          period={myPerfPeriod}
+          onSelectPeriod={setMyPerfPeriod}
+          onPressDetails={() => setPerfModalVisible(true)}
+          title="Performance & Earnings"
+          badgeText="Full Details"
+          salesLabel="SALES REVENUE"
+          commissionLabel="COMMISSION"
+          iconName="stats-chart"
+        />
 
         <View style={styles.divider} />
 
@@ -400,115 +336,13 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.surface,
     padding: tokens.spacing.md,
     borderRadius: tokens.borderRadius.lg,
-    marginBottom: tokens.spacing.xs,
+    marginBottom: tokens.spacing.sm,
     ...tokens.shadows.card,
   },
-  myPerfCard: {
-    backgroundColor: tokens.colors.surfaceCard,
-    borderRadius: tokens.borderRadius.card,
-    padding: 14,
-    marginTop: 8,
-    marginBottom: tokens.spacing.xs,
-    borderWidth: 1,
-    borderColor: tokens.colors.borderSubtle,
-    ...tokens.shadows.card,
-  },
-  myPerfHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  myPerfTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  myPerfIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: tokens.colors.actionPrimaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  myPerfTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: tokens.colors.onBackground,
-  },
-  myPerfSubtitle: {
-    fontSize: 10.5,
-    color: tokens.colors.secondary,
-    marginTop: 1,
-  },
-  myPerfActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: tokens.colors.actionPrimaryBg,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: tokens.borderRadius.pill,
-  },
-  myPerfActionBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: tokens.colors.primaryContainer,
-  },
-  perfPeriodRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
-  },
-  perfPeriodChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: tokens.borderRadius.pill,
-    backgroundColor: tokens.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: tokens.colors.borderSubtle,
-  },
-  perfPeriodChipActive: {
-    backgroundColor: tokens.colors.primaryContainer,
-    borderColor: tokens.colors.primaryContainer,
-  },
-  perfPeriodChipText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: tokens.colors.secondary,
-  },
-  perfPeriodChipTextActive: {
-    color: '#FFFFFF',
-  },
-  myPerfMetricsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: tokens.colors.surfaceMuted,
-    borderRadius: tokens.borderRadius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  myPerfMetricCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  myPerfMetricLabel: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: tokens.colors.secondary,
-    marginBottom: 3,
-  },
-  myPerfMetricValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: tokens.colors.onBackground,
-  },
-  myPerfMetricDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: tokens.colors.borderSubtle,
+  divider: {
+    height: 1,
+    backgroundColor: tokens.colors.surfaceAlt,
+    marginVertical: tokens.spacing.md,
   },
   userInfo: {
     flexDirection: 'row',
@@ -551,11 +385,6 @@ const styles = StyleSheet.create({
     ...tokens.typography.caption,
     fontWeight: '600',
     fontSize: 10,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: tokens.colors.surfaceAlt,
-    marginVertical: tokens.spacing.sm,
   },
   section: {
     marginBottom: tokens.spacing.lg,

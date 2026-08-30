@@ -31,7 +31,7 @@ export function useOrders(filters?: OrderFilters) {
       if (Array.isArray(raw)) {
         return raw as Order[]
       }
-      return (raw as any)?.data ?? [] as Order[]
+      return (raw as { data?: Order[] })?.data ?? []
     },
     staleTime: 1000 * 60, // 1 min
   })
@@ -74,7 +74,7 @@ export function useCustomers(params?: { search?: string; page?: number }) {
       if (Array.isArray(raw)) {
         return raw as Customer[]
       }
-      return (raw as any)?.data ?? [] as Customer[]
+      return (raw as { data?: Customer[] })?.data ?? []
     },
     staleTime: 1000 * 60 * 3,
   })

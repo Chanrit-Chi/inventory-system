@@ -1,0 +1,6 @@
+export { default as AppSidebar } from './AppSidebar.vue'
+export { default as AppHeader } from './AppHeader.vue'
+export { default as CommandPalette } from './CommandPalette.vue'
+export type { NavItem, NavGroup, StoreBranding } from './AppSidebar.vue'
+export type { BreadcrumbItem, HeaderNotification } from './AppHeader.vue'
+export type { CommandItem } from './CommandPalette.vue'

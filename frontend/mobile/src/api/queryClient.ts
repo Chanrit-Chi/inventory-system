@@ -1,7 +1,8 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import NetInfo from '@react-native-community/netinfo'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { QueryClient, onlineManager } from '@tanstack/react-query'
+import axios from 'axios'
 
 // Wire up NetInfo with TanStack Query onlineManager for automatic reconnection
 onlineManager.setEventListener((setOnline) => {
@@ -18,10 +19,15 @@ export const queryClient = new QueryClient({
       gcTime: 1000 * 60 * 60 * 24, // 24 hours garbage collection / persistence time
       refetchOnWindowFocus: false, // Window focus is handled via AppState or navigation listeners
       refetchOnReconnect: true,
-      retry: (failureCount, error: any) => {
-        // Do not retry 4xx client errors (e.g. 401, 403, 404, 422)
-        const status = error?.response?.status || error?.status
-        if (status && status >= 400 && status < 500) {
+      retry: (failureCount, error: unknown) => {
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status ?? error.status
+          // Do not retry 4xx client errors (e.g. 400, 401, 403, 404, 422)
+          if (status && status >= 400 && status < 500) {
+            return false
+          }
+        } else if (error instanceof Error) {
+          // Do not retry generic JS runtime errors
           return false
         }
         // Retry network drops or 5xx server errors up to 2 times

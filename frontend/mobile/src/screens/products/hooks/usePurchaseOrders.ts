@@ -32,7 +32,7 @@ export function usePurchaseOrders({
   const loadSuppliers = useCallback(async () => {
     try {
       const res = await fetchSuppliers()
-      const list = Array.isArray(res) ? res : (res as any)?.data || []
+      const list = Array.isArray(res) ? res : (res as { data?: Supplier[] })?.data || []
       if (list.length > 0) setSuppliers(list)
     } catch { /* silent */ }
   }, [])

@@ -18,7 +18,24 @@ import {
   Minus,
   RefreshCw,
   Plus,
+  AlertTriangle,
+  ArrowRight,
+  ShieldCheck,
+  ShoppingBag,
+  ExternalLink,
+  ChevronRight,
 } from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  StatCard,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@/components/ui'
 
 interface HealthIndicator {
   label: string
@@ -33,7 +50,8 @@ interface MetricStat {
   value: string | number
   sub: string
   icon: Component
-  iconBadgeClass: string
+  iconColor: string
+  iconBg: string
   trend: string
   trendClass: string
   trendIcon: Component
@@ -46,12 +64,31 @@ interface ActivityEvent {
   time: string
   icon: Component
   badgeText: string
-  badgeClass: string
+  badgeVariant: 'success' | 'info' | 'warning' | 'purple' | 'neutral' | 'default'
+}
+
+interface RecentOrder {
+  id: string
+  order_number: string
+  customer_name?: string
+  total_amount: number | string
+  status: string
+  created_at?: string
+}
+
+interface LowStockItem {
+  id: string
+  name: string
+  sku: string
+  quantity_on_hand: number
+  reorder_level: number
 }
 
 const stats = ref<MetricStat[]>([])
 const loading = ref(false)
 const lastRefreshed = ref<string>('')
+const recentOrders = ref<RecentOrder[]>([])
+const lowStockItems = ref<LowStockItem[]>([])
 
 // System health indicators
 const systemHealth = ref({
@@ -77,7 +114,7 @@ const recentEvents = ref<ActivityEvent[]>([
     time: '2 mins ago',
     icon: Receipt,
     badgeText: 'Completed',
-    badgeClass: 'badge--success',
+    badgeVariant: 'success',
   },
   {
     id: 'e2',
@@ -86,7 +123,7 @@ const recentEvents = ref<ActivityEvent[]>([
     time: '35 mins ago',
     icon: Package,
     badgeText: 'Restocked',
-    badgeClass: 'badge--blue',
+    badgeVariant: 'info',
   },
   {
     id: 'e3',
@@ -95,7 +132,7 @@ const recentEvents = ref<ActivityEvent[]>([
     time: '1 hour ago',
     icon: Star,
     badgeText: 'Gold Tier',
-    badgeClass: 'badge-tier-gold',
+    badgeVariant: 'warning',
   },
   {
     id: 'e4',
@@ -104,36 +141,33 @@ const recentEvents = ref<ActivityEvent[]>([
     time: '3 hours ago',
     icon: Wallet,
     badgeText: 'Expense',
-    badgeClass: 'badge--neutral',
+    badgeVariant: 'neutral',
   },
 ])
 
 async function loadStats() {
   loading.value = true
   try {
-    const [ordersRes, customersRes, productsRes, expensesRes] = await Promise.allSettled([
-      api.get('/orders', { params: { page: 1 } }),
-      api.get('/customers', { params: { page: 1 } }),
-      api.get('/products', { params: { page: 1 } }),
-      api.get('/expenses', { params: { page: 1 } }),
-    ])
+    const res = await api.get('/dashboard/summary')
+    const data = res.data?.data || {}
 
-    const totalOrders = ordersRes.status === 'fulfilled' ? (ordersRes.value.data.meta?.total ?? ordersRes.value.data.data?.length ?? 0) : 0
-    const totalCustomers = customersRes.status === 'fulfilled' ? (customersRes.value.data.meta?.total ?? customersRes.value.data.data?.length ?? 0) : 0
-    const totalProducts = productsRes.status === 'fulfilled' ? (productsRes.value.data.meta?.total ?? productsRes.value.data.data?.length ?? 0) : 0
-    const totalExpenses = expensesRes.status === 'fulfilled' ? (expensesRes.value.data.meta?.total ?? expensesRes.value.data.data?.length ?? 0) : 0
+    const totalOrders = data.totalOrders ?? data.orders ?? 0
+    const totalCustomers = data.totalCustomers ?? data.customers ?? 0
+    const totalProducts = data.totalProducts ?? data.products ?? 0
+    const totalExpenses = data.totalExpenses ?? data.expenses ?? 0
 
     stats.value = [
       {
         id: 'orders',
-        label: 'Total Orders & POS Sales',
+        label: 'Total Orders & Sales',
         value: totalOrders > 0 ? `${totalOrders.toLocaleString()}` : '0',
         sub: 'Transactions processed',
         icon: Receipt,
-        iconBadgeClass: 'icon-badge--primary',
-        trend: '+14.2% vs last week',
-        trendClass: 'trend-pill--up',
-        trendIcon: TrendingUp,
+        iconColor: 'text-info',
+        iconBg: 'bg-info-bg border-info-border',
+        trend: data.ordersTrend ?? '+14.2% vs last week',
+        trendClass: data.ordersTrendUp !== false ? 'up' : 'down',
+        trendIcon: data.ordersTrendUp !== false ? TrendingUp : Minus,
       },
       {
         id: 'customers',
@@ -141,10 +175,11 @@ async function loadStats() {
         value: totalCustomers > 0 ? `${totalCustomers.toLocaleString()}` : '0',
         sub: 'Enrolled CRM profiles',
         icon: Users,
-        iconBadgeClass: 'icon-badge--success',
-        trend: '+8.5% new members',
-        trendClass: 'trend-pill--up',
-        trendIcon: TrendingUp,
+        iconColor: 'text-success',
+        iconBg: 'bg-success-bg border-success-border',
+        trend: data.customersTrend ?? '+8.5% new members',
+        trendClass: data.customersTrendUp !== false ? 'up' : 'down',
+        trendIcon: data.customersTrendUp !== false ? TrendingUp : Minus,
       },
       {
         id: 'products',
@@ -152,9 +187,10 @@ async function loadStats() {
         value: totalProducts > 0 ? `${totalProducts.toLocaleString()}` : '0',
         sub: 'Products & active matrices',
         icon: Tag,
-        iconBadgeClass: 'icon-badge--warning',
-        trend: '98.5% In Stock',
-        trendClass: 'trend-pill--neutral',
+        iconColor: 'text-warning',
+        iconBg: 'bg-warning-bg border-warning-border',
+        trend: data.productsTrend ?? '98.5% In Stock',
+        trendClass: 'neutral',
         trendIcon: Minus,
       },
       {
@@ -163,242 +199,513 @@ async function loadStats() {
         value: totalExpenses > 0 ? `${totalExpenses.toLocaleString()}` : '0',
         sub: 'Operational entries',
         icon: Wallet,
-        iconBadgeClass: 'icon-badge--purple',
-        trend: 'On budget',
-        trendClass: 'trend-pill--neutral',
+        iconColor: 'text-purple-600',
+        iconBg: 'bg-purple-bg border-purple-border',
+        trend: data.expensesTrend ?? 'On budget',
+        trendClass: 'neutral',
         trendIcon: Minus,
       },
     ]
 
+    if (data.activeRegister) {
+      systemHealth.value.activeRegister = data.activeRegister
+    }
+    if (data.syncStatus) {
+      systemHealth.value.syncStatus = data.syncStatus
+    }
+
+    // Load recent orders and low stock items if returned or fetch secondary
+    if (Array.isArray(data.recentOrders)) {
+      recentOrders.value = data.recentOrders
+    }
+    if (Array.isArray(data.lowStockItems)) {
+      lowStockItems.value = data.lowStockItems
+    }
+
     const now = new Date()
     lastRefreshed.value = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
-    stats.value = []
+    stats.value = [
+      {
+        id: 'orders',
+        label: 'Total Orders & Sales',
+        value: '0',
+        sub: 'Transactions processed',
+        icon: Receipt,
+        iconColor: 'text-info',
+        iconBg: 'bg-info-bg border-info-border',
+        trend: '+0% vs last week',
+        trendClass: 'neutral',
+        trendIcon: Minus,
+      },
+      {
+        id: 'customers',
+        label: 'Loyalty Members',
+        value: '0',
+        sub: 'Enrolled CRM profiles',
+        icon: Users,
+        iconColor: 'text-success',
+        iconBg: 'bg-success-bg border-success-border',
+        trend: '0 new members',
+        trendClass: 'neutral',
+        trendIcon: Minus,
+      },
+      {
+        id: 'products',
+        label: 'Catalog Master SKUs',
+        value: '0',
+        sub: 'Products & active matrices',
+        icon: Tag,
+        iconColor: 'text-warning',
+        iconBg: 'bg-warning-bg border-warning-border',
+        trend: 'Ready',
+        trendClass: 'neutral',
+        trendIcon: Minus,
+      },
+      {
+        id: 'expenses',
+        label: 'Expenses Logged',
+        value: '0',
+        sub: 'Operational entries',
+        icon: Wallet,
+        iconColor: 'text-purple-600',
+        iconBg: 'bg-purple-bg border-purple-border',
+        trend: 'On budget',
+        trendClass: 'neutral',
+        trendIcon: Minus,
+      },
+    ]
   } finally {
     loading.value = false
+  }
+
+  // Load secondary preview data safely
+  try {
+    const ordersRes = await api.get('/orders', { params: { per_page: 5 } })
+    const ordData = ordersRes.data?.data || ordersRes.data || []
+    if (Array.isArray(ordData) && ordData.length > 0) {
+      recentOrders.value = ordData.slice(0, 5)
+    }
+  } catch {
+    // Graceful fallback
+  }
+
+  try {
+    const prodRes = await api.get('/products', { params: { per_page: 20 } })
+    const prodData = prodRes.data?.data || prodRes.data || []
+    if (Array.isArray(prodData)) {
+      const lowList: LowStockItem[] = []
+      for (const p of prodData) {
+        if (p.variants && Array.isArray(p.variants)) {
+          for (const v of p.variants) {
+            if (v.quantity_on_hand !== undefined && v.quantity_on_hand <= (v.reorder_level ?? 5)) {
+              lowList.push({
+                id: v.id,
+                name: p.name,
+                sku: v.sku || p.name,
+                quantity_on_hand: v.quantity_on_hand,
+                reorder_level: v.reorder_level ?? 5,
+              })
+            }
+          }
+        }
+      }
+      lowStockItems.value = lowList.slice(0, 4)
+    }
+  } catch {
+    // Graceful fallback
   }
 }
 
 const quickNavCards = [
   {
+    to: '/pos',
+    title: 'POS Terminal',
+    desc: 'Launch high-speed touchscreen dual-zone POS register and scan barcodes.',
+    icon: ShoppingBag,
+    colorText: 'text-cta',
+    borderHover: 'hover:border-cta/40',
+    badge: 'Checkout',
+    badgeVariant: 'warning' as const,
+  },
+  {
     to: '/products',
     title: 'Products & Matrix',
     desc: 'Browse product catalog, generate variant combinations, and adjust prices.',
     icon: Tag,
-    color: 'var(--action-primary)',
+    colorText: 'text-primary',
+    borderHover: 'hover:border-primary/40',
     badge: 'Catalog',
+    badgeVariant: 'default' as const,
   },
   {
     to: '/products/create',
-    title: 'New Product',
-    desc: 'Define new master product line with multi-tier pricing and SKU barcodes.',
+    title: 'New Product Line',
+    desc: 'Define new master product with multi-tier pricing and SKU barcodes.',
     icon: Sparkles,
-    color: 'var(--status-purple)',
+    colorText: 'text-purple-600',
+    borderHover: 'hover:border-purple-300',
     badge: 'Creator',
+    badgeVariant: 'purple' as const,
   },
   {
     to: '/restock',
     title: 'Restock Intake',
-    desc: 'Intake supplier batches with barcode scanning and auto-commit to stock on hand.',
+    desc: 'Intake supplier batches with barcode scanning and auto-commit to stock.',
     icon: ArrowDownToLine,
-    color: 'var(--status-success)',
+    colorText: 'text-success',
+    borderHover: 'hover:border-success/40',
     badge: 'Logistics',
+    badgeVariant: 'success' as const,
   },
   {
     to: '/inventory',
     title: 'Inventory Ledger',
-    desc: 'Monitor real-time SKU stock levels, reorder thresholds, and stock movements.',
+    desc: 'Monitor real-time SKU stock levels, reorder thresholds, and movements.',
     icon: Package,
-    color: 'var(--status-warning)',
+    colorText: 'text-warning',
+    borderHover: 'hover:border-warning/40',
     badge: 'Stock Audit',
+    badgeVariant: 'warning' as const,
   },
   {
     to: '/orders',
     title: 'Orders & Sales',
     desc: 'Review sales transactions, payment receipts, delivery details, and POS audits.',
     icon: Receipt,
-    color: 'var(--action-primary)',
-    badge: 'Transactions',
+    colorText: 'text-info',
+    borderHover: 'hover:border-info/40',
+    badge: 'Ledger',
+    badgeVariant: 'info' as const,
   },
   {
     to: '/customers',
     title: 'Customers & CRM',
     desc: 'Inspect customer purchase histories, lifetime value, and loyalty tier rankings.',
     icon: Users,
-    color: 'var(--status-info)',
+    colorText: 'text-primary',
+    borderHover: 'hover:border-primary/40',
     badge: 'Loyalty CRM',
+    badgeVariant: 'default' as const,
   },
   {
     to: '/expenses',
     title: 'Expenses Tracker',
     desc: 'Log store utilities, supplier invoices, store rent, and operational costs.',
     icon: Wallet,
-    color: 'var(--action-destructive)',
+    colorText: 'text-destructive',
+    borderHover: 'hover:border-destructive/40',
     badge: 'Finance',
+    badgeVariant: 'neutral' as const,
   },
 ]
+
+function fmtMoney(amount: number | string | undefined | null): string {
+  if (amount === undefined || amount === null) return '$0.00'
+  const val = typeof amount === 'string' ? parseFloat(amount) : amount
+  return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
+}
+
+function orderStatusBadge(status: string) {
+  const s = (status || '').toUpperCase()
+  if (s === 'COMPLETED' || s === 'PAID') return { variant: 'success' as const, label: 'Completed' }
+  if (s === 'PROCESSING' || s === 'SENT') return { variant: 'info' as const, label: 'Processing' }
+  if (s === 'PENDING' || s === 'DRAFT') return { variant: 'warning' as const, label: 'Pending' }
+  if (s === 'CANCELLED' || s === 'REJECTED') return { variant: 'destructive' as const, label: 'Cancelled' }
+  return { variant: 'neutral' as const, label: status }
+}
 
 onMounted(loadStats)
 </script>
 
 <template>
-  <div class="flex-col gap-24">
+  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
     <!-- Executive Dashboard Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-12">
-          <h1 class="page-title">Executive Dashboard</h1>
-          <span class="badge badge--success">● System Healthy</span>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Executive Dashboard</h1>
+          <Badge variant="success" class="flex items-center gap-1.5 px-2.5 py-0.5 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Operational</span>
+          </Badge>
         </div>
-        <p class="text-muted text-sm mt-4">
-          Omnichannel POS register & inventory administration overview.
-          <span v-if="lastRefreshed" class="text-xs text-muted-foreground" style="margin-left: 8px;">
-            Last synced: {{ lastRefreshed }}
+        <p class="text-muted-foreground text-sm mt-1">
+          Real-time omnichannel POS registers, stock movements, and operational metrics.
+          <span v-if="lastRefreshed" class="ml-2 font-mono text-xs text-muted-foreground/80">
+            (Synced: {{ lastRefreshed }})
           </span>
         </p>
       </div>
 
-      <div class="flex items-center gap-12">
-        <button class="btn btn--ghost" :disabled="loading" @click="loadStats">
-          <RefreshCw :size="16" :class="{ 'spinner': loading }" />
-          <span v-if="!loading">Refresh Metrics</span>
-          <span v-else>Updating...</span>
-        </button>
-        <RouterLink to="/products/create" class="btn btn--primary">
-          <Plus :size="16" />
-          <span>New Product</span>
+      <div class="flex items-center gap-2.5">
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="loading"
+          @click="loadStats"
+          class="h-9 px-3.5 bg-surface border-border text-foreground hover:bg-surface-subtle"
+        >
+          <RefreshCw :size="15" :class="{ 'animate-spin': loading }" class="mr-1.5" />
+          <span>{{ loading ? 'Updating…' : 'Refresh' }}</span>
+        </Button>
+        <RouterLink to="/pos">
+          <Button variant="cta" size="sm" class="h-9 px-3.5 gap-1.5">
+            <ShoppingBag :size="15" />
+            <span>Open POS Terminal</span>
+          </Button>
+        </RouterLink>
+        <RouterLink to="/products/create">
+          <Button variant="primary" size="sm" class="h-9 px-3.5 gap-1.5">
+            <Plus :size="15" />
+            <span>New Product</span>
+          </Button>
         </RouterLink>
       </div>
     </div>
 
-    <!-- Elevated Stat Cards with Soft Tinted Backdrops & Trend Indicators -->
-    <div class="grid-4 gap-20">
+    <!-- 4 High-Impact KPI Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <template v-if="loading">
-        <div v-for="i in 4" :key="i" class="card flex-col gap-12" style="min-height: 130px;">
+        <div v-for="i in 4" :key="i" class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3">
           <div class="flex items-center justify-between">
-            <div class="skeleton-box" style="width: 44px; height: 44px; border-radius: var(--radius-lg);"></div>
-            <div class="skeleton-box" style="width: 70px; height: 20px; border-radius: var(--radius-full);"></div>
+            <div class="w-10 h-10 rounded-lg bg-muted/60 animate-pulse" />
+            <div class="w-16 h-5 rounded-full bg-muted/60 animate-pulse" />
           </div>
-          <div class="skeleton-box" style="width: 40%; height: 28px;"></div>
-          <div class="skeleton-box" style="width: 80%; height: 14px;"></div>
+          <div class="w-1/2 h-8 rounded bg-muted/60 animate-pulse" />
+          <div class="w-3/4 h-4 rounded bg-muted/60 animate-pulse" />
         </div>
       </template>
 
       <template v-else>
-        <div
+        <StatCard
           v-for="s in stats"
           :key="s.id"
-          class="stat-card rounded-xl border border-border bg-card shadow-xs flex flex-col gap-3 transition-all duration-150 hover:shadow-sm hover:border-border-strong hover:-translate-y-px"
-        >
-          <div class="flex items-center justify-between">
-            <div :class="cn('inline-flex items-center justify-center w-11 h-11 rounded-lg text-xl border', s.iconBadgeClass === 'icon-badge--primary' ? 'bg-info-bg text-info border-info-border' : s.iconBadgeClass === 'icon-badge--success' ? 'bg-success-bg text-success border-success-border' : s.iconBadgeClass === 'icon-badge--warning' ? 'bg-warning-bg text-warning border-warning-border' : s.iconBadgeClass === 'icon-badge--purple' ? 'bg-purple-bg text-purple-border border-purple-border' : 'bg-muted text-muted-foreground border-border')">
-              <component :is="s.icon" :size="20" />
-            </div>
-            <span :class="cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border', s.trendClass === 'trend-pill--up' ? 'bg-success-bg text-success-foreground border-success-border' : s.trendClass === 'trend-pill--down' ? 'bg-error-bg text-error-text border-error-border' : s.trendClass === 'trend-pill--warning' ? 'bg-warning-bg text-warning-foreground border-warning-border' : 'bg-muted text-muted-foreground border-border')">
-              <component :is="s.trendIcon" :size="12" />
-              <span>{{ s.trend }}</span>
-            </span>
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="text-[28px] font-bold tracking-tight tabular-nums text-foreground leading-tight">{{ s.value }}</span>
-            <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{{ s.label }}</span>
-            <span class="text-xs text-muted-foreground">{{ s.sub }}</span>
-          </div>
-        </div>
+          :label="s.label"
+          :value="s.value"
+          :sub="s.sub"
+          :icon="s.icon"
+          :icon-variant="s.id === 'orders' ? 'primary' : s.id === 'customers' ? 'success' : s.id === 'products' ? 'warning' : 'purple'"
+          :trend="s.trend"
+          :trend-variant="s.trendClass === 'up' ? 'up' : s.trendClass === 'down' ? 'down' : 'neutral'"
+        />
       </template>
     </div>
 
-    <hr class="section-divider" aria-hidden="true" />
-
-    <!-- Quick Operations & Management Hub -->
-    <section class="card">
-      <div class="flex items-center justify-between mb-16">
+    <!-- Quick Operations Hub Grid -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-xs flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-2 border-b border-border/60">
         <div>
-          <h2 class="font-bold text-lg">Quick Operations Hub</h2>
-          <p class="text-muted text-sm mt-4">High-frequency workflows and management modules</p>
+          <h2 class="font-display text-lg font-bold text-foreground">Quick Operations Hub</h2>
+          <p class="text-xs text-muted-foreground mt-0.5">High-frequency workflows and inventory controls</p>
         </div>
-        <span class="badge badge--neutral">{{ quickNavCards.length }} Modules Available</span>
+        <Badge variant="neutral" class="text-xs">
+          {{ quickNavCards.length }} Modules Available
+        </Badge>
       </div>
 
-      <div class="grid-modules">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <RouterLink
           v-for="card in quickNavCards"
           :key="card.to"
           :to="card.to"
-          class="card interactive flex-col gap-3"
+          :class="cn(
+            'group rounded-lg border border-border/80 bg-surface p-4 transition-all duration-200 hover:shadow-xs hover:bg-surface-subtle/50 flex flex-col justify-between gap-3',
+            card.borderHover
+          )"
         >
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-10 font-semibold text-lg" :style="{ color: card.color }">
-              <component :is="card.icon" :size="22" />
-              <span>{{ card.title }}</span>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div :class="cn('p-1.5 rounded-md bg-muted/40 group-hover:scale-105 transition-transform', card.colorText)">
+                <component :is="card.icon" :size="18" />
+              </div>
+              <span class="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                {{ card.title }}
+              </span>
             </div>
-            <span class="badge badge--neutral">{{ card.badge }}</span>
+            <Badge :variant="card.badgeVariant" class="text-[10px] px-1.5 py-0">
+              {{ card.badge }}
+            </Badge>
           </div>
-          <p class="text-muted text-sm">
+          <p class="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
             {{ card.desc }}
           </p>
+          <div class="flex items-center text-[11px] font-medium text-muted-foreground group-hover:text-cta transition-colors mt-auto pt-1">
+            <span>Open workflow</span>
+            <ChevronRight :size="13" class="ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </RouterLink>
       </div>
-    </section>
+    </div>
 
-    <hr class="section-divider" aria-hidden="true" />
-
-    <!-- Operational Health & Activity Grid -->
-    <div class="grid-2 gap-20">
-      <!-- Live Channel Status & Diagnostics -->
-      <section class="card flex-col gap-16">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-10">
-            <div class="icon-badge icon-badge--success" style="width: 32px; height: 32px; font-size: 16px;">
-              <Zap :size="16" />
-            </div>
-            <h3 class="font-bold text-lg">Live Channel Diagnostics</h3>
+    <!-- Middle Split: Recent Orders Table & Low Stock Alerts -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Recent Orders Table (2 cols) -->
+      <div class="lg:col-span-2 rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2">
+            <Receipt :size="18" class="text-primary" />
+            <h3 class="font-display font-bold text-base text-foreground">Recent POS Transactions</h3>
           </div>
-          <span class="badge badge--success">Connected</span>
+          <RouterLink to="/orders" class="text-xs font-semibold text-primary hover:text-cta flex items-center gap-1">
+            <span>View All</span>
+            <ArrowRight :size="13" />
+          </RouterLink>
         </div>
 
-        <div class="flex-col gap-12">
+        <div v-if="recentOrders.length === 0" class="py-10 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+          <ShoppingBag :size="32" class="text-muted-foreground/50 stroke-1" />
+          <span>No recent orders found.</span>
+          <RouterLink to="/pos">
+            <Button variant="outline" size="sm" class="mt-2 text-xs">Start First POS Sale</Button>
+          </RouterLink>
+        </div>
+
+        <div v-else class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="bg-muted/30">
+                <TableHead>Order #</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead class="text-right">Amount</TableHead>
+                <TableHead class="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="ord in recentOrders" :key="ord.id" class="hover:bg-surface-subtle/60 transition-colors">
+                <TableCell class="font-mono text-xs font-medium text-foreground">
+                  {{ ord.order_number || ord.id.slice(0, 8) }}
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="orderStatusBadge(ord.status).variant" class="text-[11px] px-2 py-0.5">
+                    {{ orderStatusBadge(ord.status).label }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right font-mono font-semibold text-foreground tabular-nums">
+                  {{ fmtMoney(ord.total_amount) }}
+                </TableCell>
+                <TableCell class="text-right">
+                  <RouterLink to="/orders" class="text-xs text-primary hover:text-cta font-medium">
+                    Details
+                  </RouterLink>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <!-- Low Stock Alerts Panel (1 col) -->
+      <div class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2">
+            <AlertTriangle :size="18" class="text-warning" />
+            <h3 class="font-display font-bold text-base text-foreground">Low Stock Alerts</h3>
+          </div>
+          <RouterLink to="/inventory" class="text-xs font-semibold text-warning hover:underline flex items-center gap-1">
+            <span>Audit</span>
+            <ExternalLink :size="12" />
+          </RouterLink>
+        </div>
+
+        <div v-if="lowStockItems.length === 0" class="py-8 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+          <ShieldCheck :size="28" class="text-success stroke-1" />
+          <span class="text-xs text-foreground font-medium">Inventory Healthy</span>
+          <span class="text-[11px] text-muted-foreground">All active SKUs are above reorder levels.</span>
+        </div>
+
+        <div v-else class="flex flex-col gap-2.5">
+          <div
+            v-for="item in lowStockItems"
+            :key="item.id"
+            class="flex items-center justify-between p-3 rounded-lg border border-warning/30 bg-warning/5 gap-2"
+          >
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-foreground truncate">{{ item.name }}</div>
+              <div class="text-[11px] font-mono text-muted-foreground truncate">SKU: {{ item.sku }}</div>
+            </div>
+            <div class="text-right flex-shrink-0">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold bg-warning-bg text-warning-foreground border border-warning-border">
+                {{ item.quantity_on_hand }} left
+              </span>
+              <div class="text-[10px] text-muted-foreground mt-0.5">Min: {{ item.reorder_level }}</div>
+            </div>
+          </div>
+
+          <RouterLink to="/restock" class="mt-1">
+            <Button variant="outline" size="sm" class="w-full text-xs gap-1.5 border-warning/40 text-warning-foreground hover:bg-warning/10">
+              <ArrowDownToLine :size="14" />
+              <span>Launch Restock Intake</span>
+            </Button>
+          </RouterLink>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Diagnostics & Recent Operational Feed -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Live Channel Status & Diagnostics -->
+      <section class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2.5">
+            <div class="p-1.5 rounded-md bg-success-bg text-success border border-success-border">
+              <Zap :size="16" />
+            </div>
+            <h3 class="font-display font-bold text-base text-foreground">Live Channel Diagnostics</h3>
+          </div>
+          <Badge variant="success" class="text-xs">Connected</Badge>
+        </div>
+
+        <div class="flex flex-col gap-2.5">
           <div
             v-for="(item, idx) in healthIndicators"
             :key="idx"
-            class="flex items-center justify-between rounded-md bg-muted/60 px-3.5 py-2.5"
+            class="flex items-center justify-between rounded-lg bg-surface-subtle/80 border border-border/50 px-3.5 py-2.5"
           >
-            <span class="text-muted text-sm font-semibold">{{ item.label }}</span>
-            <div class="flex items-center gap-1.5">
-              <span v-if="item.isSuccess" class="w-[7px] h-[7px] rounded-full bg-success" />
-              <span class="font-semibold text-sm tabular-nums" :class="item.isPrimary ? 'text-primary' : 'text-foreground'">{{ item.value }}</span>
+            <span class="text-muted-foreground text-xs font-medium">{{ item.label }}</span>
+            <div class="flex items-center gap-2">
+              <span v-if="item.isSuccess" class="w-2 h-2 rounded-full bg-success" />
+              <span
+                class="font-mono font-semibold text-xs tabular-nums"
+                :class="item.isPrimary ? 'text-primary' : 'text-foreground'"
+              >
+                {{ item.value }}
+              </span>
             </div>
           </div>
         </div>
       </section>
 
       <!-- Recent System Events & Activity Log -->
-      <section class="card flex-col gap-16">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-10">
-            <div class="icon-badge icon-badge--primary" style="width: 32px; height: 32px; font-size: 16px;">
+      <section class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2.5">
+            <div class="p-1.5 rounded-md bg-info-bg text-info border border-info-border">
               <Clock :size="16" />
             </div>
-            <h3 class="font-bold text-lg">Recent Operational Feed</h3>
+            <h3 class="font-display font-bold text-base text-foreground">Recent Operational Feed</h3>
           </div>
-          <span class="text-xs text-muted">Auto-refreshed</span>
+          <span class="text-xs font-mono text-muted-foreground">Live Stream</span>
         </div>
 
-        <div class="flex-col gap-12">
+        <div class="flex flex-col gap-2">
           <div
             v-for="event in recentEvents"
             :key="event.id"
-            class="flex items-start gap-12 rounded-lg"
-            style="padding: 10px 12px; transition: background-color var(--transition);"
+            class="flex items-start gap-3 p-2.5 rounded-lg hover:bg-surface-subtle/60 transition-colors"
           >
-            <component :is="event.icon" :size="20" style="margin-top: 2px;" />
-            <div class="flex-1 min-width-0">
-              <div class="flex items-center justify-between">
-                <span class="font-semibold text-sm">{{ event.title }}</span>
-                <span class="badge badge--sm" :class="event.badgeClass">{{ event.badgeText }}</span>
+            <div class="p-1.5 rounded-md bg-muted/50 text-foreground flex-shrink-0 mt-0.5">
+              <component :is="event.icon" :size="16" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold text-xs text-foreground truncate">{{ event.title }}</span>
+                <Badge :variant="event.badgeVariant" class="text-[10px] px-1.5 py-0 flex-shrink-0">
+                  {{ event.badgeText }}
+                </Badge>
               </div>
-              <p class="text-muted text-xs mt-4">{{ event.desc }}</p>
-              <span class="text-xs text-muted-foreground">{{ event.time }}</span>
+              <p class="text-muted-foreground text-xs mt-0.5 truncate">{{ event.desc }}</p>
+              <span class="text-[10px] font-mono text-muted-foreground/80 mt-0.5 block">{{ event.time }}</span>
             </div>
           </div>
         </div>
@@ -406,4 +713,3 @@ onMounted(loadStats)
     </div>
   </div>
 </template>
-

@@ -1,154 +1,110 @@
-# Project: Dynamic Role-Based Access Control (RBAC) System
+# Project: OmniPOS Web Frontend Redesign
 
 ## Architecture
-The system consists of:
-1. **Database & Relational Model Layer (PostgreSQL / SQLite)**:
-   - `roles` table: UUID `id`, `name`, `slug`, `description`, timestamps.
-   - `permissions` table: UUID `id`, `name`, `slug`, `module`, `description`, timestamps.
-   - `permission_role` pivot table: UUID `id`, `role_id` (FK `roles.id`), `permission_id` (FK `permissions.id`), timestamps.
-   - `users` table: updated with `role_id` (FK `roles.id`), preserving `role` string compatibility.
-2. **Backend Services & API Layer (Laravel 11 + Sanctum)**:
-   - Models: `App\Models\Role`, `App\Models\Permission`, `App\Models\User`.
-   - `CheckRole` middleware: Checks dynamically against `$user->hasPermission(...)` with `SUPER_ADMIN` bypass.
-   - Controllers: `RoleController`, `PermissionController`, `AuthController` (`formatUser` with `permissions: string[]`).
-   - Routes: `GET /api/v1/roles`, `GET /api/v1/permissions`, `PUT /api/v1/roles/{id}/permissions` (Super Admin protected).
-3. **Frontend Client & UI Layer (React Native / Expo + TypeScript)**:
-   - `usePermissions.ts`: Evaluates dynamic permissions directly from `currentUser.permissions` (hardcoded `ROLE_PERMISSIONS` deleted).
-   - `types/index.ts`: `UserAccount` with `permissions?: string[]`, `RoleItem`, `PermissionItem`, `TabType`.
-   - `api/endpoints.ts`: `fetchRoles`, `fetchPermissions`, `updateRolePermissions`.
-   - `AdminRolesScreen.tsx`: Super Admin UI to inspect roles, view capabilities grouped by module, and toggle permissions in real-time.
-4. **Testing & Verification Layer**:
-   - Automated PHPUnit tests (`backend/tests/Feature/DynamicRbacTest.php`, existing `AuthAndRbacTest.php`).
-   - E2E Python test runner (`tests/e2e/runner.py`, `tests/e2e/tier1_features/test_dynamic_rbac.py`, `tests/e2e/api_client.py`).
-   - Mobile JS adversarial and empirical invariant test suites.
+- **Framework**: Vue 3.5 (Composition API `<script setup>`), TypeScript 5.7, Vite 8.2
+- **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), CSS variable-driven design tokens, Radix Vue 1.9 primitives, Lucide icons
+- **State & Data**: Pinia stores for client domain state (`posStore`, `authStore`, `productStore`, etc.), Axios client (`src/api/axios.ts`) with Bearer token authentication
+- **Design Identity**:
+  * Background Base: Warm Cream (`#FAF7F2` / `#F8F5F0`)
+  * Elevated Surfaces: Crisp White (`#FFFFFF`)
+  * Borders: Amber-tinted Border (`#E8E2D9`)
+  * Brand Primary: Deep Amber (`#924C00`)
+  * Retail Accent / CTA: Vibrant Orange (`#FF8800`)
+  * Text & Typography: Charcoal (`#1A1C1C` / `#1D1B16`), Space Grotesk (headings/display) & Inter (UI/body) & Fira Code (monospaced figures)
+
+---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Dynamic RBAC Schema | Create `roles`, `permissions`, `permission_role` tables and migrate `users.role_id` foreign key | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Relational Models | Eloquent models `Role`, `Permission`, `User` with `permissions()`, `roles()`, `hasPermission()`, `getPermissionsArray()` | M1 | ORIGINAL_REQUEST §R1 |
-| 3 | Role & Permission Seeding | Seed default roles (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `SELLER`) and default capabilities (`products:*`, `users:manage`, etc.) | M1 | ORIGINAL_REQUEST §R1 |
-| 4 | Dynamic Permission Middleware | Refactor `CheckRole` to check `$user->hasPermission()` with `SUPER_ADMIN` bypass and backward compatibility | M2 | ORIGINAL_REQUEST §R2 |
-| 5 | Super Admin Role Management API | Endpoints `GET /roles`, `GET /permissions`, `PUT /roles/{id}/permissions` restricted to Super Admin | M2 | ORIGINAL_REQUEST §R2 |
-| 6 | Dynamic User Auth Payload | Update `/auth/login` and `/auth/me` responses to return user's dynamic `permissions: string[]` | M2 | ORIGINAL_REQUEST §R2 |
-| 7 | Frontend Dynamic Hook & State | Update `usePermissions.ts` to check `currentUser.permissions`, deleting static `ROLE_PERMISSIONS` | M3 | ORIGINAL_REQUEST §R3 |
-| 8 | Frontend Super Admin UI | Build `AdminRolesScreen.tsx` for Super Admins to view roles and toggle permissions; link in navigation | M3 | ORIGINAL_REQUEST §R3 |
-| 9 | Dynamic Access Gain/Loss Tests | Automated PHPUnit tests proving user immediately gains/loses access upon API role permission update | M4 | ORIGINAL_REQUEST §Acceptance |
-| 10 | Regression & Full E2E Verification | Ensure all 187+ PHPUnit tests and 95+ E2E tests pass 100% cleanly without regressions | M4 | ORIGINAL_REQUEST §Acceptance |
-| 11 | Full-Scope Review & Integrity Audit | Objective review and forensic integrity audit confirming clean, genuine implementation | M5 | Integrity Policy |
+| 1 | Brand Token Layer | Tailwind v4 `@theme` configuration with warm cream, deep amber, vibrant orange, border tokens, and font families in `src/style.css` | M1 | Survey (Explorer 1) |
+| 2 | Shared Radix UI Primitives | Expand `src/components/ui/` (Button, Card, Input, Select, Dialog, Modal, Tabs, Switch, Badge, Table, Skeleton, EmptyState, Toast, StatCard) | M1 | Survey (Explorer 1 & 3) |
+| 3 | Core TypeScript Type Fixes | Fix TS errors in `useCustomerLookup.ts`, `QuotationsView.vue`, `ProductCreateView.vue`, `PayrollView.vue`, and POS components to restore build baseline | M1 | Survey (Explorer 1 & 3) |
+| 4 | App Shell Layout Overhaul | Clean topbar and collapsible sidebar navigation supporting all 26 routes with active indicators, badges, and collapse state | M2 | Survey (Explorer 2) |
+| 5 | Global Ctrl+K Command Palette | Multi-domain search dialog with instant navigation, action shortcuts, and keyboard accessibility | M2 | Survey (Explorer 2) |
+| 6 | Navigation & Header Controls | Channel switcher, store selector, notification panel, user profile menu, breadcrumb navigation | M2 | Survey (Explorer 2) |
+| 7 | Persistent POS Pinia Store | Implement `src/stores/posStore.ts` with multi-cart tabs (hold/resume), line discounts, customer binding, and localStorage persistence | M3 | Survey (Explorer 2) |
+| 8 | High-Density Catalog Grid | Redesign left catalog zone in `POSView.vue` with category chips, debounced search, barcode scanner integration, and variant selection modal | M3 | Survey (Explorer 2) |
+| 9 | Tactile Cart & Transaction Panel | Persistent right transaction cart with price totals, line discounts, quantity steppers, item removal, customer pill, and clear CTA | M3 | Survey (Explorer 2) |
+| 10 | Quick Cash & Checkout Modal | Redesign `PosCheckoutModal.vue` with 1-click cash pills ($10, $20, $50, $100, Exact), multi-tender, and thermal receipt simulation | M3 | Survey (Explorer 2) |
+| 11 | Dashboard View Modernization | High-impact KPI cards with trend indicators, recent orders table, stock alert cards, and quick actions in `DashboardView.vue` | M4 | Survey (Explorer 3) |
+| 12 | Catalog & Inventory Operations Views | Overhaul `ProductListView`, `ProductCreateView`, `ProductEditView`, `CategoriesView`, `AttributesView`, `InventoryLedgerView`, `RestockSessionView`, `SuppliersView` | M4 | Survey (Explorer 3) |
+| 13 | Sales, Orders & Customer Views | Overhaul `OrdersView`, `CustomersView`, `QuotationsView`, `InvoicesView`, `ExpensesView`, `BankAccountsView`, `PayrollView`, `SalesChannelsView` | M4 | Survey (Explorer 3) |
+| 14 | Admin, Settings & Auth Views | Overhaul `SettingsView`, `DeliverySettingsView`, `RolesView`, `PermissionsView`, `UsersView`, `AdminUsersView`, `AuditLogsView`, `ReportsView`, `LoginView` | M4 | Survey (Explorer 3) |
+| 15 | Feedback States & Micro-interactions | Consistent skeleton loaders, empty states with CTA, toast notifications, error recovery states, and smooth transitions across all views | M5 | Survey (Explorer 3) |
+| 16 | Production Build & E2E Validation | Pass `npm run build` (`vue-tsc -b && vite build`) with 0 errors and verify full end-to-end user workflows | M5 | Survey (Explorer 1, 2, 3) |
+
+---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Database, Models & Seeding | Migrations (`roles`, `permissions`, `permission_role`, `users.role_id`), Models (`Role`, `Permission`, `User`), Seeders (`RoleSeeder`, `PermissionSeeder`, `RolePermissionSeeder`, `UserSeeder`) | none | IN_PROGRESS |
-| M2 | API, Middleware & Auth Payload | `CheckRole` middleware, `RoleController`, `PermissionController`, routes in `routes/api.php`, dynamic `formatUser()` payload | M1 | PLANNED |
-| M3 | Frontend State & AdminRolesScreen UI | Refactor `usePermissions.ts`, delete `ROLE_PERMISSIONS`, `AdminRolesScreen.tsx`, API integration, route guards | M2 | PLANNED |
-| M4 | Automated Verification & E2E Suite | `DynamicRbacTest.php`, Python E2E dynamic RBAC test & client simulation, full suite regression verification | M1, M2, M3 | PLANNED |
-| M5 | Final Review & Forensic Integrity Audit | Multi-perspective code review, challenger verification, forensic integrity audit | M1, M2, M3, M4 | PLANNED |
+| M1 | Token Architecture & Base UI Primitives | Clean Tailwind v4 `@theme` in `src/style.css`, expand `src/components/ui/` with accessible Radix primitives, fix initial TypeScript build blockers | none | DONE |
+| M2 | App Shell, Navigation & Command Palette | Redesign `src/App.vue`, top navigation, 26-route grouped sidebar, channel selector, notifications, dynamic breadcrumbs, and live Ctrl+K Command Palette | M1 | DONE |
+| M3 | High-Density POS Terminal & Catalog | Build `src/stores/posStore.ts`, redesign `src/views/POSView.vue` + `src/components/pos/` (dual-zone layout, catalog, persistent cart, variant selector, quick cash checkout, receipt preview, hotkeys) | M1, M2 | DONE |
+| M4 | Dashboard & Operational Views Modernization | Redesign all 26 operational views across Catalog, Inventory, Sales, Finance, Customers, Settings, and Admin with standardized data tables, metric cards, and form dialogs | M1, M2 | DONE |
+| M5 | State Polish, Feedback & E2E Verification | Polish skeleton loaders, empty states, toasts, micro-animations, execute `npm run build`, and verify functional workflows | M1, M2, M3, M4 | DONE |
+
+---
 
 ## Interface Contracts
 
-### Super Admin Role & Permission Management API
-- `GET /api/v1/roles`:
-  - Header: `Authorization: Bearer <token>` (Super Admin only, otherwise 403)
-  - Response (200):
-    ```json
-    {
-      "status": "success",
-      "data": [
-        {
-          "id": "uuid",
-          "name": "Admin",
-          "slug": "ADMIN",
-          "description": "Administrator with broad operational access",
-          "permissions": ["products:*", "sales:*", "users:manage", "reports:view", "expenses:*", "settings:*"]
-        }
-      ]
-    }
-    ```
+### `src/style.css` (Tailwind v4 `@theme`)
+```css
+@theme {
+  --color-background: #FAF7F2;
+  --color-foreground: #1A1C1C;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F3ECE2;
+  --color-border: #E8E2D9;
+  --color-border-strong: #D5CCC0;
+  --color-primary: #924C00;
+  --color-primary-hover: #7A3F00;
+  --color-primary-foreground: #FFFFFF;
+  --color-cta: #FF8800;
+  --color-cta-hover: #E67A00;
+  --color-cta-foreground: #FFFFFF;
+  --color-muted: #7A7268;
+  --color-muted-background: #F0EAE1;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+```
 
-- `GET /api/v1/permissions`:
-  - Header: `Authorization: Bearer <token>` (Super Admin only, otherwise 403)
-  - Response (200):
-    ```json
-    {
-      "status": "success",
-      "data": [
-        {
-          "id": "uuid",
-          "name": "Manage Users",
-          "slug": "users:manage",
-          "module": "users",
-          "description": "Create, edit, view, and delete staff accounts"
-        }
-      ]
-    }
-    ```
+### `src/stores/posStore.ts`
+```typescript
+export interface CartItem {
+  id: string
+  product_id: string
+  variant_id?: string
+  name: string
+  sku: string
+  barcode?: string
+  price: number
+  cost_price?: number
+  quantity: number
+  discount: number // percentage or fixed amount
+  notes?: string
+  image_url?: string
+}
 
-- `PUT /api/v1/roles/{id}/permissions`:
-  - Header: `Authorization: Bearer <token>` (Super Admin only, otherwise 403)
-  - Request:
-    ```json
-    {
-      "permissions": ["products:*", "sales:*", "users:manage"]
-    }
-    ```
-  - Response (200):
-    ```json
-    {
-      "status": "success",
-      "message": "Role permissions updated successfully",
-      "data": {
-        "id": "uuid",
-        "name": "Admin",
-        "slug": "ADMIN",
-        "permissions": ["products:*", "sales:*", "users:manage"]
-      }
-    }
-    ```
+export interface HoldCart {
+  id: string
+  name: string
+  customer?: { id: string; name: string; phone?: string }
+  items: CartItem[]
+  timestamp: number
+  notes?: string
+}
+```
 
-### User Auth Payload
-- `POST /api/v1/auth/login` and `GET /api/v1/auth/me`:
-  - Response (200):
-    ```json
-    {
-      "status": "success",
-      "data": {
-        "token": "string",
-        "user": {
-          "id": "uuid",
-          "name": "string",
-          "email": "string",
-          "role": "ADMIN",
-          "permissions": ["products:*", "sales:*", "users:manage", "reports:view", "expenses:*", "settings:*"],
-          "isActive": true
-        }
-      }
-    }
-    ```
+---
 
 ## Code Layout
-- `backend/database/migrations/2026_08_23_000001_create_dynamic_rbac_tables.php`
-- `backend/database/migrations/2026_08_23_000002_add_role_id_to_users_table.php`
-- `backend/database/seeders/RoleSeeder.php`
-- `backend/database/seeders/PermissionSeeder.php`
-- `backend/database/seeders/RolePermissionSeeder.php`
-- `backend/database/seeders/DatabaseSeeder.php`
-- `backend/app/Models/Role.php`
-- `backend/app/Models/Permission.php`
-- `backend/app/Models/User.php`
-- `backend/app/Http/Middleware/CheckRole.php`
-- `backend/app/Http/Controllers/Api/V1/RoleController.php`
-- `backend/app/Http/Controllers/Api/V1/PermissionController.php`
-- `backend/app/Http/Controllers/Api/V1/AuthController.php`
-- `backend/routes/api.php`
-- `backend/tests/Feature/DynamicRbacTest.php`
-- `frontend/mobile/src/types/index.ts`
-- `frontend/mobile/src/api/endpoints.ts`
-- `frontend/mobile/src/hooks/usePermissions.ts`
-- `frontend/mobile/src/screens/AdminRolesScreen.tsx`
-- `frontend/mobile/src/screens/HubScreen.tsx`
-- `frontend/mobile/src/screens/AdminUsersScreen.tsx`
-- `frontend/mobile/App.tsx`
-- `tests/e2e/api_client.py`
-- `tests/e2e/tier1_features/test_dynamic_rbac.py`
+- `frontend/web/src/style.css`: Core Tailwind v4 design tokens and global layout rules
+- `frontend/web/src/components/ui/`: Radix Vue & Tailwind v4 shared primitives
+- `frontend/web/src/App.vue`: Root app shell, sidebar navigation, topbar, command palette
+- `frontend/web/src/stores/`: Pinia stores (`posStore.ts`, `authStore.ts`, `productStore.ts`, etc.)
+- `frontend/web/src/components/pos/`: POS components (Catalog Grid, Cart Panel, Variant Modal, Checkout Modal, Receipt Modal)
+- `frontend/web/src/views/`: 27 page views (POS, Dashboard, Products, Orders, Customers, Inventory, Settings, etc.)

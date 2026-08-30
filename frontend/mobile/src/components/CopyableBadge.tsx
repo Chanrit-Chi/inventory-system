@@ -78,7 +78,7 @@ export const CopyableBadge: React.FC<CopyableBadgeProps> = React.memo(({
 
   const cleanValue = value.trim()
 
-  const handlePress = async (e: any) => {
+  const handlePress = async (e?: any) => {
     // Stop propagation so parent containers (e.g. clickable rows, cards, buttons) aren't triggered
     if (e) {
       e.stopPropagation?.()

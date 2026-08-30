@@ -91,4 +91,39 @@ class StoreBrandingTaxTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_update_and_get_branding_with_separate_receipt_and_invoice_headers(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $updateResponse = $this->postJson('/api/v1/settings/branding', [
+            'store_name'       => 'KC Retail Store',
+            'receipt_header'   => 'Official Receipt',
+            'invoice_header'   => 'Tax Invoice',
+            'quotation_header' => 'Price Quotation',
+        ]);
+
+        $updateResponse->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data'    => [
+                    'store_name'       => 'KC Retail Store',
+                    'receipt_header'   => 'Official Receipt',
+                    'invoice_header'   => 'Tax Invoice',
+                    'quotation_header' => 'Price Quotation',
+                ],
+            ]);
+
+        $getRes = $this->getJson('/api/v1/settings/branding');
+
+        $getRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data'    => [
+                    'receipt_header'   => 'Official Receipt',
+                    'invoice_header'   => 'Tax Invoice',
+                    'quotation_header' => 'Price Quotation',
+                ],
+            ]);
+    }
 }

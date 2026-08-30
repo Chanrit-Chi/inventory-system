@@ -98,6 +98,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/delivery-zones/{id}',  [DeliveryZoneController::class, 'show']);
         Route::get('/bank-accounts',        [BankAccountController::class, 'index']);
         Route::get('/bank-accounts/{id}',   [BankAccountController::class, 'show']);
+        Route::get('/staff-members',        [UserController::class, 'staffList']);
         Route::post('/printer/raw-print',   [PrinterController::class, 'rawPrint']);
 
         // Quotations & Estimates Lifecycle
@@ -124,6 +125,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/my/incentives',     [\App\Http\Controllers\Api\V1\StaffIncentiveController::class, 'myIncentives']);
         Route::get('/my/salary-history', [\App\Http\Controllers\Api\V1\PayrollController::class, 'mySalaryHistory']);
         Route::get('/my/savings',        [\App\Http\Controllers\Api\V1\PayrollController::class, 'mySavings']);
+
+        // Seller Daily Settlement & Reconciliation Proof
+        Route::get('/seller-settlements/summary',         [\App\Http\Controllers\Api\V1\SellerDailySettlementController::class, 'summary']);
+        Route::get('/seller-settlements/team-daily',      [\App\Http\Controllers\Api\V1\SellerDailySettlementController::class, 'teamDailySummary']);
+        Route::post('/seller-settlements/confirm',        [\App\Http\Controllers\Api\V1\SellerDailySettlementController::class, 'confirm']);
+        Route::post('/seller-settlements/reassign-order', [\App\Http\Controllers\Api\V1\SellerDailySettlementController::class, 'reassignOrder']);
 
         // ============================================================
         // 3. Store Operations & Inventory Management (Manager, Admin, Super Admin)

@@ -12,12 +12,14 @@ import { tokens } from '../../theme/tokens'
 import { ControlledInput } from '../ControlledInput'
 import { CustomerLookupRow } from '../CustomerLookupRow'
 import { getChannelPlatformMeta } from '../../screens/SalesChannelsScreen'
+import type { CustomerLoyaltyInfo } from '../../hooks/useCustomerLookup'
 import type {
   SalesChannel,
   DeliveryCompany,
   DeliveryZone,
   BankAccount,
   Customer,
+  UserAccount,
 } from '../../types'
 import type { PosCheckoutFormValues } from '../../utils/validation'
 
@@ -30,6 +32,11 @@ export interface CheckoutStep2FormProps {
   activeChannel: SalesChannel | null
   channelId?: string
   onOpenChannelPicker: () => void
+  users?: UserAccount[]
+  selectedSeller?: UserAccount | null
+  currentUserId?: string | null
+  onOpenSellerPicker?: () => void
+  onResetSellerToMe?: () => void
   phone: string
   name: string
   setPhone: (v: string) => void
@@ -37,7 +44,7 @@ export interface CheckoutStep2FormProps {
   matchedCustomer: Customer | null
   customerSuggestions: Customer[]
   customerLookupStatus: 'idle' | 'searching' | 'found' | 'not_found' | 'error'
-  loyaltyInfo?: any
+  loyaltyInfo?: CustomerLoyaltyInfo | null
   onSelectCustomer: (c: Customer) => void
   dismissSuggestions: () => void
   onResetCustomer: () => void
@@ -65,6 +72,11 @@ export function CheckoutStep2Form({
   activeChannel,
   channelId,
   onOpenChannelPicker,
+  users = [],
+  selectedSeller,
+  currentUserId,
+  onOpenSellerPicker,
+  onResetSellerToMe,
   phone,
   name,
   setPhone,
@@ -80,6 +92,7 @@ export function CheckoutStep2Form({
   deliveryCompanies,
   selectedDeliveryCompany,
   onOpenDeliveryPicker,
+  deliveryZones,
   selectedDeliveryZone,
   onOpenDeliveryZonePicker,
   discountType,
@@ -102,7 +115,7 @@ export function CheckoutStep2Form({
 
   return (
     <ScrollView
-      ref={scrollRef as any}
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={{ paddingBottom: 20 }}
     >
@@ -159,28 +172,57 @@ export function CheckoutStep2Form({
         )}
       </View>
 
-      {/* Customer & Loyalty Row */}
-      <CustomerLookupRow
-        phone={phone}
-        name={name}
-        matchedCustomer={matchedCustomer}
-        suggestions={customerSuggestions}
-        status={customerLookupStatus}
-        loyaltyInfo={loyaltyInfo}
-        onPhoneChange={(val) => {
-          setPhone(val)
-          setValue('customerPhone', val, { shouldValidate: true })
-        }}
-        onNameChange={(val) => {
-          setName(val)
-          setValue('customerName', val, { shouldValidate: true })
-        }}
-        onSelectCustomer={onSelectCustomer}
-        onDismissSuggestions={dismissSuggestions}
-        onReset={onResetCustomer}
-        phoneError={errors.customerPhone?.message}
-        nameError={errors.customerName?.message}
-      />
+      {/* Sales Representative (Incentive Credit) */}
+      <View style={styles.channelSection}>
+        <View style={styles.channelSectionHeader}>
+          <View style={styles.channelSectionTitleWrap}>
+            <Ionicons name="person-circle-outline" size={15} color={tokens.colors.primaryContainer} />
+            <Text style={styles.channelSectionTitle}>Sales Rep (Incentive Credit)</Text>
+          </View>
+          {Boolean(selectedSeller && currentUserId && selectedSeller.id !== currentUserId) && (
+            <TouchableOpacity onPress={onResetSellerToMe} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.resetToMeLink}>Reset to Me</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={styles.dropdownTrigger}
+          onPress={onOpenSellerPicker}
+          activeOpacity={0.75}
+        >
+          <View style={styles.dropdownTriggerLeft}>
+            <View
+              style={[
+                styles.dropdownIconCircle,
+                { backgroundColor: selectedSeller?.id && selectedSeller?.id !== currentUserId ? tokens.colors.primaryFixed : tokens.colors.surfaceAlt },
+              ]}
+            >
+              <Ionicons
+                name="person"
+                size={15}
+                color={selectedSeller?.id && selectedSeller?.id !== currentUserId ? tokens.colors.primary : tokens.colors.secondary}
+              />
+            </View>
+            <View style={styles.dropdownTextWrap}>
+              <Text style={styles.dropdownValueText} numberOfLines={1}>
+                {selectedSeller?.name || 'Logged-In Staff'}
+                {selectedSeller?.id === currentUserId ? ' (Me)' : ''}
+              </Text>
+              <Text style={styles.dropdownSubtext}>
+                {selectedSeller?.id && selectedSeller?.id !== currentUserId
+                  ? `Assisted Sale • ${selectedSeller?.role || 'Sales'}`
+                  : `${selectedSeller?.role || 'Staff'} • Normal Sale Credit`}
+              </Text>
+            </View>
+          </View>
+          <Ionicons
+            name="chevron-down"
+            size={18}
+            color={tokens.colors.secondary}
+          />
+        </TouchableOpacity>
+      </View>
 
       {/* Delivery & Fulfillment Preference Section */}
       <View style={styles.deliverySection}>
@@ -258,7 +300,7 @@ export function CheckoutStep2Form({
                   ]}
                 >
                   <Ionicons
-                    name={(currentCompany?.logoIcon as any) || 'car'}
+                    name={(currentCompany?.logoIcon as any) ?? 'car'}
                     size={16}
                     color={compColor}
                   />
@@ -358,6 +400,29 @@ export function CheckoutStep2Form({
           </View>
         )}
       </View>
+
+      {/* Customer & Loyalty Row */}
+      <CustomerLookupRow
+        phone={phone}
+        name={name}
+        matchedCustomer={matchedCustomer}
+        suggestions={customerSuggestions}
+        status={customerLookupStatus}
+        loyaltyInfo={loyaltyInfo || null}
+        onPhoneChange={(val) => {
+          setPhone(val)
+          setValue('customerPhone', val, { shouldValidate: true })
+        }}
+        onNameChange={(val) => {
+          setName(val)
+          setValue('customerName', val, { shouldValidate: true })
+        }}
+        onSelectCustomer={onSelectCustomer}
+        onDismissSuggestions={dismissSuggestions}
+        onReset={onResetCustomer}
+        phoneError={errors.customerPhone?.message}
+        nameError={errors.customerName?.message}
+      />
 
       {/* Discount Section */}
       <View style={styles.discountSection}>
@@ -613,6 +678,11 @@ const styles = StyleSheet.create({
     color: tokens.colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  resetToMeLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.primary,
   },
   channelErrorText: {
     fontSize: 12,

@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   FlatList,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -23,6 +24,8 @@ import { ProductGroupHeader } from './ProductGroupHeader'
 import { CopyableBadge } from './CopyableBadge'
 import { useBarcodeScan } from '../hooks/useBarcodeScan'
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
+import { emitGlobalToast } from '../utils/clipboard'
 
 export interface StockInLineItem {
   id: string
@@ -74,11 +77,15 @@ export const StockInModal: React.FC<StockInModalProps> = ({
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [catalogSearch, setCatalogSearch] = useState('')
 
-  // Internal Scanner State
+  // Internal Scanner & Toast State
+  const globalToast = useToast()
   const [toastMessage, setToastMessage] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'info' | 'warning' | 'error'>('success')
+  const toastTranslateY = useRef(new Animated.Value(-60)).current
+  const toastOpacity = useRef(new Animated.Value(0)).current
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [barcodeInput, setBarcodeInput] = useState('')
   const hardwareInputRef = useRef<TextInput>(null)
-  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Filter pending purchase orders (status ORDERED or DRAFT)
   const pendingPOs = useMemo(() => {
@@ -87,11 +94,57 @@ export const StockInModal: React.FC<StockInModalProps> = ({
     )
   }, [pendingPurchaseOrders])
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg)
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
-    toastTimeoutRef.current = setTimeout(() => setToastMessage(''), 3000)
-  }, [])
+  const showToast = useCallback(
+    (msg: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
+      if (!msg) return
+      setToastMessage(msg)
+      setToastType(type)
+
+      // Notify global toast system
+      if (globalToast && globalToast.showToast) {
+        globalToast.showToast(msg, { type })
+      } else {
+        emitGlobalToast(msg, type)
+      }
+
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+
+      toastTranslateY.setValue(-60)
+      toastOpacity.setValue(0)
+
+      Animated.parallel([
+        Animated.spring(toastTranslateY, {
+          toValue: 0,
+          friction: 8,
+          tension: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(toastOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start()
+
+      toastTimeoutRef.current = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(toastTranslateY, {
+            toValue: -60,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(toastOpacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setToastMessage('')
+        })
+      }, 2600)
+    },
+    [globalToast, toastTranslateY, toastOpacity]
+  )
 
   function isValidUuid(str?: string | null): boolean {
     if (!str) return false
@@ -175,7 +228,7 @@ export const StockInModal: React.FC<StockInModalProps> = ({
 
       if (isRealVariant) {
         const purchaseCost = parseFloat(String((variant as ProductVariant)?.cost_price_override || product?.purchase_price || '0')) || 0
-        const attrSummary = variant.attribute_values?.map((av: any) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
+        const attrSummary = variant.attribute_values?.map((av) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
         const displayName = (variant as ProductVariant).name || (attrSummary ? `${product?.name || 'Product'} (${attrSummary})` : `${product?.name || 'Product'} - ${variant.sku}`)
 
         const initItem: StockInLineItem = {
@@ -195,7 +248,7 @@ export const StockInModal: React.FC<StockInModalProps> = ({
         if (product.variants && product.variants.length > 0) {
           const initItems: StockInLineItem[] = product.variants.map((v, idx) => {
             const purchaseCost = parseFloat(String(v.cost_price_override || product.purchase_price || '0')) || 0
-            const attrSummary = v.attribute_values?.map((av: any) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
+            const attrSummary = v.attribute_values?.map((av) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
             const displayName = v.name || (attrSummary ? `${product.name} (${attrSummary})` : `${product.name} - ${v.sku}`)
 
             return {
@@ -296,6 +349,8 @@ export const StockInModal: React.FC<StockInModalProps> = ({
     setScannerOpen,
     loading: scanLoading,
     handleScanCode,
+    lastFeedback: scanFeedback,
+    triggerFeedback,
   } = useBarcodeScan({
     mode: 'stock-in',
     customToast: showToast,
@@ -308,6 +363,12 @@ export const StockInModal: React.FC<StockInModalProps> = ({
             i.id === existingItem.id ? { ...i, received_qty: i.received_qty + 1 } : i
           )
         )
+        triggerFeedback({
+          message: `+1 ${existingItem.name}`,
+          submessage: `Total staged: ${existingItem.received_qty + 1}`,
+          type: 'success',
+          timestamp: Date.now(),
+        })
         showToast(`+1 ${existingItem.name}`)
         return true
       }
@@ -559,10 +620,45 @@ export const StockInModal: React.FC<StockInModalProps> = ({
       statusBarTranslucent
     >
       <SafeAreaView style={styles.safeArea}>
-        {!!toastMessage && (
-          <View style={styles.toastContainer}>
-            <Text style={styles.toastText}>{toastMessage}</Text>
-          </View>
+        {Boolean(toastMessage) && (
+          <Animated.View
+            style={[
+              styles.toastContainer,
+              {
+                transform: [{ translateY: toastTranslateY }],
+                opacity: toastOpacity,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.toastPill}>
+              <Ionicons
+                name={
+                  toastType === 'success'
+                    ? 'checkmark-circle'
+                    : toastType === 'warning'
+                    ? 'warning'
+                    : toastType === 'error'
+                    ? 'alert-circle'
+                    : 'information-circle'
+                }
+                size={18}
+                color={
+                  toastType === 'success'
+                    ? '#34D399'
+                    : toastType === 'warning'
+                    ? '#FBBF24'
+                    : toastType === 'error'
+                    ? '#F87171'
+                    : tokens.colors.primaryContainer
+                }
+                style={styles.toastIcon}
+              />
+              <Text style={styles.toastText} numberOfLines={2}>
+                {toastMessage}
+              </Text>
+            </View>
+          </Animated.View>
         )}
 
         <CameraScannerModal
@@ -572,6 +668,24 @@ export const StockInModal: React.FC<StockInModalProps> = ({
             await handleScanCode(code)
           }}
           isLoading={scanLoading}
+          title="Stock Intake Scanner"
+          scannedItems={items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            barcode: item.barcode,
+            quantity: item.received_qty,
+            priceOrCost: item.unit_cost,
+            priceOrCostLabel: 'Cost',
+          }))}
+          totalCount={items.reduce((sum, it) => sum + it.received_qty, 0)}
+          totalValue={items.reduce((sum, it) => sum + (it.unit_cost || 0) * it.received_qty, 0)}
+          onUpdateItemQuantity={(id, delta) => updateReceivedQty(id, delta)}
+          onRemoveItem={(id) => handleRemoveItem(id)}
+          primaryActionLabel="Done & Review Intake"
+          primaryActionIcon="checkmark-circle-outline"
+          onPrimaryAction={() => setScannerOpen(false)}
+          feedback={scanFeedback}
         />
 
         {/* Product Catalog Selection Modal */}
@@ -1328,19 +1442,38 @@ const styles = StyleSheet.create({
   },
   toastContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 20,
-    right: 20,
-    backgroundColor: tokens.colors.primary,
-    padding: 12,
-    borderRadius: 8,
+    top: Platform.OS === 'ios' ? 52 : 36,
+    left: 16,
+    right: 16,
     alignItems: 'center',
-    zIndex: 9999,
+    zIndex: 99999,
+    elevation: 99999,
+  },
+  toastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: tokens.borderRadius.pill,
+    maxWidth: '92%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  toastIcon: {
+    marginRight: 8,
   },
   toastText: {
-    color: '#FFF',
-    fontSize: 14,
+    color: '#F8FAFC',
+    fontSize: 13,
     fontWeight: '600',
+    letterSpacing: -0.2,
+    flexShrink: 1,
   },
   textInput: {
     backgroundColor: tokens.colors.surfaceAlt,

@@ -18,6 +18,8 @@ export interface StaffPerformanceCardProps {
   title?: string
   subtitle?: string
   badgeText?: string
+  salesLabel?: string
+  commissionLabel?: string
   iconName?: keyof typeof Ionicons.glyphMap
   containerStyle?: object
 }
@@ -30,17 +32,19 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
   greetingName,
   title,
   subtitle,
-  badgeText = 'My Earnings',
-  iconName = 'person',
+  badgeText = 'Full Details',
+  salesLabel = 'SALES REVENUE',
+  commissionLabel = 'COMMISSION',
+  iconName = 'stats-chart',
   containerStyle,
 }) => {
   const displayTitle =
-    title || (greetingName ? `Hello, ${greetingName.split(' ')[0]} \u{1F44B}` : 'My Performance & Earnings')
+    title || (greetingName ? `Hello, ${greetingName.split(' ')[0]} 👋` : 'My Performance & Earnings')
 
   const periodLabel =
     period === 'today' ? "Today's Shift" : period === '7d' ? 'Last 7 Days' : 'This Month'
 
-  const displaySubtitle = subtitle || `${periodLabel} \u2022 Sales, Orders & Commission`
+  const displaySubtitle = subtitle || `${periodLabel} • Sales, Orders & Commission`
 
   const salesRevenue = performance
     ? (performance.summary?.total_revenue ?? performance.total_revenue ?? 0)
@@ -62,31 +66,39 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
       accessibilityRole="button"
       accessibilityLabel={`View ${badgeText}`}
     >
-      {/* Top Row: User Greeting / Card Title & My Earnings Badge */}
+      {/* 1. Header Top Line: Icon + Title on left, Action Button on right */}
       <View style={styles.header}>
         <View style={styles.titleGroup}>
           <View style={styles.iconCircle}>
             <Ionicons name={iconName} size={15} color={tokens.colors.primaryContainer} />
           </View>
-          <View style={styles.titleTextContainer}>
-            <Text style={styles.greetingText} numberOfLines={1}>
-              {displayTitle}
-            </Text>
-            <Text style={styles.subtitleText} numberOfLines={1}>
-              {displaySubtitle}
-            </Text>
-          </View>
+          <Text
+            style={styles.greetingText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {displayTitle}
+          </Text>
         </View>
 
         <View style={styles.badge}>
           <Text style={styles.badgeText} numberOfLines={1}>
             {badgeText}
           </Text>
-          <Ionicons name="chevron-forward" size={12} color={tokens.colors.primaryContainer} />
+          <Ionicons name="chevron-forward" size={11} color={tokens.colors.primaryContainer} />
         </View>
       </View>
 
-      {/* Middle Row: Period Filter Pills */}
+      {/* 2. Full-Width Subtitle Row (Never cramped by badge, 100% visible) */}
+      <View style={styles.subtitleRow}>
+        <Ionicons name="time-outline" size={13} color={tokens.colors.secondary} />
+        <Text style={styles.subtitleText} numberOfLines={1}>
+          {displaySubtitle}
+        </Text>
+      </View>
+
+      {/* 3. Period Filter Selector Pills */}
       <View style={styles.periodRow}>
         {(
           [
@@ -114,17 +126,17 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
         })}
       </View>
 
-      {/* Bottom Row: 3-Column Metrics (Sales, Orders, Commission) */}
+      {/* 4. 3-Column Metrics (Sales, Orders, Commission) */}
       <View style={styles.metricsContainer}>
         <View style={styles.metricCol}>
           <Text style={styles.metricLabel} numberOfLines={1}>
-            MY SALES
+            {salesLabel}
           </Text>
           <Text
             style={styles.metricValue}
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.8}
+            minimumFontScale={0.75}
           >
             ${salesRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
@@ -140,7 +152,7 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
             style={styles.metricValue}
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.8}
+            minimumFontScale={0.75}
           >
             {ordersCount}
           </Text>
@@ -150,13 +162,13 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
 
         <View style={styles.metricCol}>
           <Text style={styles.metricLabel} numberOfLines={1}>
-            COMMISSION
+            {commissionLabel}
           </Text>
           <Text
             style={[styles.metricValue, styles.commissionValue]}
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.8}
+            minimumFontScale={0.75}
           >
             +${incentiveAmount.toFixed(2)}
           </Text>
@@ -170,17 +182,19 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: tokens.colors.surfaceCard,
     borderRadius: tokens.borderRadius.card,
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
+    gap: 10,
     ...tokens.shadows.card,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
     gap: 8,
   },
   titleGroup: {
@@ -189,54 +203,61 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
     minWidth: 0,
+    marginRight: 4,
   },
   iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: tokens.colors.actionPrimaryBg,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  titleTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
   greetingText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     color: tokens.colors.onBackground,
     letterSpacing: -0.2,
-  },
-  subtitleText: {
-    fontSize: 10.5,
-    color: tokens.colors.secondary,
-    marginTop: 1,
+    flex: 1,
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
     backgroundColor: tokens.colors.actionPrimaryBg,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.primaryFixedDim,
     flexShrink: 0,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 10.5,
+    fontWeight: '700',
     color: tokens.colors.primaryContainer,
+  },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: -2,
+    marginBottom: 2,
+  },
+  subtitleText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    color: tokens.colors.secondary,
+    flex: 1,
   },
   periodRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
+    gap: 8,
   },
   periodChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 3.5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: tokens.borderRadius.pill,
     backgroundColor: tokens.colors.surfaceMuted,
     borderWidth: 1,
@@ -247,7 +268,7 @@ const styles = StyleSheet.create({
     borderColor: tokens.colors.primaryContainer,
   },
   periodChipText: {
-    fontSize: 10.5,
+    fontSize: 11.5,
     fontWeight: '700',
     color: tokens.colors.secondary,
   },
@@ -259,8 +280,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: tokens.colors.surfaceMuted,
     borderRadius: tokens.borderRadius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    marginTop: 2,
   },
   metricCol: {
     flex: 1,
@@ -270,14 +292,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   metricLabel: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '700',
     color: tokens.colors.secondary,
-    marginBottom: 3,
-    letterSpacing: 0.2,
+    marginBottom: 4,
+    letterSpacing: 0.3,
   },
   metricValue: {
-    fontSize: 13.5,
+    fontSize: 15.5,
     fontWeight: '800',
     color: tokens.colors.onBackground,
     textAlign: 'center',
@@ -287,7 +309,7 @@ const styles = StyleSheet.create({
   },
   metricDivider: {
     width: 1,
-    height: 22,
+    height: 28,
     backgroundColor: tokens.colors.borderSubtle,
     marginHorizontal: 2,
   },

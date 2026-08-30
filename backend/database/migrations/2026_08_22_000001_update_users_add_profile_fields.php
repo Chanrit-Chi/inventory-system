@@ -9,13 +9,22 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() !== 'sqlite') {
+            Schema::table('users', function (Blueprint $table) {
+                $table->string('role')->default('SELLER')->change();
+            });
+        }
+
         Schema::table('users', function (Blueprint $table) {
-            // Expand role to support all mobile app roles
-            // SQLite doesn't support ALTER COLUMN for enums, so we use string
-            $table->string('role')->default('SELLER')->change();
-            $table->string('phone')->nullable()->after('email');
-            $table->boolean('is_active')->default(true)->after('role');
-            $table->string('permission_group')->nullable()->after('is_active');
+            if (!Schema::hasColumn('users', 'phone')) {
+                $table->string('phone')->nullable()->after('email');
+            }
+            if (!Schema::hasColumn('users', 'is_active')) {
+                $table->boolean('is_active')->default(true)->after('role');
+            }
+            if (!Schema::hasColumn('users', 'permission_group')) {
+                $table->string('permission_group')->nullable()->after('is_active');
+            }
         });
 
         // Migrate existing role values to new uppercase format

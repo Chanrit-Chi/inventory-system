@@ -1,0 +1,80 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { cn } from '@/lib/utils'
+
+type Variant =
+  | 'default'
+  | 'primary'
+  | 'amber'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'destructive'
+  | 'info'
+  | 'purple'
+  | 'neutral'
+  | 'outline'
+
+interface Props {
+  variant?: Variant
+  dot?: boolean
+  class?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  variant: 'default',
+  dot: false,
+})
+
+const variantClass = computed(() => {
+  switch (props.variant) {
+    case 'primary':
+      return 'bg-cta-muted text-primary border-[#FFE4CC]'
+    case 'amber':
+      return 'bg-accent text-primary border-[#FFDCC4]'
+    case 'success':
+      return 'bg-success-bg text-success-text border-success-border'
+    case 'warning':
+      return 'bg-warning-bg text-warning-text border-warning-border'
+    case 'error':
+    case 'destructive':
+      return 'bg-error-bg text-error-text border-error-border'
+    case 'info':
+      return 'bg-info-bg text-info-text border-info-border'
+    case 'purple':
+      return 'bg-purple-bg text-purple-text border-purple-border'
+    case 'outline':
+      return 'bg-transparent text-foreground border-border'
+    case 'neutral':
+    default:
+      return 'bg-muted text-muted-foreground border-border'
+  }
+})
+
+const dotColorClass = computed(() => {
+  switch (props.variant) {
+    case 'primary': return 'bg-cta'
+    case 'amber': return 'bg-primary'
+    case 'success': return 'bg-success'
+    case 'warning': return 'bg-warning'
+    case 'error':
+    case 'destructive': return 'bg-destructive'
+    case 'info': return 'bg-info'
+    case 'purple': return 'bg-purple'
+    default: return 'bg-muted-foreground'
+  }
+})
+</script>
+
+<template>
+  <span
+    :class="cn(
+      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors',
+      variantClass,
+      $attrs.class as string,
+    )"
+  >
+    <span v-if="dot" :class="cn('w-1.5 h-1.5 rounded-full', dotColorClass)" />
+    <slot />
+  </span>
+</template>

@@ -6,7 +6,7 @@ import { tokens } from '../../../theme/tokens'
 import { styles } from '../ProductsScreen.styles'
 import { usePermissions } from '../../../hooks/usePermissions'
 import { CopyableBadge } from '../../../components/CopyableBadge'
-import type { Product } from '../../../types'
+import type { Product, ProductVariant, ScannedVariant, ScannedAttributeValue } from '../../../types'
 
 interface ProductDetailModalProps {
   detailModalOpen: boolean
@@ -18,8 +18,8 @@ interface ProductDetailModalProps {
   handleToggleVariantActive: (prod: Product, variantId: string) => void
   setOverviewScannerOpen: (v: boolean) => void
   setOverviewScanTarget: (v: { type: 'product' } | { type: 'variant'; variantId: string } | null) => void
-  onOpenStockIn?: (product?: Product | null, variant?: any) => void
-  onOpenStockAdjustment?: (product?: Product | null, variant?: any) => void
+  onOpenStockIn?: (product?: Product | null, variant?: ProductVariant | ScannedVariant | null) => void
+  onOpenStockAdjustment?: (product?: Product | null, variant?: ProductVariant | ScannedVariant | null) => void
 }
 
 export function ProductDetailModal({
@@ -208,7 +208,7 @@ export function ProductDetailModal({
 
                     <View style={{ gap: 8 }}>
                       {detailProduct.variants?.map((v) => {
-                        const attrSummary = v.attribute_values?.map((av: any) => av.value_name || av.attribute?.name).filter(Boolean).join(' • ') || ''
+                        const attrSummary = v.attribute_values?.map((av: ScannedAttributeValue) => av.value_name || av.attribute?.name).filter(Boolean).join(' • ') || ''
                         const displayName = v.name || attrSummary || v.sku
                         const vPrice = v.selling_price_override ? Number(v.selling_price_override) : Number(detailProduct.selling_price)
 

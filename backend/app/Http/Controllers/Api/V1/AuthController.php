@@ -40,14 +40,16 @@ class AuthController extends BaseApiController
             );
         }
 
-        // Determine device/client token name
-        $deviceName = $request->input('device_name', 'mobile');
+        // Determine device/client token name and IP
+        $rawDevice = trim((string) $request->input('device_name', ''));
+        $deviceName = $rawDevice !== '' ? $rawDevice : 'mobile';
+        $ip = $request->ip() ?: '127.0.0.1';
 
-        // Clean up previous tokens for this device name to prevent token bloat
+        // Clean up previous tokens for this specific device name to prevent token bloat
         $user->tokens()->where('name', $deviceName)->delete();
 
-        // Create new Bearer token with full access abilities
-        $token = $user->createToken($deviceName, ['*'])->plainTextToken;
+        // Create new Bearer token with full access abilities and client IP recorded
+        $token = $user->createToken($deviceName, ['*', 'ip:' . $ip])->plainTextToken;
 
         return $this->successResponse([
             'token' => $token,
@@ -100,7 +102,10 @@ class AuthController extends BaseApiController
             ]);
         }
 
-        $user->update(['password' => Hash::make($data['new_password'])]);
+        $user->update([
+            'password'             => Hash::make($data['new_password']),
+            'must_change_password' => false,
+        ]);
 
         // Revoke all other tokens so other devices are forced to re-authenticate
         $currentTokenId = $user->currentAccessToken()?->id;
@@ -108,7 +113,7 @@ class AuthController extends BaseApiController
             $user->tokens()->where('id', '!=', $currentTokenId)->delete();
         }
 
-        return $this->successResponse(null, 'Password updated successfully.');
+        return $this->successResponse($this->formatUser($user->fresh()), 'Password updated successfully.');
     }
 
     /**
@@ -138,16 +143,22 @@ class AuthController extends BaseApiController
      */
     private function formatUser(User $user): array
     {
+        $attrs = $user->getAttributes();
+        $isActive = array_key_exists('is_active', $attrs) ? (bool) $attrs['is_active'] : true;
+        $mustChange = array_key_exists('must_change_password', $attrs) ? (bool) $attrs['must_change_password'] : false;
+
         return [
-            'id'              => $user->id,
-            'name'            => $user->name,
-            'email'           => $user->email,
-            'phone'           => $user->phone,
-            'role'            => $user->role,
-            'isActive'        => (bool) $user->is_active,
-            'permissionGroup' => $user->permission_group,
-            'permissions'     => $user->getPermissionsArray(),
-            'lastActive'      => $user->updated_at?->toDateTimeString(),
+            'id'                   => $user->id,
+            'name'                 => $user->name,
+            'email'                => $user->email,
+            'phone'                => array_key_exists('phone', $attrs) ? $attrs['phone'] : null,
+            'role'                 => $user->role,
+            'isActive'             => $isActive,
+            'must_change_password' => $mustChange,
+            'mustChangePassword'   => $mustChange,
+            'permissionGroup'      => array_key_exists('permission_group', $attrs) ? $attrs['permission_group'] : null,
+            'permissions'          => $user->getPermissionsArray(),
+            'lastActive'           => $user->updated_at?->toDateTimeString(),
         ];
     }
 }

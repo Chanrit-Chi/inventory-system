@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   Modal,
   TouchableOpacity,
@@ -40,9 +41,13 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
 
   useEffect(() => {
     if (visible) {
-      setSelectedQuantities({})
+      if (variants.length === 1 && (variants[0].quantity_on_hand ?? 0) > 0) {
+        setSelectedQuantities({ [variants[0].id]: 1 })
+      } else {
+        setSelectedQuantities({})
+      }
     }
-  }, [visible])
+  }, [visible, variants])
 
   const allOutOfStock = variants.length > 0 && variants.every(v => (v.quantity_on_hand ?? 0) <= 0)
 
@@ -65,6 +70,20 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
         return next
       }
       return { ...prev, [variant.id]: current - 1 }
+    })
+  }, [])
+
+  const handleSetExactQuantity = useCallback((variant: ScannedVariant, qty: number) => {
+    const stock = variant.quantity_on_hand ?? 0
+    if (stock <= 0) return
+    setSelectedQuantities(prev => {
+      if (qty <= 0) {
+        const next = { ...prev }
+        delete next[variant.id]
+        return next
+      }
+      const capped = Math.min(qty, stock)
+      return { ...prev, [variant.id]: capped }
     })
   }, [])
 
@@ -237,7 +256,18 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
               >
                 <Ionicons name="remove" size={14} color={tokens.colors.onBackground} />
               </TouchableOpacity>
-              <Text style={styles.stepperQtyText}>{selectedQty}</Text>
+              <TextInput
+                testID={`input-qty-variant-${item.id}`}
+                style={styles.stepperQtyText}
+                keyboardType="numeric"
+                value={String(selectedQty)}
+                onChangeText={(txt) => {
+                  const clean = txt.replace(/[^0-9]/g, '')
+                  const num = parseInt(clean, 10)
+                  handleSetExactQuantity(item, isNaN(num) ? 0 : num)
+                }}
+                selectTextOnFocus
+              />
               <TouchableOpacity
                 testID={`btn-inc-variant-${item.id}`}
                 style={[styles.stepperBtn, isAtMax && styles.stepperBtnDisabled]}
@@ -287,20 +317,24 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
           <View style={styles.header}>
             <View style={styles.headerTextCol}>
               <View style={styles.masterBadgeRow}>
-                <View style={styles.masterTag}>
-                  <Text style={styles.masterTagText}>Master Product Options</Text>
+                <View style={[styles.masterTag, variants.length === 1 && { backgroundColor: tokens.colors.surfaceAlt }]}>
+                  <Text style={[styles.masterTagText, variants.length === 1 && { color: tokens.colors.secondary }]}>
+                    {variants.length === 1 ? 'Single Product' : 'Master Product Options'}
+                  </Text>
                 </View>
-                <Text style={styles.variantCountTag}>{variants.length} options</Text>
+                <Text style={styles.variantCountTag}>
+                  {variants.length === 1 ? '1 item' : `${variants.length} options`}
+                </Text>
               </View>
               <Text style={styles.productTitle} numberOfLines={2}>
                 {product?.name ?? 'Select Product Variants'}
               </Text>
-              {(Boolean((product as any)?.sku) || Boolean(product?.barcode)) && (
+              {(Boolean(product?.sku) || Boolean(product?.barcode)) && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                  {Boolean((product as any)?.sku) && (
+                  {Boolean(product?.sku) && (
                     <CopyableBadge
                       type="sku"
-                      value={(product as any)?.sku}
+                      value={product?.sku}
                       compact
                     />
                   )}
@@ -696,8 +730,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: tokens.colors.primaryContainer,
-    minWidth: 20,
+    minWidth: 28,
     textAlign: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    includeFontPadding: false,
   },
   oosBadge: {
     paddingHorizontal: 10,

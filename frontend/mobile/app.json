@@ -33,7 +33,8 @@
         {
           "cameraPermission": "Allow Mobile POS to scan item barcodes."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

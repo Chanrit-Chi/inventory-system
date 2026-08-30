@@ -2,22 +2,28 @@ import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   Platform,
-  UIManager,
   StatusBar as RNStatusBar,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import * as NavigationBar from 'expo-navigation-bar'
+import {
+  useFonts,
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
+  DMSans_800ExtraBold,
+  DMSans_900Black,
+} from '@expo-google-fonts/dm-sans'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from './src/theme/tokens'
-import { useCart } from './src/hooks/useCart'
-import { useOfflineQueue } from './src/hooks/useOfflineQueue'
 import { usePermissions } from './src/hooks/usePermissions'
 import { useBarcodeScan } from './src/hooks/useBarcodeScan'
 import { useNetworkStatus } from './src/hooks/useNetworkStatus'
@@ -31,9 +37,14 @@ import { StockAdjustmentModal } from './src/components/StockAdjustmentModal'
 import { PurchaseOrderModal } from './src/components/PurchaseOrderModal'
 import { VariantPickerModal } from './src/components/VariantPickerModal'
 import { AuthModal } from './src/components/AuthModal'
+import { ForceChangePasswordModal } from './src/components/ForceChangePasswordModal'
 import { HubScreen } from './src/screens/HubScreen'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { BrandingProvider, useBranding } from './src/context/BrandingContext'
+import { CartProvider, useCartContext } from './src/context/CartContext'
+import { OfflineQueueProvider, useOfflineQueueContext } from './src/context/OfflineQueueContext'
+import { PurchaseOrderProvider, usePurchaseOrderContext } from './src/context/PurchaseOrderContext'
+import { ModalManagerProvider, useModalManager } from './src/context/ModalManagerContext'
 import NetInfo from '@react-native-community/netinfo'
 import LoginScreen from './src/screens/LoginScreen'
 import HomeScreen from './src/screens/HomeScreen'
@@ -56,13 +67,11 @@ import { DeliveryCompaniesScreen } from './src/screens/DeliveryCompaniesScreen'
 import { DeliveryZonesScreen } from './src/screens/DeliveryZonesScreen'
 import { SalesChannelsScreen } from './src/screens/SalesChannelsScreen'
 import PayrollScreen from './src/screens/PayrollScreen'
-import { usePurchaseOrders } from './src/hooks/usePurchaseOrders'
+import DailySettlementsScreen from './src/screens/DailySettlementsScreen'
 import type {
   TabType,
   Order,
   Product,
-  ScannedProduct,
-  ScannedVariant,
   QuotationItem,
   Customer,
 } from './src/types'
@@ -71,7 +80,6 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, asyncStoragePersister } from './src/api/queryClient'
 import { queryKeys } from './src/api/queryKeys'
 import { ErrorBoundary } from './src/components/ErrorBoundary'
-
 import { ToastProvider } from './src/context/ToastContext'
 
 export default function App() {
@@ -83,9 +91,17 @@ export default function App() {
       >
         <AuthProvider>
           <BrandingProvider>
-            <ToastProvider>
-              <AppShell />
-            </ToastProvider>
+            <CartProvider>
+              <OfflineQueueProvider>
+                <PurchaseOrderProvider>
+                  <ModalManagerProvider>
+                    <ToastProvider>
+                      <AppShell />
+                    </ToastProvider>
+                  </ModalManagerProvider>
+                </PurchaseOrderProvider>
+              </OfflineQueueProvider>
+            </CartProvider>
           </BrandingProvider>
         </AuthProvider>
       </PersistQueryClientProvider>
@@ -104,22 +120,22 @@ import { useNavigation } from '@react-navigation/native'
 const noop = () => {}
 
 const ScreenWrapper = React.memo(({ ScreenComponent }: { ScreenComponent: any }) => {
-  const actions = useAppActions();
-  const navigation = useNavigation<any>();
-  const { canAccessTab } = usePermissions();
+  const actions = useAppActions()
+  const navigation = useNavigation<any>()
+  const { canAccessTab } = usePermissions()
   const navigateToTab = React.useCallback(
     (tab: any) => {
       if (typeof tab !== 'string') {
-        return;
+        return
       }
       if (!canAccessTab(tab as any)) {
         Alert.alert('Access Restricted', 'You do not have permission to access this module.')
         return
       }
-      navigation.navigate(tab);
+      navigation.navigate(tab)
     },
     [navigation, canAccessTab]
-  );
+  )
   return (
     <ScreenComponent
       onNavigate={navigateToTab}
@@ -149,8 +165,8 @@ const ScreenWrapper = React.memo(({ ScreenComponent }: { ScreenComponent: any })
         if (typeof tab === 'string') navigation.navigate(tab)
       }}
     />
-  );
-});
+  )
+})
 
 const HomeTab = () => <ScreenWrapper ScreenComponent={HomeScreen} />
 const PosTab = () => <ScreenWrapper ScreenComponent={PosScreen} />
@@ -173,6 +189,7 @@ const DeliveryZonesTab = () => <ScreenWrapper ScreenComponent={DeliveryZonesScre
 const SettingsTab = () => <ScreenWrapper ScreenComponent={SettingsScreen} />
 const HubTab = () => <ScreenWrapper ScreenComponent={HubScreen} />
 const PayrollTab = () => <ScreenWrapper ScreenComponent={PayrollScreen} />
+const DailySettlementsTab = () => <ScreenWrapper ScreenComponent={DailySettlementsScreen} />
 
 const GlobalHeader = ({
   branding,
@@ -184,9 +201,8 @@ const GlobalHeader = ({
   isCheckoutActive,
   currentRoute,
 }: any) => {
-
   if (currentRoute === 'pos' && isCheckoutActive) {
-    return null;
+    return null
   }
 
   return (
@@ -202,16 +218,18 @@ const GlobalHeader = ({
               <Image
                 source={{ uri: branding.logo_url }}
                 style={styles.brandLogoImg}
-                resizeMode="contain"
+                contentFit="contain"
               />
             ) : (
               <Image
                 source={require('./assets/KC SHOP-No BG.png')}
                 style={styles.brandLogoImg}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
-            <Text style={styles.brandName} numberOfLines={1}>{branding.store_name || 'KC Inventory'}</Text>
+            <Text style={styles.brandName} numberOfLines={1}>
+              {branding.store_name || 'KC Inventory'}
+            </Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -249,89 +267,106 @@ const GlobalHeader = ({
         </TouchableOpacity>
       </View>
     </View>
-  );
-};
+  )
+}
 
-const RootNavigator = React.memo(({
-  branding,
-  pendingCount,
-  isSyncing,
-  handleSyncOffline,
-  handleOpenScanner,
-  setAuthModalOpen,
-  isCheckoutActive,
-  totalItemCount,
-  currentRoute,
-  networkStatus,
-}: any) => {
-  return (
-    <View style={styles.screenContainer}>
-      <GlobalHeader 
-        branding={branding} 
-        pendingCount={pendingCount} 
-        isSyncing={isSyncing}
-        handleSyncOffline={handleSyncOffline}
-        handleOpenScanner={handleOpenScanner}
-        setAuthModalOpen={setAuthModalOpen}
-        isCheckoutActive={isCheckoutActive}
-        currentRoute={currentRoute}
-      />
-      {networkStatus && (
-        <NetworkStatusBanner
-          connectionState={networkStatus.connectionState}
-          isChecking={networkStatus.isChecking}
-          onRetry={networkStatus.checkConnection}
-          customMessage={networkStatus.errorMessage}
+const RootNavigator = React.memo(
+  ({
+    branding,
+    pendingCount,
+    isSyncing,
+    handleSyncOffline,
+    handleOpenScanner,
+    setAuthModalOpen,
+    isCheckoutActive,
+    totalItemCount,
+    currentRoute,
+    networkStatus,
+  }: any) => {
+    return (
+      <View style={styles.screenContainer}>
+        <GlobalHeader
+          branding={branding}
+          pendingCount={pendingCount}
+          isSyncing={isSyncing}
+          handleSyncOffline={handleSyncOffline}
+          handleOpenScanner={handleOpenScanner}
+          setAuthModalOpen={setAuthModalOpen}
+          isCheckoutActive={isCheckoutActive}
+          currentRoute={currentRoute}
         />
-      )}
-      <Tab.Navigator
-        tabBar={(props) => {
-          const activeRouteName = props.state.routes[props.state.index].name;
-          return (
-            <BottomTabBar
-              activeTab={activeRouteName as any}
-              onSelectTab={(tab) => props.navigation.navigate(tab)}
-              cartItemCount={totalItemCount}
-              pendingSyncCount={pendingCount}
-            />
-          );
-        }}
-        screenOptions={{ headerShown: false }}
-      >
-        <Tab.Screen name="home" component={HomeTab} />
-        <Tab.Screen name="pos" component={PosTab} />
-        <Tab.Screen name="products" component={ProductsTab} />
-        <Tab.Screen name="purchase-orders" component={PurchaseOrdersTab} />
-        <Tab.Screen name="transactions" component={TransactionsTab} />
-        <Tab.Screen name="hub" component={HubTab} />
-        <Tab.Screen name="quotations" component={QuotationsTab} />
-        <Tab.Screen name="invoices" component={InvoicesTab} />
-        <Tab.Screen name="categories" component={CategoriesTab} />
-        <Tab.Screen name="suppliers" component={SuppliersTab} />
-        <Tab.Screen name="customers" component={CustomersTab} />
-        <Tab.Screen name="expenses" component={ExpensesTab} />
-        <Tab.Screen name="reports" component={ReportsTab} />
-        <Tab.Screen name="admin" component={AdminUsersTab} />
-        <Tab.Screen name="roles" component={AdminRolesTab} />
-        <Tab.Screen name="sales-channels" component={SalesChannelsTab} />
-        <Tab.Screen name="bank-accounts" component={BankAccountsTab} />
-        <Tab.Screen name="delivery-companies" component={DeliveryCompaniesTab} />
-        <Tab.Screen name="delivery-zones" component={DeliveryZonesTab} />
-        <Tab.Screen name="settings" component={SettingsTab} />
-        <Tab.Screen name="payroll" component={PayrollTab} />
-      </Tab.Navigator>
-    </View>
-  );
-});
+        {networkStatus && (
+          <NetworkStatusBanner
+            connectionState={networkStatus.connectionState}
+            isChecking={networkStatus.isChecking}
+            onRetry={networkStatus.checkConnection}
+            customMessage={networkStatus.errorMessage}
+          />
+        )}
+        <Tab.Navigator
+          tabBar={(props) => {
+            const activeRouteName = props.state.routes[props.state.index].name
+            return (
+              <BottomTabBar
+                activeTab={activeRouteName as any}
+                onSelectTab={(tab) => props.navigation.navigate(tab)}
+                cartItemCount={totalItemCount}
+                pendingSyncCount={pendingCount}
+              />
+            )
+          }}
+          screenOptions={{ headerShown: false }}
+        >
+          <Tab.Screen name="home" component={HomeTab} />
+          <Tab.Screen name="pos" component={PosTab} />
+          <Tab.Screen name="products" component={ProductsTab} />
+          <Tab.Screen name="purchase-orders" component={PurchaseOrdersTab} />
+          <Tab.Screen name="transactions" component={TransactionsTab} />
+          <Tab.Screen name="hub" component={HubTab} />
+          <Tab.Screen name="quotations" component={QuotationsTab} />
+          <Tab.Screen name="invoices" component={InvoicesTab} />
+          <Tab.Screen name="categories" component={CategoriesTab} />
+          <Tab.Screen name="suppliers" component={SuppliersTab} />
+          <Tab.Screen name="customers" component={CustomersTab} />
+          <Tab.Screen name="expenses" component={ExpensesTab} />
+          <Tab.Screen name="reports" component={ReportsTab} />
+          <Tab.Screen name="admin" component={AdminUsersTab} />
+          <Tab.Screen name="roles" component={AdminRolesTab} />
+          <Tab.Screen name="sales-channels" component={SalesChannelsTab} />
+          <Tab.Screen name="bank-accounts" component={BankAccountsTab} />
+          <Tab.Screen name="delivery-companies" component={DeliveryCompaniesTab} />
+          <Tab.Screen name="delivery-zones" component={DeliveryZonesTab} />
+          <Tab.Screen name="settings" component={SettingsTab} />
+          <Tab.Screen name="payroll" component={PayrollTab} />
+          <Tab.Screen name="daily-settlements" component={DailySettlementsTab} />
+        </Tab.Navigator>
+      </View>
+    )
+  }
+)
 
 function AppShell() {
+  const [fontsLoaded] = useFonts({
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+    DMSans_700Bold,
+    DMSans_800ExtraBold,
+    DMSans_900Black,
+  })
+
   const { currentUser, isAuthenticated, isRestoring, updateProfile } = useAuth()
   const { branding } = useBranding()
   const [currentRoute, setCurrentRoute] = useState<string>('home')
   const { canAccessTab } = usePermissions()
   const [activeTab, setActiveTab] = useState<TabType>('home')
-  const [authModalOpen, setAuthModalOpen] = useState(false)
   const [isCheckoutActive, setIsCheckoutActive] = useState(false)
+
+  // Context hooks
+  const cartContext = useCartContext()
+  const offlineQueueContext = useOfflineQueueContext()
+  const purchaseOrderContext = usePurchaseOrderContext()
+  const modalManager = useModalManager()
 
   // Ensure activeTab is accessible by current user
   React.useEffect(() => {
@@ -347,34 +382,20 @@ function AppShell() {
     }
   }, [])
 
-  // Shared Cart State
-  const cartHook = useCart()
-  const {
-    totalItemCount,
-    addVariantToCart,
-    addMultipleItemsToCart,
-    replaceCartWithItems,
-  } = cartHook
-
-  // Offline Queue State
-  const offlineQueueHook = useOfflineQueue()
-  const {
-    pendingCount,
-    isSyncing,
-    syncQueue,
-  } = offlineQueueHook
-
   // Global Network & Backend Connection Status
   const networkStatus = useNetworkStatus()
 
-  // Shared Purchase Orders State (with Local Persistence & Live Status Tracking)
-  const poHook = usePurchaseOrders()
-  const {
-    purchaseOrders,
-    pendingPurchaseOrders,
-    addPurchaseOrder,
-    markPoReceived,
-  } = poHook
+  // Products SubTab State for Direct Navigation (e.g. from Hub Purchase Orders)
+  const [productsSubTab, setProductsSubTab] = useState<'catalog' | 'movements' | 'purchaseOrders'>(
+    'catalog'
+  )
+
+  // Order updates state
+  const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0)
+  const [orderUpdateError, setOrderUpdateError] = useState<{
+    message: string
+    onRetry: () => void
+  } | null>(null)
 
   // Global Scanner & Variant Picker Hook
   const {
@@ -388,97 +409,39 @@ function AppShell() {
     pickerVariants,
     closePicker,
     handleScanCode,
+    lastFeedback: scanFeedback,
   } = useBarcodeScan({
+    mode: 'cart',
+    closeScannerOnFound: false,
     onFoundVariant: (variant, product) => {
-      addVariantToCart(variant, product?.name || 'Product')
-      const label = variant.barcode || variant.sku
-      Alert.alert(
-        'Product Added',
-        `Added ${product?.name || 'Product'} (${label}) to cart.`,
-        [
-          {
-            text: 'Go to Register',
-            onPress: () => {
-              setScannerOpen(false)
-              setActiveTab('pos')
-            },
-          },
-          {
-            text: 'Keep Scanning',
-            onPress: () => setScannerOpen(true),
-          },
-        ]
-      )
+      return cartContext.addVariantToCart(variant, product?.name || 'Product', product?.image_url)
     },
   })
 
-  // Global Stock In Modal State
-  const [stockInOpen, setStockInOpen] = useState(false)
-  const [stockInProduct, setStockInProduct] = useState<Product | null>(null)
-  const [stockInVariant, setStockInVariant] = useState<any>(null)
-
-  // Global Stock Adjustment Modal State
-  const [stockAdjOpen, setStockAdjOpen] = useState(false)
-  const [stockAdjProduct, setStockAdjProduct] = useState<Product | null>(null)
-  const [stockAdjVariant, setStockAdjVariant] = useState<any>(null)
-
-  // Global Purchase Order Modal Dialog State
-  const [purchaseOrderModalOpen, setPurchaseOrderModalOpen] = useState(false)
-  const [poModalConfig, setPoModalConfig] = useState<{ mode?: 'list' | 'create'; supplierId?: string }>({ mode: 'list' })
-
-  const handleOpenPurchaseOrder = useCallback((opts?: { mode?: 'list' | 'create'; supplierId?: string }) => {
-    setPoModalConfig(opts || { mode: 'list' })
-    setPurchaseOrderModalOpen(true)
-  }, [])
-
-  // Products SubTab State for Direct Navigation (e.g. from Hub Purchase Orders)
-  const [productsSubTab, setProductsSubTab] = useState<'catalog' | 'movements' | 'purchaseOrders'>('catalog')
-
-  // Receipt Modal State for viewing transactions
-  const [viewingOrder, setViewingOrder] = useState<Order | null>(null)
-  const [receiptOpen, setReceiptOpen] = useState(false)
-
-  const handleOpenStockIn = useCallback((product?: any, variant?: any) => {
-    const isRealProduct = product && typeof product === 'object' && typeof product.id === 'string' && !('nativeEvent' in product)
-    const isRealVariant = variant && typeof variant === 'object' && typeof variant.id === 'string' && !('nativeEvent' in variant)
-    setStockInProduct(isRealProduct ? (product as Product) : null)
-    setStockInVariant(isRealVariant ? variant : null)
-    setStockInOpen(true)
-  }, [])
-
-  const handleOpenStockAdjustment = useCallback((product?: any, variant?: any) => {
-    const isRealProduct = product && typeof product === 'object' && typeof product.id === 'string' && !('nativeEvent' in product)
-    const isRealVariant = variant && typeof variant === 'object' && typeof variant.id === 'string' && !('nativeEvent' in variant)
-    setStockAdjProduct(isRealProduct ? (product as Product) : null)
-    setStockAdjVariant(isRealVariant ? variant : null)
-    setStockAdjOpen(true)
-  }, [])
-
-  const handleOpenAuthModal = useCallback(() => {
-    setAuthModalOpen(true)
-  }, [])
-
   const handleSyncOffline = useCallback(async () => {
-    const success = await syncQueue()
+    const success = await offlineQueueContext.syncQueue()
     if (success) {
       Alert.alert('Sync Successful', 'All offline transactions have been synchronized.')
     } else {
-      Alert.alert('Sync Incomplete', 'Some transactions could not be synced. Will retry automatically.')
+      Alert.alert(
+        'Sync Incomplete',
+        'Some transactions could not be synced. Will retry automatically.'
+      )
     }
-  }, [syncQueue])
+  }, [offlineQueueContext])
 
   // Auto-sync offline queue when network connectivity is restored
   useEffect(() => {
     let wasOffline = false
-    const unsubscribe = NetInfo.addEventListener(state => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
       const isConnected = state.isConnected && state.isInternetReachable !== false
-      if (isConnected && wasOffline && pendingCount > 0) {
-        syncQueue()
+      if (isConnected && wasOffline && offlineQueueContext.pendingCount > 0) {
+        offlineQueueContext.syncQueue()
       }
       wasOffline = !isConnected
     })
     return () => unsubscribe()
-  }, [syncQueue, pendingCount])
+  }, [offlineQueueContext])
 
   // Conversion: Quotation Items -> POS Cart
   const handleConvertQuoteToCart = useCallback(
@@ -487,29 +450,32 @@ function AppShell() {
         variantId: item.variant_id || item.id || `quote-item-${idx}`,
         sku: item.sku || 'SKU-CUSTOM',
         productName: item.product_name || 'Quoted Product',
-        quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 1,
-        unitPrice: typeof item.unit_price === 'number' ? item.unit_price : Number(item.unit_price) || 0,
+        quantity:
+          typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 1,
+        unitPrice:
+          typeof item.unit_price === 'number' ? item.unit_price : Number(item.unit_price) || 0,
         availableStock: (item as any).available_stock ?? 0,
       }))
 
-      replaceCartWithItems(cartItems, preset)
+      cartContext.replaceCartWithItems(cartItems, preset)
       setActiveTab('pos')
       Alert.alert(
         'Quotation Loaded',
-        `Transferred ${quoteItems.length} items from quotation ${quoteNumber || ''} into active POS Register cart.`,
+        `Transferred ${quoteItems.length} items from quotation ${
+          quoteNumber || ''
+        } into active POS Register cart.`,
         [{ text: 'View Register', onPress: () => setActiveTab('pos') }]
       )
     },
-    [replaceCartWithItems]
+    [cartContext]
   )
 
-  const handleSelectOrder = useCallback((order: Order) => {
-    setViewingOrder(order)
-    setReceiptOpen(true)
-  }, [])
-
-  const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0)
-  const [orderUpdateError, setOrderUpdateError] = useState<{ message: string; onRetry: () => void } | null>(null)
+  const handleSelectOrder = useCallback(
+    (order: Order) => {
+      modalManager.openReceipt(order)
+    },
+    [modalManager]
+  )
 
   const handleUpdateOrderStatus = useCallback(
     async (orderId: string, newStatus: string, paymentMethod?: string, notes?: string) => {
@@ -517,17 +483,14 @@ function AppShell() {
       try {
         await updateOrderStatus(orderId, newStatus, paymentMethod, notes)
 
-        setViewingOrder((prev) => {
-          if (!prev || prev.id !== orderId) return prev
-          return {
-            ...prev,
-            status: newStatus,
-            notes: notes !== undefined ? notes : prev.notes,
-            payments:
-              paymentMethod && prev.payments && prev.payments.length > 0
-                ? [{ ...prev.payments[0], payment_method: paymentMethod }]
-                : prev.payments,
-          }
+        modalManager.openReceipt({
+          ...modalManager.viewingOrder!,
+          status: newStatus,
+          notes: notes !== undefined ? notes : modalManager.viewingOrder!.notes,
+          payments:
+            paymentMethod && modalManager.viewingOrder!.payments && modalManager.viewingOrder!.payments.length > 0
+              ? [{ ...modalManager.viewingOrder!.payments[0], payment_method: paymentMethod }]
+              : modalManager.viewingOrder!.payments,
         })
         setOrderRefreshTrigger((t) => t + 1)
         await Promise.allSettled([
@@ -545,7 +508,7 @@ function AppShell() {
         Alert.alert('Update Failed', errorMsg)
       }
     },
-    []
+    [modalManager]
   )
 
   const handleUpdateOrder = useCallback(
@@ -557,28 +520,32 @@ function AppShell() {
         notes?: string
         delivery_address?: string
         region?: string
+        seller_id?: string | null
       }
     ) => {
       setOrderUpdateError(null)
       try {
-        await updateOrder(orderId, payload)
+        const updated = await updateOrder(orderId, payload)
 
-        setViewingOrder((prev) => {
-          if (!prev || prev.id !== orderId) return prev
-          return {
-            ...prev,
-            notes: payload.notes !== undefined ? payload.notes : prev.notes,
+        if (modalManager.viewingOrder && modalManager.viewingOrder.id === orderId) {
+          modalManager.openReceipt(updated || {
+            ...modalManager.viewingOrder,
+            notes: payload.notes !== undefined ? payload.notes : modalManager.viewingOrder.notes,
             delivery_address:
               payload.delivery_address !== undefined
                 ? payload.delivery_address
-                : prev.delivery_address,
-            region: payload.region !== undefined ? payload.region : prev.region,
-          }
-        })
+                : modalManager.viewingOrder.delivery_address,
+            region:
+              payload.region !== undefined ? payload.region : modalManager.viewingOrder.region,
+            seller_id:
+              payload.seller_id !== undefined ? payload.seller_id : modalManager.viewingOrder.seller_id,
+          })
+        }
         setOrderRefreshTrigger((t) => t + 1)
         await Promise.allSettled([
           queryClient.invalidateQueries({ queryKey: queryKeys.orders.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.products.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
         ])
       } catch (err: any) {
         const errorMsg = err?.message || 'Could not update order details.'
@@ -589,97 +556,106 @@ function AppShell() {
         Alert.alert('Update Failed', errorMsg)
       }
     },
-    []
+    [modalManager]
   )
 
   const handleNewSaleFromReceipt = useCallback(() => {
-    setReceiptOpen(false)
-    setViewingOrder(null)
+    modalManager.closeReceipt()
     setActiveTab('pos')
-  }, [])
+  }, [modalManager])
 
-  const handleNavigate = useCallback((tab: TabType) => {
-    if (!canAccessTab(tab)) {
-      Alert.alert('Access Restricted', 'You do not have permission to access this module.')
-      return
-    }
-    setActiveTab(tab)
-  }, [canAccessTab])
+  const handleNavigate = useCallback(
+    (tab: TabType) => {
+      if (!canAccessTab(tab)) {
+        Alert.alert('Access Restricted', 'You do not have permission to access this module.')
+        return
+      }
+      setActiveTab(tab)
+    },
+    [canAccessTab]
+  )
 
   const handleSelectCustomerForPOS = useCallback(
     (customer: Customer) => {
-      if (customer && cartHook.setCheckoutPreset) {
-        cartHook.setCheckoutPreset({
+      if (customer && cartContext.setCheckoutPreset) {
+        cartContext.setCheckoutPreset({
           customerName: customer.name,
           customerPhone: customer.phone,
+          deliveryAddress: customer.address || '',
         })
       }
     },
-    [cartHook.setCheckoutPreset]
+    [cartContext]
   )
 
   const appContextValue = useMemo(
     () => ({
       onNavigate: noop as (tab: any) => void,
       onOpenScanner: handleOpenScanner,
-      onOpenStockIn: handleOpenStockIn,
-      onOpenStockAdjustment: handleOpenStockAdjustment,
-      onOpenPurchaseOrder: handleOpenPurchaseOrder,
+      onOpenStockIn: modalManager.openStockIn,
+      onOpenStockAdjustment: modalManager.openStockAdjustment,
+      onOpenPurchaseOrder: modalManager.openPurchaseOrder,
       productsSubTab: productsSubTab,
       setProductsSubTab: setProductsSubTab,
       onSelectOrder: handleSelectOrder,
       onConvertQuoteToCart: handleConvertQuoteToCart,
       onCheckoutStateChange: setIsCheckoutActive,
-      onAuthModalOpen: handleOpenAuthModal,
+      onAuthModalOpen: modalManager.openAuthModal,
       onSelectCustomerForPOS: handleSelectCustomerForPOS,
-      cartHook: cartHook,
-      offlineQueueHook: offlineQueueHook,
-      purchaseOrders: purchaseOrders,
-      addPurchaseOrder: addPurchaseOrder,
-      markPoReceived: markPoReceived,
+      cartHook: cartContext,
+      offlineQueueHook: offlineQueueContext,
+      purchaseOrders: purchaseOrderContext.purchaseOrders,
+      addPurchaseOrder: purchaseOrderContext.addPurchaseOrder,
+      markPoReceived: purchaseOrderContext.markPoReceived,
       currentUser: currentUser,
       orderRefreshTrigger: orderRefreshTrigger,
     }),
     [
       handleOpenScanner,
-      handleOpenStockIn,
-      handleOpenStockAdjustment,
-      handleOpenPurchaseOrder,
+      modalManager,
       productsSubTab,
       handleSelectOrder,
       handleConvertQuoteToCart,
-      handleOpenAuthModal,
       handleSelectCustomerForPOS,
-      cartHook,
-      offlineQueueHook,
-      purchaseOrders,
-      addPurchaseOrder,
-      markPoReceived,
+      cartContext,
+      offlineQueueContext,
+      purchaseOrderContext,
       currentUser,
       orderRefreshTrigger,
     ]
   )
 
-  if (isRestoring) {
+  if (isRestoring || !fontsLoaded) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={[styles.safeArea, { alignItems: 'center', justifyContent: 'center' }]}>
+        <SafeAreaView
+          style={[styles.safeArea, { alignItems: 'center', justifyContent: 'center' }]}
+        >
           <StatusBar style="dark" backgroundColor={tokens.colors.background} />
           <View style={{ alignItems: 'center', gap: 16 }}>
             {branding.logo_url ? (
               <Image
                 source={{ uri: branding.logo_url }}
                 style={{ width: 80, height: 80 }}
-                resizeMode="contain"
+                contentFit="contain"
               />
             ) : (
               <Image
                 source={require('./assets/KC SHOP-No BG.png')}
                 style={{ width: 80, height: 80 }}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
-            <Text style={{ fontSize: 18, fontWeight: '800', color: tokens.colors.onBackground, letterSpacing: -0.5 }}>{branding.store_name || 'KC Inventory'}</Text>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: '800',
+                color: tokens.colors.onBackground,
+                letterSpacing: -0.5,
+              }}
+            >
+              {branding.store_name || 'KC Inventory'}
+            </Text>
             <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
           </View>
         </SafeAreaView>
@@ -729,22 +705,22 @@ function AppShell() {
               </TouchableOpacity>
             </View>
           )}
-          <AppProvider value={appContextValue}>
+          <AppProvider value={appContextValue as any}>
             <NavigationContainer
               onStateChange={(state) => {
-                const route = state?.routes[state.index]?.name;
-                if (route) setCurrentRoute(route);
+                const route = state?.routes[state.index]?.name
+                if (route) setCurrentRoute(route)
               }}
             >
               <RootNavigator
                 branding={branding}
-                pendingCount={pendingCount}
-                isSyncing={isSyncing}
+                pendingCount={offlineQueueContext.pendingCount}
+                isSyncing={offlineQueueContext.isSyncing}
                 handleSyncOffline={handleSyncOffline}
                 handleOpenScanner={handleOpenScanner}
-                setAuthModalOpen={setAuthModalOpen}
+                setAuthModalOpen={modalManager.openAuthModal}
                 isCheckoutActive={isCheckoutActive}
-                totalItemCount={totalItemCount}
+                totalItemCount={cartContext.totalItemCount}
                 currentRoute={currentRoute}
                 networkStatus={networkStatus}
               />
@@ -759,53 +735,71 @@ function AppShell() {
               await handleScanCode(code)
             }}
             isLoading={scanLoading}
+            scannedItems={cartContext.cart.map((item) => ({
+              id: item.variantId,
+              name: item.productName,
+              sku: item.sku,
+              quantity: item.quantity,
+              priceOrCost: item.unitPrice,
+              imageUrl: item.imageUrl,
+            }))}
+            totalCount={cartContext.totalItemCount}
+            totalValue={cartContext.cartTotal}
+            onUpdateItemQuantity={(id, delta) => cartContext.updateQuantity(id, delta)}
+            onRemoveItem={(id) => cartContext.removeFromCart(id)}
+            primaryActionLabel="Go to Register"
+            onPrimaryAction={() => {
+              setScannerOpen(false)
+              setActiveTab('pos')
+            }}
+            feedback={scanFeedback}
           />
 
           {/* Global Stock Intake / Receiving Modal */}
           <StockInModal
-            visible={stockInOpen}
-            product={stockInProduct}
-            variant={stockInVariant}
-            onClose={() => {
-              setStockInOpen(false)
-              setStockInProduct(null)
-              setStockInVariant(null)
-            }}
-            pendingPurchaseOrders={pendingPurchaseOrders}
-            onLinkPoReceived={markPoReceived}
+            visible={modalManager.stockInOpen}
+            product={modalManager.stockInProduct}
+            variant={modalManager.stockInVariant}
+            onClose={modalManager.closeStockIn}
+            pendingPurchaseOrders={purchaseOrderContext.pendingPurchaseOrders}
+            onLinkPoReceived={purchaseOrderContext.markPoReceived}
           />
 
           {/* Global Inventory Count Adjustment Modal */}
           <StockAdjustmentModal
-            visible={stockAdjOpen}
-            product={stockAdjProduct}
-            variant={stockAdjVariant}
-            onClose={() => {
-              setStockAdjOpen(false)
-              setStockAdjProduct(null)
-              setStockAdjVariant(null)
-            }}
+            visible={modalManager.stockAdjOpen}
+            product={modalManager.stockAdjProduct}
+            variant={modalManager.stockAdjVariant}
+            onClose={modalManager.closeStockAdjustment}
           />
 
           {/* Global Purchase Orders Dialog Modal */}
           <PurchaseOrderModal
-            visible={purchaseOrderModalOpen}
-            onClose={() => setPurchaseOrderModalOpen(false)}
-            purchaseOrders={purchaseOrders}
-            onAddPO={addPurchaseOrder}
-            onMarkPoReceived={markPoReceived}
-            onOpenStockIn={handleOpenStockIn}
-            initialMode={poModalConfig.mode || 'list'}
-            preSelectedSupplierId={poModalConfig.supplierId}
+            visible={modalManager.purchaseOrderModalOpen}
+            onClose={modalManager.closePurchaseOrder}
+            purchaseOrders={purchaseOrderContext.purchaseOrders}
+            onAddPO={purchaseOrderContext.addPurchaseOrder}
+            onMarkPoReceived={purchaseOrderContext.markPoReceived}
+            onOpenStockIn={modalManager.openStockIn}
+            initialMode={modalManager.poModalConfig.mode || 'list'}
+            preSelectedSupplierId={modalManager.poModalConfig.supplierId}
           />
 
           {/* Global Auth / Profile Modal */}
           <AuthModal
-            visible={authModalOpen}
+            visible={modalManager.authModalOpen}
             currentUser={currentUser}
-            onClose={() => setAuthModalOpen(false)}
+            onClose={modalManager.closeAuthModal}
             onUpdateProfile={updateProfile}
           />
+
+          {/* Mandatory First-Login Password Change Modal */}
+          {Boolean(currentUser && (currentUser.mustChangePassword || currentUser.must_change_password)) && (
+            <ForceChangePasswordModal
+              visible={true}
+              currentUser={currentUser}
+            />
+          )}
 
           {/* Global Variant Picker Modal */}
           <VariantPickerModal
@@ -814,7 +808,7 @@ function AppShell() {
             variants={pickerVariants}
             onSelectVariant={(variant) => {
               if (pickerProduct) {
-                addVariantToCart(variant, pickerProduct.name)
+                cartContext.addVariantToCart(variant, pickerProduct.name)
                 Alert.alert(
                   'Variant Selected',
                   `Added ${pickerProduct.name} (${variant.sku}) to cart.`,
@@ -841,12 +835,9 @@ function AppShell() {
 
           {/* Order Receipt Modal (for viewing historical or recent orders) */}
           <OrderReceiptModal
-            visible={receiptOpen}
-            order={viewingOrder}
-            onClose={() => {
-              setReceiptOpen(false)
-              setViewingOrder(null)
-            }}
+            visible={modalManager.receiptOpen}
+            order={modalManager.viewingOrder}
+            onClose={modalManager.closeReceipt}
             onNewSale={handleNewSaleFromReceipt}
             onNavigateSettings={() => handleNavigate('settings')}
             onUpdateStatus={handleUpdateOrderStatus}

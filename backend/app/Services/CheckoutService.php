@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Enums\MovementType;
+use App\Enums\OrderStatus;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -108,7 +110,6 @@ class CheckoutService
                 }
 
                 // --- Generate order number ---
-                // Generate unique order number with collision retry
                 $orderNumber = null;
                 for ($attempt = 0; $attempt < 5; $attempt++) {
                     $candidate = 'ORD-' . strtoupper(Str::random(10));
@@ -134,7 +135,7 @@ class CheckoutService
                     $customerId = $customer->id;
                 }
 
-                // --- Calculate financials ---
+                // --- Calculate financials with precise decimal arithmetic ---
                 $subtotal = 0.0;
                 $processedItems = [];
 
@@ -147,10 +148,16 @@ class CheckoutService
 
                     $qty = (int) $item['quantity'];
                     $lineDiscount = (float) ($item['discount_amount'] ?? $item['discount'] ?? 0);
-                    $lineSubtotal = round($effectiveUnitPrice * $qty, 2);
-                    $lineFinal = max(0.0, round($lineSubtotal - $lineDiscount, 2));
+                    $lineSubtotal = function_exists('bcmul')
+                        ? (float) bcmul((string) $effectiveUnitPrice, (string) $qty, 2)
+                        : round($effectiveUnitPrice * $qty, 2);
+                    $lineFinal = function_exists('bcsub')
+                        ? max(0.0, (float) bcsub((string) $lineSubtotal, (string) $lineDiscount, 2))
+                        : max(0.0, round($lineSubtotal - $lineDiscount, 2));
 
-                    $subtotal += $lineFinal;
+                    $subtotal = function_exists('bcadd')
+                        ? (float) bcadd((string) $subtotal, (string) $lineFinal, 2)
+                        : round($subtotal + $lineFinal, 2);
 
                     $processedItems[] = [
                         'variant'         => $variant,
@@ -194,7 +201,7 @@ class CheckoutService
                 $statusInput = strtolower($data['status'] ?? $data['payment_status'] ?? 'paid');
                 $isPending = $statusInput === 'pending';
 
-                $orderStatus = $isPending ? 'PENDING' : 'COMPLETED';
+                $orderStatus = $isPending ? OrderStatus::PENDING->value : OrderStatus::COMPLETED->value;
                 $paymentStatus = $isPending ? 'PENDING' : 'PAID';
                 $completedAt = $isPending ? null : now();
                 $paymentRecordStatus = $isPending ? 'pending' : 'completed';
@@ -231,61 +238,65 @@ class CheckoutService
                     throw $e;
                 }
 
-            // --- Create OrderItems, decrement stock, write StockMovements ---
-            foreach ($processedItems as $pItem) {
-                $variant      = $pItem['variant'];
-                $qtyBefore    = $variant->quantity_on_hand;
-                $qtyAfter     = $qtyBefore - $pItem['quantity'];
+                // --- Create OrderItems, decrement stock, write StockMovements ---
+                foreach ($processedItems as $pItem) {
+                    $variant      = $pItem['variant'];
+                    $qtyBefore    = $variant->quantity_on_hand;
+                    $qtyAfter     = $qtyBefore - $pItem['quantity'];
 
-                // Decrement
-                $variant->decrement('quantity_on_hand', $pItem['quantity']);
+                    // Decrement
+                    $variant->decrement('quantity_on_hand', $pItem['quantity']);
 
-                OrderItem::create([
+                    OrderItem::create([
+                        'order_id'        => $order->id,
+                        'product_id'      => $variant->product_id,
+                        'variant_id'      => $variant->id,
+                        'quantity'        => $pItem['quantity'],
+                        'unit_price'      => $pItem['unit_price'],
+                        'subtotal'        => $pItem['subtotal'],
+                        'discount_amount' => $pItem['discount_amount'],
+                        'total_price'     => $pItem['total_price'],
+                        'final_amount'    => $pItem['final_amount'],
+                    ]);
+
+                    StockMovement::create([
+                        'variant_id'      => $variant->id,
+                        'movement_type'   => MovementType::SALE->value,
+                        'quantity_change' => -$pItem['quantity'],
+                        'quantity_before' => $qtyBefore,
+                        'quantity_after'  => $qtyAfter,
+                        'reference_id'    => $orderNumber,
+                        'notes'           => "Sale via order {$orderNumber}",
+                    ]);
+                }
+
+                // --- Create Payment ---
+                Payment::create([
                     'order_id'        => $order->id,
-                    'product_id'      => $variant->product_id,
-                    'variant_id'      => $variant->id,
-                    'quantity'        => $pItem['quantity'],
-                    'unit_price'      => $pItem['unit_price'],
-                    'subtotal'        => $pItem['subtotal'],
-                    'discount_amount' => $pItem['discount_amount'],
-                    'total_price'     => $pItem['total_price'],
-                    'final_amount'    => $pItem['final_amount'],
+                    'payment_method'  => $data['payment_method'],
+                    'amount'          => $data['payment_amount'],
+                    'status'          => $paymentRecordStatus,
+                    'transaction_ref' => $data['transaction_ref'] ?? null,
                 ]);
 
-                StockMovement::create([
-                    'variant_id'      => $variant->id,
-                    'movement_type'   => 'SALE',
-                    'quantity_change' => -$pItem['quantity'],
-                    'quantity_before' => $qtyBefore,
-                    'quantity_after'  => $qtyAfter,
-                    'reference_id'    => $orderNumber,
-                    'notes'           => "Sale via order {$orderNumber}",
-                ]);
-            }
+                // --- Update customer spend & default address ---
+                if ($customerId) {
+                    $roundedTotal = round((float) $totalAmount, 2);
+                    $customerUpdateData = [
+                        'total_spent'      => DB::raw("ROUND(total_spent + {$roundedTotal}, 2)"),
+                        'last_purchase_at' => now(),
+                    ];
+                    if (!empty($data['delivery_address'])) {
+                        $customerUpdateData['address'] = $data['delivery_address'];
+                    }
+                    Customer::where('id', $customerId)->update($customerUpdateData);
+                }
 
-            // --- Create Payment ---
-            Payment::create([
-                'order_id'        => $order->id,
-                'payment_method'  => $data['payment_method'],
-                'amount'          => $data['payment_amount'],
-                'status'          => $paymentRecordStatus,
-                'transaction_ref' => $data['transaction_ref'] ?? null,
-            ]);
+                $loadedOrder = $order->load(['items.variant', 'payments', 'customer', 'channel']);
+                \App\Events\OrderPlaced::dispatch($loadedOrder);
 
-            // --- Update customer spend ---
-            if ($customerId) {
-                $roundedTotal = round((float) $totalAmount, 2);
-                Customer::where('id', $customerId)->update([
-                    'total_spent'      => DB::raw("ROUND(total_spent + {$roundedTotal}, 2)"),
-                    'last_purchase_at' => now(),
-                ]);
-            }
-
-            $loadedOrder = $order->load(['items.variant', 'payments', 'customer', 'channel']);
-            \App\Events\OrderPlaced::dispatch($loadedOrder);
-
-            return $loadedOrder;
-        });
+                return $loadedOrder;
+            });
         } catch (\Illuminate\Database\QueryException $e) {
             $existing = Order::where('client_mutation_id', $data['client_mutation_id'])
                 ->with(['items.variant', 'payments', 'customer', 'channel'])

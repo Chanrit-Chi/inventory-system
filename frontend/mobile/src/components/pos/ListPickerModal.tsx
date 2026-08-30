@@ -10,11 +10,13 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../theme/tokens'
 
+type IconName = keyof typeof Ionicons.glyphMap
+
 export interface PickerItem {
   id: string
   title: string
   subtitle?: string
-  icon?: string
+  icon?: IconName
   iconColor?: string
   iconBg?: string
 }
@@ -23,7 +25,7 @@ interface ListPickerModalProps {
   visible: boolean
   onClose: () => void
   title: string
-  titleIcon?: string
+  titleIcon?: IconName
   items: PickerItem[]
   selectedId?: string | null
   onSelect: (item: PickerItem) => void
@@ -49,7 +51,7 @@ export function ListPickerModal({
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name={titleIcon as any} size={18} color={tokens.colors.primary} />
+              <Ionicons name={titleIcon} size={18} color={tokens.colors.primary} />
               <Text style={styles.title}>{title}</Text>
             </View>
             <TouchableOpacity
@@ -77,7 +79,7 @@ export function ListPickerModal({
                 >
                   <View style={[styles.iconCircle, { backgroundColor: bg }]}>
                     <Ionicons
-                      name={(item.icon as any) || 'ellipse'}
+                      name={item.icon || 'ellipse'}
                       size={18}
                       color={color}
                     />

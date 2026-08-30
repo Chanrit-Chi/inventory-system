@@ -22,6 +22,7 @@ import { supplierSchema, SupplierFormValues } from '../utils/validation'
 import { ControlledInput } from '../components/ControlledInput'
 import { fetchSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
 import { SearchBar } from '../components/SearchBar'
 import { matchSearch } from '../utils/searchHelper'
 
@@ -136,6 +137,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   onSelectSupplierForPO,
   onOpenPurchaseOrder,
 }) => {
+  const { showToast } = useToast()
   const { can } = usePermissions()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [search, setSearch] = useState('')
@@ -251,7 +253,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
       } catch {
         // Saved locally
       }
-      Alert.alert('Success', `Supplier "${data.name}" updated.`)
+      showToast(`Supplier "${data.name}" updated.`, 'success')
     } else {
       const tempId = `sup-${Date.now()}`
       const newSupplier: Supplier = {
@@ -282,7 +284,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
       } catch {
         // Saved locally
       }
-      Alert.alert('Success', `Supplier "${data.name}" added successfully.`)
+      showToast(`Supplier "${data.name}" added successfully.`, 'success')
     }
     setModalOpen(false)
   }
@@ -298,14 +300,15 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
           style: 'destructive',
           onPress: async () => {
             setSuppliers((prev) => prev.filter((item) => item.id !== s.id))
-            if (selectedSupplier?.id === s.id) {
-              setSelectedSupplier(null)
-            }
+            setSelectedSupplier(null)
             try {
               await deleteSupplier(s.id)
-            } catch {
-              // Local delete
+            } catch (err: unknown) {
+              const error = err as { response?: { data?: { message?: string } } }
+              const msg = error.response?.data?.message || 'Failed to delete supplier from server.'
+              showToast(msg, 'warning')
             }
+            showToast(`Supplier "${s.name}" deleted.`, 'success')
           },
         },
       ]

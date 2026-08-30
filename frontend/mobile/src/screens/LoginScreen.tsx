@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 
 export default function LoginScreen() {
-  const { login } = useAuth()
+  const { login, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth()
   const { branding } = useBranding()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,6 +25,13 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [loginError, setLoginError] = useState('')
+
+  useEffect(() => {
+    if (sessionExpiredMessage) {
+      setLoginError(sessionExpiredMessage)
+      clearSessionExpiredMessage()
+    }
+  }, [sessionExpiredMessage, clearSessionExpiredMessage])
 
   const validate = () => {
     let valid = true

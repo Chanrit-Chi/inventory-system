@@ -24,6 +24,7 @@ import {
   updateDeliveryZone,
   deleteDeliveryZone,
 } from '../api/endpoints'
+import { useToast } from '../context/ToastContext'
 
 export interface DeliveryZonesScreenProps {
   onNavigate: (tab: TabType) => void
@@ -41,6 +42,7 @@ const ZONE_COLORS = [
 ]
 
 export const DeliveryZonesScreen: React.FC<DeliveryZonesScreenProps> = ({ onNavigate }) => {
+  const { showToast } = useToast()
   const [zones, setZones] = useState<DeliveryZone[]>(INITIAL_DELIVERY_ZONES)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -103,7 +105,7 @@ export const DeliveryZonesScreen: React.FC<DeliveryZonesScreenProps> = ({ onNavi
           isDefault,
         })
         await loadZones()
-        Alert.alert('Updated', `Delivery zone "${data.name}" updated successfully.`)
+        showToast(`Delivery zone "${data.name}" updated.`, 'success')
       } else {
         await createDeliveryZone({
           name: data.name.trim(),
@@ -112,12 +114,12 @@ export const DeliveryZonesScreen: React.FC<DeliveryZonesScreenProps> = ({ onNavi
           isDefault,
         })
         await loadZones()
-        Alert.alert('Zone Added', `"${data.name}" added to your delivery zones.`)
+        showToast(`"${data.name}" added to delivery zones.`, 'success')
       }
       setModalVisible(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save delivery zone.'
-      Alert.alert('Error', msg)
+      showToast(msg, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -133,9 +135,10 @@ export const DeliveryZonesScreen: React.FC<DeliveryZonesScreenProps> = ({ onNavi
           try {
             await deleteDeliveryZone(id)
             await loadZones()
+            showToast(`${zoneName} removed.`, 'success')
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to delete delivery zone.'
-            Alert.alert('Error', msg)
+            showToast(msg, 'error')
           }
         },
       },

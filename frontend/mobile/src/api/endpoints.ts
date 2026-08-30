@@ -17,6 +17,7 @@ import type {
   PermissionItem,
   Quotation,
   QuotationStatus,
+  QuotationItem,
   Invoice,
   InvoiceStatus,
   InvoicePaymentRecord,
@@ -26,10 +27,27 @@ import type {
   DeliveryCompany,
   DeliveryZone,
   StockMovementRecord,
+  Payroll,
+  ProductVariant,
+  ProductCategory,
+  AttributeTaxonomy,
+  SellerDailySettlementSummary,
+  SellerDailySettlementRecord,
+  TeamDailySettlementSummary,
 } from '../types'
+import { getDeviceIdentifier } from '../utils/device'
 
-export async function loginUser(email: string, password: string): Promise<{ token: string; user: UserAccount }> {
-  const response = await apiClient.post<ApiResponse<{ token: string; user: UserAccount }>>('/auth/login', { email, password })
+export async function loginUser(
+  email: string,
+  password: string,
+  deviceName?: string
+): Promise<{ token: string; user: UserAccount }> {
+  const resolvedDeviceName = deviceName || (await getDeviceIdentifier())
+  const response = await apiClient.post<ApiResponse<{ token: string; user: UserAccount }>>('/auth/login', {
+    email,
+    password,
+    device_name: resolvedDeviceName,
+  })
   return response.data.data
 }
 
@@ -66,6 +84,24 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export async function fetchUsers(): Promise<UserAccount[]> {
   const response = await apiClient.get<ApiResponse<UserAccount[]>>('/users')
   return response.data.data ?? []
+}
+
+/**
+ * Fetch all active staff members for operational assignment & POS seller attribution
+ * GET /api/v1/staff-members
+ */
+export async function fetchStaffMembers(): Promise<UserAccount[]> {
+  const response = await apiClient.get<ApiResponse<UserAccount[]>>('/staff-members')
+  return response.data.data ?? []
+}
+
+/**
+ * Fetch a single staff user by ID
+ * GET /api/v1/users/:id
+ */
+export async function fetchUser(id: string): Promise<UserAccount | null> {
+  const response = await apiClient.get<ApiResponse<UserAccount>>(`/users/${id}`)
+  return response.data.data ?? null
 }
 
 /**
@@ -135,10 +171,21 @@ export interface AuditLogEntry {
   action: string
   category?: string
   target: string
-  by: string
-  time: string
+  by?: string
+  actor_name?: string
+  actor_role?: string
+  time?: string
+  occurred_at?: string
   created_at?: string
   details?: string
+  ip?: string
+  device?: string
+  metadata?: {
+    ip?: string
+    device?: string
+    user_agent?: string
+    [key: string]: any
+  } | null
 }
 
 export interface FetchAuditLogsParams {
@@ -172,15 +219,17 @@ export async function scanBarcode(code: string): Promise<ScanResult> {
     // If backend endpoint is unreachable or 404, fallback to local catalog resolution
   }
 
-  // Fallback: search products endpoint locally
+  // Fallback: search products endpoint with scoped query
   try {
-    const prodRes = await apiClient.get<ApiResponse<Product[] | { data: Product[] }>>('/products')
+    const prodRes = await apiClient.get<ApiResponse<Product[] | { data: Product[] }>>('/products', {
+      params: { search: trimmed, limit: 10 },
+    })
     const rawData = prodRes.data?.data
     const list: Product[] = Array.isArray(rawData)
-      ? (rawData as Product[])
+      ? rawData
       : Array.isArray(prodRes.data)
       ? (prodRes.data as unknown as Product[])
-      : (rawData as any)?.data || []
+      : (rawData as { data?: Product[] })?.data || []
 
     const q = trimmed.toLowerCase()
     // 1. Look for variant match by barcode or sku
@@ -371,6 +420,7 @@ export async function updateOrder(
     notes?: string
     delivery_address?: string
     region?: string
+    seller_id?: string | null
   }
 ): Promise<Order> {
   const response = await apiClient.patch<ApiResponse<Order>>(`/orders/${id}`, payload)
@@ -407,8 +457,8 @@ export async function getVariants(params?: {
   include_inactive?: boolean
   page?: number
   per_page?: number
-}): Promise<ApiResponse<any[]>> {
-  const response = await apiClient.get<ApiResponse<any[]>>('/variants', {
+}): Promise<ApiResponse<ProductVariant[]>> {
+  const response = await apiClient.get<ApiResponse<ProductVariant[]>>('/variants', {
     params,
   })
   return response.data
@@ -420,9 +470,9 @@ export async function getVariants(params?: {
  */
 export async function updateVariant(
   id: string,
-  payload: Record<string, any>
-): Promise<ApiResponse<any>> {
-  const response = await apiClient.patch<ApiResponse<any>>(`/variants/${id}`, payload)
+  payload: Partial<ProductVariant>
+): Promise<ApiResponse<ProductVariant>> {
+  const response = await apiClient.patch<ApiResponse<ProductVariant>>(`/variants/${id}`, payload)
   return response.data
 }
 
@@ -599,8 +649,8 @@ export async function getCustomerDetails(id: string): Promise<ApiResponse<Custom
  * Fetch product categories
  * GET /api/v1/categories
  */
-export async function fetchCategories(): Promise<ApiResponse<any[]>> {
-  const response = await apiClient.get<ApiResponse<any[]>>('/categories')
+export async function fetchCategories(): Promise<ApiResponse<ProductCategory[]>> {
+  const response = await apiClient.get<ApiResponse<ProductCategory[]>>('/categories')
   return response.data
 }
 
@@ -608,8 +658,8 @@ export async function fetchCategories(): Promise<ApiResponse<any[]>> {
  * Create a new product category
  * POST /api/v1/categories
  */
-export async function createCategory(payload: { name: string; code?: string; description?: string }): Promise<ApiResponse<any>> {
-  const response = await apiClient.post<ApiResponse<any>>('/categories', payload)
+export async function createCategory(payload: { name: string; code?: string; description?: string }): Promise<ApiResponse<ProductCategory>> {
+  const response = await apiClient.post<ApiResponse<ProductCategory>>('/categories', payload)
   return response.data
 }
 
@@ -617,8 +667,8 @@ export async function createCategory(payload: { name: string; code?: string; des
  * Update an existing product category
  * PUT /api/v1/categories/:id
  */
-export async function updateCategory(id: string, payload: { name: string; code?: string; description?: string }): Promise<ApiResponse<any>> {
-  const response = await apiClient.put<ApiResponse<any>>(`/categories/${id}`, payload)
+export async function updateCategory(id: string, payload: { name: string; code?: string; description?: string }): Promise<ApiResponse<ProductCategory>> {
+  const response = await apiClient.put<ApiResponse<ProductCategory>>(`/categories/${id}`, payload)
   return response.data
 }
 
@@ -635,8 +685,8 @@ export async function deleteCategory(id: string): Promise<{ success: boolean; me
  * Fetch product attributes and taxonomy
  * GET /api/v1/attributes
  */
-export async function fetchAttributes(): Promise<ApiResponse<any[]>> {
-  const response = await apiClient.get<ApiResponse<any[]>>('/attributes')
+export async function fetchAttributes(): Promise<ApiResponse<AttributeTaxonomy[]>> {
+  const response = await apiClient.get<ApiResponse<AttributeTaxonomy[]>>('/attributes')
   return response.data
 }
 
@@ -644,8 +694,8 @@ export async function fetchAttributes(): Promise<ApiResponse<any[]>> {
  * Create a new product attribute
  * POST /api/v1/attributes
  */
-export async function createAttribute(payload: { name: string; code?: string; values?: string[] }): Promise<ApiResponse<any>> {
-  const response = await apiClient.post<ApiResponse<any>>('/attributes', payload)
+export async function createAttribute(payload: { name: string; code?: string; values?: string[] }): Promise<ApiResponse<AttributeTaxonomy>> {
+  const response = await apiClient.post<ApiResponse<AttributeTaxonomy>>('/attributes', payload)
   return response.data
 }
 
@@ -671,6 +721,7 @@ export async function adjustStock(payload: {
   reason: string
   notes?: string
   adjusted_at?: string
+  client_mutation_id?: string
 }): Promise<ApiResponse<{ variant_id: string; new_quantity: number; difference: number; reason: string }>> {
   const response = await apiClient.post<ApiResponse<{ variant_id: string; new_quantity: number; difference: number; reason: string }>>('/inventory/adjust', payload)
   return response.data
@@ -716,7 +767,7 @@ export async function fetchStockMovements(params?: {
  * Create product catalog entry
  * POST /api/v1/products
  */
-export async function createProduct(payload: any): Promise<ApiResponse<Product>> {
+export async function createProduct(payload: FormData | Record<string, unknown>): Promise<ApiResponse<Product>> {
   const response = await apiClient.post<ApiResponse<Product>>('/products', payload)
   return response.data
 }
@@ -725,7 +776,7 @@ export async function createProduct(payload: any): Promise<ApiResponse<Product>>
  * Update existing product
  * PUT /api/v1/products/:id
  */
-export async function updateProduct(id: string, payload: any): Promise<ApiResponse<Product>> {
+export async function updateProduct(id: string, payload: FormData | Record<string, unknown>): Promise<ApiResponse<Product>> {
   const response = await apiClient.put<ApiResponse<Product>>(`/products/${id}`, payload)
   return response.data
 }
@@ -823,8 +874,8 @@ export async function updateQuotationStatus(
  */
 export async function convertQuotation(
   id: string
-): Promise<ApiResponse<{ quotation: Quotation; items: any[] }>> {
-  const response = await apiClient.post<ApiResponse<{ quotation: Quotation; items: any[] }>>(`/quotations/${id}/convert`)
+): Promise<ApiResponse<{ quotation: Quotation; items: QuotationItem[] }>> {
+  const response = await apiClient.post<ApiResponse<{ quotation: Quotation; items: QuotationItem[] }>>(`/quotations/${id}/convert`)
   return response.data
 }
 
@@ -1067,8 +1118,8 @@ export async function generatePayroll(payload: {
   batch?: boolean
   month: number
   year: number
-}): Promise<ApiResponse<any>> {
-  const response = await apiClient.post<ApiResponse<any>>('/payrolls/generate', payload)
+}): Promise<ApiResponse<Payroll[]>> {
+  const response = await apiClient.post<ApiResponse<Payroll[]>>('/payrolls/generate', payload)
   return response.data
 }
 
@@ -1076,8 +1127,8 @@ export async function generatePayroll(payload: {
  * Update draft payroll manually
  * PUT /api/v1/payrolls/:id
  */
-export async function updatePayroll(id: string, payload: any): Promise<ApiResponse<import('../types').Payroll>> {
-  const response = await apiClient.put<ApiResponse<import('../types').Payroll>>(`/payrolls/${id}`, payload)
+export async function updatePayroll(id: string, payload: Partial<Payroll>): Promise<ApiResponse<Payroll>> {
+  const response = await apiClient.put<ApiResponse<Payroll>>(`/payrolls/${id}`, payload)
   return response.data
 }
 
@@ -1337,4 +1388,67 @@ export async function deleteBankAccount(id: string): Promise<ApiResponse<null>> 
   const response = await apiClient.delete<ApiResponse<null>>(`/bank-accounts/${id}`)
   return response.data
 }
+
+/**
+ * Fetch seller daily settlement summary & breakdown
+ * GET /api/v1/seller-settlements/summary
+ */
+export async function fetchSellerSettlementSummary(
+  date?: string,
+  sellerId?: string
+): Promise<ApiResponse<SellerDailySettlementSummary>> {
+  const response = await apiClient.get<ApiResponse<SellerDailySettlementSummary>>(
+    '/seller-settlements/summary',
+    { params: { date, seller_id: sellerId } }
+  )
+  return response.data
+}
+
+/**
+ * Confirm / sign off on seller daily sales
+ * POST /api/v1/seller-settlements/confirm
+ */
+export async function confirmSellerSettlement(payload: {
+  seller_id?: string
+  confirmed_date: string
+  notes?: string
+}): Promise<ApiResponse<SellerDailySettlementRecord>> {
+  const response = await apiClient.post<ApiResponse<SellerDailySettlementRecord>>(
+    '/seller-settlements/confirm',
+    payload
+  )
+  return response.data
+}
+
+/**
+ * Reassign an order to another seller
+ * POST /api/v1/seller-settlements/reassign-order
+ */
+export async function reassignOrderSeller(payload: {
+  order_id: string
+  new_seller_id: string
+  reason?: string
+}): Promise<ApiResponse<Order>> {
+  const response = await apiClient.post<ApiResponse<Order>>(
+    '/seller-settlements/reassign-order',
+    payload
+  )
+  return response.data
+}
+
+/**
+ * Fetch manager reconciliation summary across all team sellers for a given date
+ * GET /api/v1/seller-settlements/team-daily?date=YYYY-MM-DD
+ */
+export async function fetchTeamDailySettlementSummary(
+  date?: string
+): Promise<ApiResponse<TeamDailySettlementSummary>> {
+  const params = date ? { date } : {}
+  const response = await apiClient.get<ApiResponse<TeamDailySettlementSummary>>(
+    '/seller-settlements/team-daily',
+    { params }
+  )
+  return response.data
+}
+
 

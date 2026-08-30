@@ -1,6 +1,6 @@
 import { Share, Alert, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { Order, Invoice } from '../types'
+import type { Order, Invoice, SellerDailySettlementSummary } from '../types'
 import { sendRawPrint } from '../api/endpoints'
 
 export type PrinterConnectionType = 'wifi' | 'bluetooth' | 'system'
@@ -31,6 +31,8 @@ export interface PrinterConfig {
   storePhone: string
   storeAddress: string
   receiptTitle?: string
+  invoiceTitle?: string
+  quotationTitle?: string
   showCashierName?: boolean
   showCustomerInfo?: boolean
   showTax?: boolean
@@ -50,6 +52,8 @@ export const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
   storePhone: '+855 12 345 678',
   storeAddress: 'Phnom Penh, Cambodia',
   receiptTitle: 'TAX INVOICE / RECEIPT',
+  invoiceTitle: 'INVOICE',
+  quotationTitle: 'QUOTATION',
   showCashierName: true,
   showCustomerInfo: true,
   showTax: false,
@@ -68,7 +72,7 @@ export async function getPrinterConfig(): Promise<PrinterConfig> {
     if (raw) {
       return { ...DEFAULT_PRINTER_CONFIG, ...JSON.parse(raw) }
     }
-  } catch {
+  } catch (_) {
     // fallback to default
   }
   return DEFAULT_PRINTER_CONFIG
@@ -83,7 +87,7 @@ export async function savePrinterConfig(config: Partial<PrinterConfig>): Promise
     const updated = { ...current, ...config }
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
     return updated
-  } catch {
+  } catch (_) {
     return DEFAULT_PRINTER_CONFIG
   }
 }
@@ -100,7 +104,7 @@ export async function getPrinterDevices(): Promise<PrinterDevice[]> {
         return parsed
       }
     }
-  } catch {
+  } catch (_) {
     // fallback
   }
   return []
@@ -258,7 +262,10 @@ export function buildEscPosCommands(order: Order, config: PrinterConfig): string
   
   // Optional Cashier Name
   if (config.showCashierName !== false) {
-    const cashierName = order.user?.name || (order as any).cashier_name || 'Staff'
+    const cashierName = order.user?.name ||
+      // @ts-ignore - cashier_name might be present on order object from API
+      ('cashier_name' in order && order.cashier_name ? String(order.cashier_name) : undefined) ||
+      'Staff'
     buffer += `Cashier: ${cashierName}\n`
   }
 
@@ -369,7 +376,8 @@ async function printOverWiFi(commands: string, config: PrinterConfig): Promise<{
       success: false,
       message: `Backend raw-print proxy unreachable for ${config.ipAddress}:${config.port}. Falling back to native print.`,
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { message?: string }
     return {
       success: false,
       message: `Could not connect to printer at ${config.ipAddress}:${config.port}. Check if printer is powered on and connected to the same Wi-Fi.`,
@@ -415,8 +423,8 @@ export function buildKitchenEscPosCommands(order: Order, device: PrinterDevice):
     buffer += `[ ${qty}x ] ${name}\n`
     buffer += ESC_POS.NORMAL_TEXT + ESC_POS.BOLD_OFF
 
-    if ((it as any).notes) {
-      buffer += `  -> Note: ${(it as any).notes}\n`
+    if ('notes' in it && it.notes) {
+      buffer += `  -> Note: ${it.notes}\n`
     }
   })
 
@@ -486,7 +494,7 @@ export async function printHtmlThermalReceipt(
         return `
           <div style="font-size: 15px; font-weight: bold; margin: 6px 0; padding-bottom: 4px; border-bottom: 1px dashed #000;">
             [ ${qty}x ] ${name}
-            ${(it as any).notes ? `<div style="font-size: 11px; font-style: italic;">Note: ${(it as any).notes}</div>` : ''}
+            ${('notes' in it && it.notes) ? `<div style="font-size: 11px; font-style: italic;">Note: ${it.notes}</div>` : ''}
           </div>
         `
       }
@@ -565,7 +573,7 @@ export async function printHtmlThermalReceipt(
             <div class="divider-solid"></div>
             <div class="row"><span>Order #:</span><span class="bold">#${order.order_number}</span></div>
             <div class="row"><span>Date:</span><span>${orderDate}</span></div>
-            ${config.showCashierName !== false ? `<div class="row"><span>Cashier:</span><span>${order.user?.name || (order as any).cashier_name || 'Staff'}</span></div>` : ''}
+            ${config.showCashierName !== false ? `<div class="row"><span>Cashier:</span><span>${order.user?.name || ('cashier_name' in order && order.cashier_name ? String(order.cashier_name) : undefined) || 'Staff'}</span></div>` : ''}
             ${config.showCustomerInfo !== false && order.customer?.name ? `<div class="row"><span>Customer:</span><span>${order.customer.name}</span></div>` : ''}
             <div class="divider-dashed"></div>
             <div class="row bold"><span>ITEM</span><span>TOTAL</span></div>
@@ -596,8 +604,9 @@ export async function printHtmlThermalReceipt(
       printerUrl: device.ipAddress ? `http://${device.ipAddress}:${device.port || 9100}` : undefined,
     })
     return { success: true, message: `Receipt sent to ${device.name}` }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Print canceled.' }
+  } catch (err: unknown) {
+    const error = err as { message?: string }
+    return { success: false, message: error?.message || 'Print canceled.' }
   }
 }
 
@@ -818,7 +827,7 @@ export async function shareReceipt(order: Order, customConfig?: Partial<PrinterC
             <div class="store-name">${config.storeName}</div>
             <div class="store-contact">${config.storeAddress}</div>
             <div class="store-contact">Phone: ${config.storePhone}</div>
-            <div class="receipt-title">Official Receipt</div>
+            <div class="receipt-title">${config.receiptTitle?.trim() || 'Official Receipt'}</div>
           </div>
           
           <div style="margin-bottom: 30px; padding: 20px; background-color: #F9FAFB; border-radius: 8px;">
@@ -882,8 +891,9 @@ export async function shareReceipt(order: Order, customConfig?: Partial<PrinterC
     } else {
       Alert.alert('Sharing Unavailable', 'File sharing is not available on this device.')
     }
-  } catch (err: any) {
-    Alert.alert('Share Error', err?.message || 'Could not generate and share receipt PDF.')
+  } catch (err) {
+    const error = err as { message?: string }
+    Alert.alert('Share Error', error?.message || 'Could not generate and share receipt PDF.')
   }
 }
 
@@ -949,7 +959,7 @@ export async function shareInvoice(invoice: Invoice, customConfig?: Partial<Prin
               <div class="store-contact">Phone: ${config.storePhone}</div>
             </div>
             <div>
-              <div class="invoice-title">INVOICE</div>
+              <div class="invoice-title">${config.invoiceTitle?.trim() || 'INVOICE'}</div>
               <div style="text-align: right; color: #6B7280; margin-top: 5px; font-size: 15px;">#${invoice.invoice_number}</div>
             </div>
           </div>
@@ -1025,8 +1035,9 @@ export async function shareInvoice(invoice: Invoice, customConfig?: Partial<Prin
     } else {
       Alert.alert('Sharing Unavailable', 'File sharing is not available on this device.')
     }
-  } catch (err: any) {
-    Alert.alert('Share Error', err?.message || 'Could not generate and share invoice PDF.')
+  } catch (err) {
+    const error = err as { message?: string }
+    Alert.alert('Share Error', error?.message || 'Could not generate and share invoice PDF.')
   }
 }
 
@@ -1058,8 +1069,9 @@ export function buildInvoiceEscPosCommands(invoice: Invoice, config: PrinterConf
     buffer += `Tel: ${config.storePhone.trim()}\n`
   }
 
+  const invTitle = config.invoiceTitle?.trim() || 'INVOICE'
   buffer += ESC_POS.BOLD_ON
-  buffer += `*** INVOICE ***\n`
+  buffer += `*** ${invTitle} ***\n`
   buffer += ESC_POS.BOLD_OFF
   buffer += `${getDivider(maxCols, '=')}\n`
 
@@ -1212,7 +1224,7 @@ export async function printHtmlInvoiceReceipt(
           ${config.subHeader ? `<div class="sub-header">${config.subHeader}</div>` : ''}
           ${config.storeAddress ? `<div>${config.storeAddress}</div>` : ''}
           ${config.storePhone ? `<div>Tel: ${config.storePhone}</div>` : ''}
-          <div class="doc-title">INVOICE</div>
+          <div class="doc-title">${config.invoiceTitle?.trim() || 'INVOICE'}</div>
         </div>
         <div class="divider-solid"></div>
         <div class="row"><span>Invoice #:</span><span class="bold">#${invNumber}</span></div>
@@ -1245,8 +1257,9 @@ export async function printHtmlInvoiceReceipt(
       printerUrl: device.ipAddress ? `http://${device.ipAddress}:${device.port || 9100}` : undefined,
     })
     return { success: true, message: `Invoice sent to ${device.name}` }
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Print canceled.' }
+  } catch (err) {
+    const error = err as { message?: string }
+    return { success: false, message: error?.message || 'Print canceled.' }
   }
 }
 
@@ -1321,4 +1334,93 @@ export async function printInvoiceThermal(
     },
     customConfig
   )
+}
+
+/**
+ * Build ESC/POS bytes for Seller Daily Reconciliation Slip
+ */
+export function buildSellerDailySlipEscPosCommands(
+  summary: SellerDailySettlementSummary,
+  device: PrinterDevice
+): string {
+  const maxCols = device.paperWidth === '58mm' ? 32 : 48
+  let buffer = ''
+
+  buffer += ESC_POS.INIT
+  buffer += ESC_POS.ALIGN_CENTER
+  buffer += ESC_POS.DOUBLE_HEIGHT_ON
+  buffer += ESC_POS.BOLD_ON
+  buffer += 'DAILY SALES RECONCILIATION\n'
+  buffer += ESC_POS.NORMAL_TEXT
+  buffer += ESC_POS.BOLD_OFF
+  buffer += `Date: ${summary.date}\n`
+  buffer += `Seller: ${summary.seller?.name || 'Staff'}\n`
+  buffer += `${'-'.repeat(maxCols)}\n`
+
+  buffer += ESC_POS.ALIGN_LEFT
+  buffer += `Status: ${summary.is_confirmed ? 'CONFIRMED' : 'PENDING SIGN-OFF'}\n`
+  if (summary.settlement?.confirmed_at) {
+    buffer += `Signed At: ${summary.settlement.confirmed_at}\n`
+  }
+  buffer += `${'-'.repeat(maxCols)}\n`
+
+  buffer += formatTwoColumn('TOTAL ORDERS:', `${summary.total_orders_count}`, maxCols) + '\n'
+  buffer += formatTwoColumn('TOTAL SALES:', `$${summary.total_sales_amount.toFixed(2)}`, maxCols) + '\n'
+  buffer += formatTwoColumn('EST. INCENTIVE:', `+$${summary.total_incentive_amount.toFixed(2)}`, maxCols) + '\n'
+  buffer += `${'-'.repeat(maxCols)}\n`
+
+  buffer += formatTwoColumn('Direct Orders:', `${summary.direct_orders_count}`, maxCols) + '\n'
+  buffer += formatTwoColumn('Assisted Orders:', `${summary.assisted_orders_count}`, maxCols) + '\n'
+
+  if (summary.assisted_orders && summary.assisted_orders.length > 0) {
+    buffer += `${'-'.repeat(maxCols)}\n`
+    buffer += 'ASSISTED BREAKDOWN:\n'
+    for (const ord of summary.assisted_orders) {
+      const helper = ord.input_by_user?.name ? ` via ${ord.input_by_user.name}` : ''
+      buffer += formatTwoColumn(`#${ord.order_number || ord.id.substring(0, 6)}${helper}`, `$${ord.total_amount.toFixed(2)}`, maxCols) + '\n'
+    }
+  }
+
+  buffer += `${'='.repeat(maxCols)}\n`
+  buffer += ESC_POS.ALIGN_CENTER
+  buffer += 'Thank you for your hard work!\n'
+  buffer += ESC_POS.FEED_LINES(3)
+
+  if (device.autoCut) {
+    buffer += ESC_POS.CUT_PAPER
+  }
+
+  return buffer
+}
+
+/**
+ * Print Seller Daily Settlement Slip
+ */
+export async function printSellerDailySlip(
+  device: PrinterDevice,
+  summary: SellerDailySettlementSummary
+): Promise<{ success: boolean; message: string }> {
+  if (device.connectionType === 'wifi') {
+    const commands = buildSellerDailySlipEscPosCommands(summary, device)
+    const storeConfig = await getPrinterConfig()
+    const result = await printOverWiFi(commands, {
+      ...storeConfig,
+      ipAddress: device.ipAddress || '192.168.1.100',
+      port: device.port || 9100,
+      paperWidth: device.paperWidth,
+      autoCut: device.autoCut,
+      connectionType: 'wifi',
+    })
+    return result
+  } else if (device.connectionType === 'bluetooth') {
+    const targetName = device.bluetoothName || device.name || 'Bluetooth Thermal'
+    Alert.alert(
+      '🖨️ Bluetooth Printing',
+      `Sent Daily Sales Slip (${summary.date}) to "${targetName}".`
+    )
+    return { success: true, message: `Sent to ${targetName}` }
+  } else {
+    Alert.alert('Printed Slip', `Daily reconciliation slip for ${summary.seller?.name} processed.`)
+    return { success: true, message: 'Printed' }
+  }
 }

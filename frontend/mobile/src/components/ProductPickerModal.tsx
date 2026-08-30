@@ -20,7 +20,7 @@ import { getProducts } from '../api/endpoints'
 import { SearchBar } from './SearchBar'
 import { CopyableBadge } from './CopyableBadge'
 import { matchSearch } from '../utils/searchHelper'
-import type { Product, ProductVariant, ScannedVariant } from '../types'
+import type { Product, ProductVariant, ScannedVariant, ScannedAttributeValue } from '../types'
 
 export interface SelectedProductItem {
   product: Product
@@ -176,7 +176,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
       const variantSkus = p.variants?.map((v) => v.sku || '') || []
       const variantBarcodes = p.variants?.map((v) => v.barcode || '') || []
       const variantAttrValues = p.variants?.flatMap((v) =>
-        v.attribute_values?.map((av) => av.value_name || (av as any).value || av.attribute?.name || '') || []
+        v.attribute_values?.map((av: ScannedAttributeValue) => av.value_name || av.attribute?.name || '') || []
       ) || []
 
       return matchSearch(
@@ -232,7 +232,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
       const cost = (v as ProductVariant)?.cost_price_override || prod.purchase_price || '0'
       return parseFloat(String(cost)) || 0
     }
-    const sell = v?.selling_price_override || (v as any)?.selling_price || prod.selling_price || '0'
+    const sell = v?.selling_price_override || v?.selling_price || prod.selling_price || '0'
     return parseFloat(String(sell)) || 0
   }
 
@@ -246,7 +246,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
       ? (v.quantity_on_hand ?? 0)
       : (prod.variants && prod.variants.length > 0
           ? prod.variants.reduce((sum, item) => sum + (item.quantity_on_hand ?? 0), 0)
-          : ((prod as any).quantity_on_hand ?? 0))
+          : ((prod as Product & { quantity_on_hand?: number }).quantity_on_hand ?? 0))
     const shouldLimitStock = priceType === 'selling' && !allowExceedStock
 
     setSelectedMap((prev) => {
@@ -278,7 +278,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
       ? (v.quantity_on_hand ?? 0)
       : (prod.variants && prod.variants.length > 0
           ? prod.variants.reduce((sum, item) => sum + (item.quantity_on_hand ?? 0), 0)
-          : ((prod as any).quantity_on_hand ?? 0))
+          : ((prod as Product & { quantity_on_hand?: number }).quantity_on_hand ?? 0))
     const shouldLimitStock = priceType === 'selling' && !allowExceedStock
 
     setSelectedMap((prev) => {
@@ -298,7 +298,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
       ? (v.quantity_on_hand ?? 0)
       : (prod.variants && prod.variants.length > 0
           ? prod.variants.reduce((sum, item) => sum + (item.quantity_on_hand ?? 0), 0)
-          : ((prod as any).quantity_on_hand ?? 0))
+          : ((prod as Product & { quantity_on_hand?: number }).quantity_on_hand ?? 0))
     const shouldLimitStock = priceType === 'selling' && !allowExceedStock
 
     if (shouldLimitStock && stock <= 0) {

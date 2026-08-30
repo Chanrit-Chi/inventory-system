@@ -23,6 +23,7 @@ export const TAB_PERMISSION: Partial<Record<TabType, string>> = {
   'delivery-zones': 'delivery:view',
   settings: 'settings:*',
   payroll: 'payroll:view',
+  'daily-settlements': 'reports:view',
 }
 
 /**

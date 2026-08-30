@@ -2,6 +2,31 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useProductStore } from '@/stores/productStore'
+import {
+  ArrowLeft,
+  Check,
+  Package,
+  Layers,
+  DollarSign,
+  AlertCircle,
+  TrendingUp,
+  Save,
+} from 'lucide-vue-next'
+import {
+  Button,
+  Badge,
+  Input,
+  Switch,
+  StatCard,
+  Card,
+  Alert,
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@/components/ui'
 
 const route = useRoute()
 const productStore = useProductStore()
@@ -117,9 +142,9 @@ function fmtMoney(num: number | string | undefined | null): string {
 }
 
 function stockBadge(qty: number, reorder: number) {
-  if (qty === 0) return 'badge--red'
-  if (qty <= reorder) return 'badge--yellow'
-  return 'badge--green'
+  if (qty === 0) return 'destructive' as const
+  if (qty <= reorder) return 'warning' as const
+  return 'success' as const
 }
 
 function stockLabel(qty: number, reorder: number) {
@@ -134,159 +159,146 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-col gap-24" style="max-width: 1080px;">
+  <div class="flex flex-col gap-6 max-w-5xl mx-auto w-full">
     <!-- Header & Navigation -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-12">
-        <RouterLink to="/products" class="btn btn--ghost btn--sm">
-          ← Back to Catalog
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <RouterLink to="/products">
+          <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs">
+            <ArrowLeft :size="14" />
+            <span>Back to Catalog</span>
+          </Button>
         </RouterLink>
         <div>
-          <h1 class="page-title" style="margin: 0;">
-            Edit: {{ productStore.selectedProduct?.name || 'Loading Product…' }}
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">
+            Edit: {{ productStore.selectedProduct?.name || 'Product' }}
           </h1>
-          <span class="text-xs text-muted">ID: {{ productId }}</span>
+          <span class="text-xs font-mono text-muted-foreground">ID: {{ productId }}</span>
         </div>
       </div>
 
-      <div v-if="productStore.selectedProduct" class="flex items-center gap-8">
-        <span class="badge" :class="form.is_active ? 'badge--green' : 'badge--neutral'">
+      <div v-if="productStore.selectedProduct" class="flex items-center gap-2">
+        <Badge :variant="form.is_active ? 'success' : 'neutral'" class="text-xs px-2.5 py-1">
           {{ form.is_active ? '● Active in POS' : '○ Inactive' }}
-        </span>
+        </Badge>
       </div>
     </div>
 
     <!-- Alert Notifications -->
-    <div v-if="submitError || productStore.error" class="alert alert--error">
-      <span>⚠️ {{ submitError || productStore.error }}</span>
-    </div>
+    <Alert v-if="submitError || productStore.error" variant="error">
+      <div class="flex items-center gap-2">
+        <AlertCircle :size="16" class="flex-shrink-0" />
+        <span>{{ submitError || productStore.error }}</span>
+      </div>
+    </Alert>
 
-    <div v-if="successMessage" class="alert alert--success">
-      <span>✓ {{ successMessage }}</span>
-    </div>
+    <Alert v-if="successMessage" variant="success">
+      <div class="flex items-center gap-2">
+        <Check :size="16" class="flex-shrink-0" />
+        <span>{{ successMessage }}</span>
+      </div>
+    </Alert>
 
-    <div v-if="productStore.loading" class="card">
-      <div v-for="i in 4" :key="i" class="skeleton-row"></div>
+    <div v-if="productStore.loading" class="rounded-xl border border-border bg-card p-6 shadow-xs space-y-3">
+      <div v-for="i in 4" :key="i" class="h-12 rounded-md bg-muted/50 animate-pulse" />
     </div>
 
     <template v-else-if="productStore.selectedProduct">
       <!-- KPI Stats Banner for Product -->
-      <div class="grid-3 gap-16">
-        <div class="stat-card">
-          <div class="stat-card-header">
-            <div class="icon-badge icon-badge--primary">
-              <span>🧬</span>
-            </div>
-            <span class="badge badge--blue">Variants</span>
-          </div>
-          <div class="stat-card-body">
-            <span class="stat-card-value tabular-nums">{{ productStore.selectedProduct.variants?.length || 0 }}</span>
-            <span class="stat-card-label">Active SKUs</span>
-            <span class="stat-card-sub">Variant matrix combinations</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-card-header">
-            <div class="icon-badge icon-badge--success">
-              <span>📦</span>
-            </div>
-            <span class="badge badge--green">Live Stock</span>
-          </div>
-          <div class="stat-card-body">
-            <span class="stat-card-value tabular-nums" style="color: var(--status-success);">
-              {{ totalStockOnHand }}
-            </span>
-            <span class="stat-card-label">Total Units on Hand</span>
-            <span class="stat-card-sub">Across all variant SKUs</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-card-header">
-            <div class="icon-badge icon-badge--warning">
-              <span>💵</span>
-            </div>
-            <span class="badge badge--neutral">Valuation</span>
-          </div>
-          <div class="stat-card-body">
-            <span class="stat-card-value tabular-nums" style="color: var(--action-primary);">
-              {{ fmtMoney(totalStockValue) }}
-            </span>
-            <span class="stat-card-label">Inventory Retail Value</span>
-            <span class="stat-card-sub">Total on-shelf stock value</span>
-          </div>
-        </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          label="Active SKUs"
+          :value="productStore.selectedProduct.variants?.length || 0"
+          sub="Variant matrix combinations"
+          :icon="Layers"
+          icon-variant="primary"
+        />
+        <StatCard
+          label="Total Stock on Hand"
+          :value="totalStockOnHand"
+          sub="Across all variations"
+          :icon="Package"
+          icon-variant="success"
+        />
+        <StatCard
+          label="Retail Valuation"
+          :value="fmtMoney(totalStockValue)"
+          sub="Total on-shelf inventory"
+          :icon="DollarSign"
+          icon-variant="warning"
+        />
       </div>
 
       <!-- Edit Form Card -->
-      <section class="card flex-col gap-16">
-        <div class="flex items-center justify-between">
-          <h2 class="font-bold text-lg">Base Product Details & Pricing</h2>
-          <span class="text-xs text-muted">Last updated in database</span>
+      <Card class="p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <h2 class="font-display font-bold text-base text-foreground">Base Product Details & Pricing</h2>
+          <span class="text-[11px] text-muted-foreground">Syncs with POS terminal</span>
         </div>
 
-        <div class="flex-col gap-16">
-          <div class="form-group">
-            <label class="form-label">Product Name *</label>
-            <input
+        <div class="flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Name *</label>
+            <Input
               id="product-edit-name"
               v-model="form.name"
               type="text"
-              :class="{ 'input--error': productStore.fieldErrors?.name }"
+              class="h-9 bg-surface text-sm"
+              :error="!!productStore.fieldErrors?.name"
             />
-            <span v-if="productStore.fieldErrors?.name" class="form-error-text">
+            <span v-if="productStore.fieldErrors?.name" class="text-xs text-destructive mt-1 block">
               {{ productStore.fieldErrors.name[0] }}
             </span>
           </div>
 
-          <div class="grid-2 gap-16">
-            <div class="form-group">
-              <label class="form-label">Master Barcode</label>
-              <input
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Master Barcode</label>
+              <Input
                 id="product-edit-barcode"
                 v-model="form.barcode"
                 type="text"
                 placeholder="e.g. 8859123456789"
-                :class="{ 'input--error': productStore.fieldErrors?.barcode }"
+                class="h-9 bg-surface text-sm font-mono"
               />
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Default Reorder Level</label>
-              <input
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Default Reorder Level</label>
+              <Input
                 id="product-edit-reorder"
                 v-model="form.default_reorder_level"
                 type="number"
                 min="0"
+                class="h-9 bg-surface text-sm font-mono"
               />
             </div>
           </div>
 
-          <div class="grid-2 gap-16">
-            <div class="form-group">
-              <label class="form-label">Purchase Cost ($) *</label>
-              <input
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Cost Price ($) *</label>
+              <Input
                 id="product-edit-purchase-price"
                 v-model="form.purchase_price"
                 type="number"
                 step="0.01"
                 min="0"
-                class="tabular-nums"
-                :class="{ 'input--error': productStore.fieldErrors?.purchase_price }"
+                class="h-9 bg-surface text-sm font-mono"
+                :error="!!productStore.fieldErrors?.purchase_price"
               />
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Selling Price ($) *</label>
-              <input
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Selling Price ($) *</label>
+              <Input
                 id="product-edit-selling-price"
                 v-model="form.selling_price"
                 type="number"
                 step="0.01"
                 min="0.01"
-                class="tabular-nums"
-                :class="{ 'input--error': productStore.fieldErrors?.selling_price }"
+                class="h-9 bg-surface text-sm font-mono"
+                :error="!!productStore.fieldErrors?.selling_price"
               />
             </div>
           </div>
@@ -294,129 +306,142 @@ onMounted(() => {
           <!-- Profit Margin Gauge Banner -->
           <div
             v-if="form.selling_price && form.purchase_price"
-            class="flex items-center justify-between"
-            style="padding: 10px 14px; background-color: var(--surface-alt); border-radius: var(--radius-md); border: 1px solid var(--border-color);"
+            class="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-surface-subtle/80 text-xs"
           >
-            <span class="text-xs text-muted font-semibold">Unit Gross Profit Margin:</span>
-            <div class="flex items-center gap-8">
-              <span class="font-bold tabular-nums" :style="{ color: grossProfit >= 0 ? 'var(--status-success)' : 'var(--status-error)' }">
+            <div class="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <TrendingUp :size="14" class="text-primary" />
+              <span>Gross Margin:</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold" :class="grossProfit >= 0 ? 'text-success' : 'text-destructive'">
                 {{ fmtMoney(grossProfit) }} / unit
               </span>
-              <span class="badge" :class="grossProfit >= 0 ? 'badge--green' : 'badge--red'">
+              <Badge :variant="grossProfit >= 0 ? 'success' : 'destructive'" class="text-[10px] font-mono px-1.5 py-0">
                 {{ grossMarginPercent }}% Margin
-              </span>
+              </Badge>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Image URL</label>
-            <input
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Image URL</label>
+            <Input
               id="product-edit-image"
               v-model="form.image_url"
               type="url"
               placeholder="https://example.com/image.jpg"
+              class="h-9 bg-surface text-sm"
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Description</label>
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Description</label>
             <textarea
               id="product-edit-description"
               v-model="form.description"
               rows="3"
+              class="w-full px-3 py-2 text-sm bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
             ></textarea>
           </div>
 
-          <div class="flex items-center gap-12 pt-8" style="border-top: 1px solid var(--border-subtle);">
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="form.is_active" />
-              <span class="toggle-slider"></span>
-            </label>
+          <div class="flex items-center justify-between pt-3 border-t border-border/60">
             <div>
-              <span class="font-semibold text-sm block">Product Active in POS & Online Catalog</span>
-              <span class="text-xs text-muted">Inactive products cannot be sold through register checkouts</span>
+              <span class="text-xs font-semibold text-foreground block">Active in POS & Catalog</span>
+              <span class="text-[11px] text-muted-foreground">Inactive products cannot be sold at register checkout</span>
             </div>
+            <Switch
+              :checked="form.is_active"
+              @update:checked="(val) => form.is_active = val"
+            />
           </div>
         </div>
 
-        <div class="flex items-center justify-end gap-12 mt-16 pt-16" style="border-top: 1px solid var(--border-color);">
-          <RouterLink to="/products" class="btn btn--ghost">
-            Cancel
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-border/60">
+          <RouterLink to="/products">
+            <Button variant="outline" size="sm" class="h-9 px-4 text-xs">
+              Cancel
+            </Button>
           </RouterLink>
-          <button
+          <Button
             id="btn-save-product"
-            class="btn btn--primary"
+            variant="primary"
+            size="sm"
+            class="h-9 px-5 text-xs gap-1.5"
             :disabled="productStore.mutating"
             @click="save"
           >
-            <span v-if="productStore.mutating" class="spinner"></span>
-            {{ productStore.mutating ? 'Saving Changes…' : '✓ Save Changes' }}
-          </button>
+            <span v-if="productStore.mutating" class="animate-spin mr-1">⏳</span>
+            <Save v-else :size="14" />
+            <span>{{ productStore.mutating ? 'Saving Changes…' : 'Save Changes' }}</span>
+          </Button>
         </div>
-      </section>
+      </Card>
 
       <!-- Variants & Live Stock Table -->
-      <section class="card" style="padding: 0; overflow: hidden;">
-        <div class="flex items-center justify-between" style="padding: 18px 24px; border-bottom: 1px solid var(--border-color);">
+      <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+        <div class="p-4 border-b border-border bg-surface-subtle/40 flex items-center justify-between">
           <div>
-            <h2 class="font-bold text-lg">
-              Variant Inventory Matrix
-              <span class="badge badge--blue tabular-nums" style="margin-left: 8px;">
+            <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+              <span>Variant Inventory Matrix</span>
+              <Badge variant="info" class="font-mono text-xs">
                 {{ productStore.selectedProduct.variants?.length || 0 }} SKUs
-              </span>
+              </Badge>
             </h2>
-            <p class="text-muted text-xs mt-2">
-              Individual SKUs, barcodes, and live stock levels for each variation.
+            <p class="text-[11px] text-muted-foreground mt-0.5">
+              Individual barcodes, stock-on-hand, and reorder levels for each variation.
             </p>
           </div>
         </div>
 
-        <div v-if="!productStore.selectedProduct.variants || productStore.selectedProduct.variants.length === 0" class="empty-state" style="padding: 32px 0;">
-          <p class="text-muted">No variants associated with this product.</p>
+        <div v-if="!productStore.selectedProduct.variants || productStore.selectedProduct.variants.length === 0" class="p-8 text-center text-muted-foreground text-xs">
+          No variants associated with this product.
         </div>
 
-        <div v-else class="table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-          <table>
-            <thead>
-              <tr>
-                <th>Variant SKU</th>
-                <th>Barcode</th>
-                <th>Cost Price</th>
-                <th>Selling Price</th>
-                <th>Stock On Hand</th>
-                <th>Reorder Level</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="v in productStore.selectedProduct.variants" :key="v.id">
-                <td>
-                  <code class="tabular-nums font-semibold" style="font-size: 13px; color: var(--action-primary);">
-                    {{ v.sku }}
-                  </code>
-                </td>
-                <td>
-                  <code v-if="v.barcode" class="tabular-nums text-xs" style="background-color: var(--surface-alt); padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        <div v-else class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="bg-muted/40">
+                <TableHead>Variant SKU</TableHead>
+                <TableHead>Barcode</TableHead>
+                <TableHead>Cost</TableHead>
+                <TableHead>Selling Price</TableHead>
+                <TableHead>Stock on Hand</TableHead>
+                <TableHead>Reorder Level</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="v in productStore.selectedProduct.variants" :key="v.id" class="hover:bg-surface-subtle/80 transition-colors">
+                <TableCell class="font-mono text-xs font-semibold text-primary">
+                  {{ v.sku }}
+                </TableCell>
+                <TableCell class="font-mono text-xs">
+                  <span v-if="v.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
                     {{ v.barcode }}
-                  </code>
-                  <span v-else class="text-muted text-xs">—</span>
-                </td>
-                <td class="tabular-nums text-muted">{{ fmtMoney(v.cost_price) }}</td>
-                <td class="tabular-nums font-bold" style="color: var(--action-primary);">{{ fmtMoney(v.selling_price) }}</td>
-                <td class="tabular-nums font-bold" style="font-size: 14.5px;">
-                  {{ v.quantity_on_hand }}
-                </td>
-                <td class="tabular-nums text-muted">{{ v.reorder_level }} units</td>
-                <td>
-                  <span class="badge" :class="stockBadge(v.quantity_on_hand, v.reorder_level)">
-                    {{ stockLabel(v.quantity_on_hand, v.reorder_level) }}
                   </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <span v-else class="text-muted-foreground">—</span>
+                </TableCell>
+                <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                  {{ fmtMoney(v.cost_price) }}
+                </TableCell>
+                <TableCell class="font-mono text-xs font-bold text-foreground tabular-nums">
+                  {{ fmtMoney(v.selling_price) }}
+                </TableCell>
+                <TableCell class="font-mono text-sm font-bold text-foreground tabular-nums">
+                  {{ v.quantity_on_hand }}
+                </TableCell>
+                <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+                  {{ v.reorder_level }} units
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="stockBadge(v.quantity_on_hand, v.reorder_level)" class="text-[11px] px-2 py-0.5">
+                    {{ stockLabel(v.quantity_on_hand, v.reorder_level) }}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
-      </section>
+      </div>
     </template>
   </div>
 </template>

@@ -53,12 +53,12 @@ export function usePermissionsList() {
 /**
  * Query for staff performance analytics
  */
-export function useStaffPerformanceQuery(userId: string | null | undefined, params?: Record<string, any>) {
+export function useStaffPerformanceQuery(userId: string | null | undefined, params?: Record<string, unknown>) {
   return useQuery({
     queryKey: queryKeys.staff.performance({ userId, ...params }),
     queryFn: async () => {
       if (!userId) return null
-      const res = await fetchStaffPerformance(userId, params as any)
+      const res = await fetchStaffPerformance(userId, params)
       return res.data
     },
     enabled: Boolean(userId),
@@ -69,11 +69,11 @@ export function useStaffPerformanceQuery(userId: string | null | undefined, para
 /**
  * Query for real-time analytics report
  */
-export function useAnalyticsReportQuery(params?: Record<string, any>) {
+export function useAnalyticsReportQuery(params?: Record<string, unknown>) {
   return useQuery<AnalyticsReportData>({
     queryKey: queryKeys.reports.analytics(params),
     queryFn: async () => {
-      const res = await fetchAnalyticsReport(params as any)
+      const res = await fetchAnalyticsReport(params)
       return res.data
     },
     staleTime: 1000 * 60 * 2,

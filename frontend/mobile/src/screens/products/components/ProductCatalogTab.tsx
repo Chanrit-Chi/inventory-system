@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
+  LayoutChangeEvent,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
@@ -34,8 +37,8 @@ interface ProductCatalogTabProps {
   loadProducts?: () => void
   headerTranslateY: Animated.AnimatedInterpolation<number>
   headerOpacity: Animated.AnimatedInterpolation<number>
-  onLayoutHeader: (e: any) => void
-  onScroll: (...args: any[]) => void
+  onLayoutHeader: (e: LayoutChangeEvent) => void
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
   headerHeight: number
   handleOpenCreateProduct: () => void
   handleOpenProductDetail: (product: Product) => void

@@ -4,6 +4,7 @@ import { checkoutOrder, adjustStock, restockInventory, updateOrderStatus } from 
 import type { CheckoutPayload, OfflineMutation, OfflineMutationPayload, Order } from '../types'
 
 const QUEUE_STORAGE_KEY = '@kc_inventory_offline_queue'
+const MAX_RETRY_ATTEMPTS = 3
 
 /**
  * Calculates exponential backoff delay in ms based on retry attempt:
@@ -64,7 +65,8 @@ export function useOfflineQueue() {
       id = payload.data.client_mutation_id
       endpoint = '/inventory/restock'
     } else {
-      id = `status_${payload.data.orderId}_${Date.now()}`
+      // Idempotent key based on orderId + status (or client_mutation_id)
+      id = payload.data.client_mutation_id || `status_${payload.data.orderId}_${payload.data.status}`
       endpoint = `/orders/${payload.data.orderId}/status`
     }
 
@@ -93,7 +95,17 @@ export function useOfflineQueue() {
    * Enqueue Stock Adjustment
    */
   const enqueueStockAdjustment = useCallback(
-    (data: { variant_id: string; type: string; quantity: number; reason: string; client_mutation_id: string }) => {
+    (data: {
+      variant_id: string
+      type: string
+      quantity: number
+      current_quantity?: number
+      difference?: number
+      reason: string
+      notes?: string
+      adjusted_at?: string
+      client_mutation_id: string
+    }) => {
       return enqueueMutation({ type: 'STOCK_ADJUSTMENT', data })
     },
     [enqueueMutation]
@@ -118,8 +130,8 @@ export function useOfflineQueue() {
    * Enqueue Order Status Update
    */
   const enqueueStatusUpdate = useCallback(
-    (orderId: string, status: string) => {
-      return enqueueMutation({ type: 'UPDATE_ORDER_STATUS', data: { orderId, status } })
+    (orderId: string, status: string, client_mutation_id?: string) => {
+      return enqueueMutation({ type: 'UPDATE_ORDER_STATUS', data: { orderId, status, client_mutation_id } })
     },
     [enqueueMutation]
   )
@@ -155,7 +167,12 @@ export function useOfflineQueue() {
           await adjustStock({
             variant_id: payload.data.variant_id,
             new_quantity: payload.data.quantity,
+            current_quantity: payload.data.current_quantity,
+            difference: payload.data.difference,
             reason: payload.data.reason,
+            notes: payload.data.notes,
+            adjusted_at: payload.data.adjusted_at,
+            client_mutation_id: payload.data.client_mutation_id,
           })
         } else if (payload.type === 'STOCK_IN') {
           await restockInventory({
@@ -172,12 +189,18 @@ export function useOfflineQueue() {
         }
       } catch (err: unknown) {
         failedCount++
-        remainingQueue.push({
-          ...mutation,
-          retryCount: mutation.retryCount + 1,
-          status: 'failed',
-          error: err instanceof Error ? err.message : 'Sync error',
-        })
+        const nextRetry = mutation.retryCount + 1
+        // Only keep in retry queue if under MAX_RETRY_ATTEMPTS
+        if (nextRetry < MAX_RETRY_ATTEMPTS) {
+          remainingQueue.push({
+            ...mutation,
+            retryCount: nextRetry,
+            status: 'failed',
+            error: err instanceof Error ? err.message : 'Sync error',
+          })
+        } else {
+          console.warn(`[useOfflineQueue] Mutation ${mutation.id} exceeded max retries (${MAX_RETRY_ATTEMPTS}). Dropping from active queue.`)
+        }
       }
     }
 

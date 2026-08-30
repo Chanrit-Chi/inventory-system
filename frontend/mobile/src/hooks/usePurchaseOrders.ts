@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { restockInventory } from '../api/endpoints'
+import { queryClient } from '../api/queryClient'
+import { queryKeys } from '../api/queryKeys'
 import type { PurchaseOrder, PurchaseOrderStatus } from '../types'
 
 const PO_STORAGE_KEY = '@omnipos_purchase_orders_v2'
@@ -56,7 +59,42 @@ export function usePurchaseOrders() {
   )
 
   const markPoReceived = useCallback(
-    (poId: string) => {
+    async (poId: string) => {
+      const targetPo = purchaseOrders.find((p) => p.id === poId)
+      if (targetPo && targetPo.status === 'RECEIVED') {
+        return { success: false, reason: 'already_received', totalUnits: 0 }
+      }
+
+      // Restock items into inventory if items exist
+      let totalUnits = 0
+      if (targetPo && targetPo.items && targetPo.items.length > 0) {
+        const restockItems = targetPo.items
+          .filter((it) => it.variantId && it.quantity > 0)
+          .map((it) => ({
+            variant_id: it.variantId,
+            quantity: it.quantity,
+            unit_cost: it.unitCost || 0,
+          }))
+
+        totalUnits = restockItems.reduce((sum, it) => sum + it.quantity, 0)
+
+        if (restockItems.length > 0) {
+          try {
+            await restockInventory({
+              items: restockItems,
+              notes: `PO Received: ${targetPo.poNumber || targetPo.id}`,
+            })
+            await Promise.allSettled([
+              queryClient.invalidateQueries({ queryKey: queryKeys.products.all }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
+            ])
+          } catch (err: unknown) {
+            console.warn('[usePurchaseOrders] Restock API error, PO status still updated:', err)
+          }
+        }
+      }
+
       setPurchaseOrders((prev) => {
         const next = prev.map((po) =>
           po.id === poId ? { ...po, status: 'RECEIVED' as PurchaseOrderStatus } : po
@@ -64,8 +102,10 @@ export function usePurchaseOrders() {
         savePOs(next)
         return next
       })
+
+      return { success: true, totalUnits }
     },
-    [savePOs]
+    [purchaseOrders, savePOs]
   )
 
   const updatePoStatus = useCallback(

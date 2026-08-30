@@ -159,10 +159,7 @@ export function CheckoutStep3Summary({
               Delivery ({selectedDeliveryZone.name})
             </Text>
             <Text style={styles.summaryValue}>
-              $
-              {(
-                parseFloat(String(selectedDeliveryZone.cost || '0')) || 0
-              ).toFixed(2)}
+              ${summaryDeliveryCost.toFixed(2)}
             </Text>
           </View>
         ) : null}

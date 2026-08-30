@@ -1,4 +1,5 @@
 import { usePermissions } from '../hooks/usePermissions'
+import { useToast } from '../context/ToastContext'
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
@@ -19,6 +20,8 @@ import {
 } from '../api/endpoints'
 import type {
   Product,
+  ProductVariant,
+  ScannedVariant,
   PurchaseOrder,
   TabType,
   ProductCategory,
@@ -41,8 +44,8 @@ import { ProductFormModal } from './products/components/ProductFormModal'
 
 export interface ProductsScreenProps {
   onNavigate: (tab: TabType) => void
-  onOpenStockIn?: (product?: Product | null, variant?: any) => void
-  onOpenStockAdjustment?: (product?: Product | null, variant?: any) => void
+  onOpenStockIn?: (product?: Product | null, variant?: ProductVariant | ScannedVariant | null) => void
+  onOpenStockAdjustment?: (product?: Product | null, variant?: ProductVariant | ScannedVariant | null) => void
   onOpenPurchaseOrder?: (opts?: { mode?: 'list' | 'create'; supplierId?: string }) => void
   purchaseOrders?: PurchaseOrder[]
   onAddPO?: (po: PurchaseOrder) => void
@@ -60,6 +63,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   onMarkPoReceived,
   initialSubTab,
 }) => {
+  const { showToast } = useToast()
   const { can } = usePermissions()
   const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'movements' | 'purchaseOrders'>(() => {
     if (initialSubTab) return initialSubTab
@@ -215,9 +219,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
     try {
       await updateProduct(prod.id, { is_active: newActive })
-      Alert.alert(
-        newActive ? 'Product Activated' : 'Product Deactivated',
-        `"${prod.name}" is now ${newActive ? 'active' : 'hidden from sale'}${updatedVariants.length > 0 ? ' (all variants included).' : '.'}`
+      showToast(
+        `"${prod.name}" is now ${newActive ? 'active' : 'hidden from sale'}.`,
+        'info'
       )
     } catch (err) {
       console.warn('Product status update API call failed, rolling back:', prod.id, err)
@@ -226,7 +230,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       if (detailProduct?.id === prod.id) {
         setDetailProduct(previousProd)
       }
-      Alert.alert('Update Failed', 'Could not update product status. Reverted changes.')
+      showToast('Could not update product status.', 'error')
     }
   }
 
@@ -252,9 +256,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
     try {
       await updateProduct(prod.id, { variants: [{ id: variantId, is_active: newActive }] })
-      Alert.alert(
-        newActive ? 'Variant Activated' : 'Variant Deactivated',
-        `"${displayName}" is now ${newActive ? 'available for sale.' : 'hidden from sale.'}`
+      showToast(
+        `"${displayName}" is now ${newActive ? 'available for sale.' : 'hidden from sale.'}`,
+        'info'
       )
     } catch (err) {
       console.warn('Variant status update API call failed, rolling back:', variantId, err)
@@ -263,7 +267,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       if (detailProduct?.id === prod.id) {
         setDetailProduct(previousProd)
       }
-      Alert.alert('Update Failed', 'Could not update variant status. Reverted changes.')
+      showToast('Could not update variant status.', 'error')
     }
   }
 
@@ -286,12 +290,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       setDetailProduct(null)
       const msg = (res?.message || '').toLowerCase()
       if (msg.includes('deactivat')) {
-        Alert.alert('Product Deactivated', `"${prod.name}" has existing records and was deactivated instead of deleted.`)
+        showToast(`"${prod.name}" has existing records and was deactivated.`, 'info')
       } else {
-        Alert.alert('Product Deleted', `"${prod.name}" was deleted successfully.`)
+        showToast(`"${prod.name}" was deleted successfully.`, 'success')
       }
-    } catch (err: any) {
-      const raw = String(err?.message || '').toLowerCase()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err || '')
+      const raw = errorMessage.toLowerCase()
       const looksLinked = ['constraint', 'linked', 'associated', 'in use', 'foreign', 'reference', 'record', 'history'].some((k) =>
         raw.includes(k)
       )
@@ -302,12 +307,12 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           const updated: Product = { ...prod, is_active: false, variants: updatedVariants }
           setProducts(products.map((p) => (p.id === prod.id ? updated : p)))
           setDetailProduct(updated)
-          Alert.alert('Deactivated Instead', `"${prod.name}" has existing sales/stock records and was deactivated instead of deleted.`)
+          showToast(`"${prod.name}" has existing records and was deactivated.`, 'info')
         } catch {
-          Alert.alert('Error', 'Could not delete or deactivate this product.')
+          showToast('Could not delete or deactivate product.', 'error')
         }
       } else {
-        Alert.alert('Delete Failed', err?.message || 'Could not delete product.')
+        showToast(errorMessage || 'Could not delete product.', 'error')
       }
     }
   }
@@ -363,12 +368,12 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       // Saved locally
     }
 
-    Alert.alert('Category Added', `Category "${catName}" created and selected!`)
+    showToast(`Category "${catName}" created and selected!`, 'success')
   }
 
   const handleSaveInlineAttribute = async () => {
     if (!inlineAttrName.trim() || !inlineAttrValues.trim()) {
-      Alert.alert('Missing Fields', 'Please enter attribute name and preset values.')
+      showToast('Please enter attribute name and preset values.', 'warning')
       return
     }
     const values = inlineAttrValues.split(',').map((v) => v.trim()).filter(Boolean)
@@ -384,7 +389,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     }
 
     setManagedAttributes((prev) => [...prev, localTax])
-    setSelectedProductAttributes((prev: any[]) => [
+    setSelectedProductAttributes((prev) => [
       ...prev,
       { id: tempId, name: newTaxName, selectedValues: values, allValues: values },
     ])
@@ -407,7 +412,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       // Saved locally
     }
 
-    Alert.alert('Attribute Created', `Attribute "${newTaxName}" saved to database and added to product.`)
+    showToast(`Attribute "${newTaxName}" saved and added!`, 'success')
   }
 
   const handleOpenAddCustomValueModal = (attrId: string, attrName: string) => {
@@ -419,7 +424,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   const handleConfirmAddCustomValue = () => {
     const trimmed = customValInput.trim()
     if (!trimmed) {
-      Alert.alert('Missing Value', 'Please enter a value name.')
+      showToast('Please enter a value name.', 'warning')
       return
     }
     if (targetAttrForCustomVal) {
@@ -440,9 +445,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
         (p.barcode === trimmedCode || p.variants?.some((v) => v.barcode === trimmedCode))
     )
     if (existingConflict) {
-      Alert.alert(
-        'Duplicate Barcode',
-        `Barcode "${trimmedCode}" is already assigned to "${existingConflict.name}".`
+      showToast(
+        `Barcode "${trimmedCode}" is already assigned to "${existingConflict.name}".`,
+        'warning'
       )
       return
     }
@@ -464,7 +469,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
         setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
         setDetailProduct(previousProd)
       }
-      Alert.alert('Barcode Assigned', `Physical barcode "${trimmedCode}" assigned to "${detailProduct.name}".`)
+      showToast(`Physical barcode "${trimmedCode}" assigned to "${detailProduct.name}".`, 'success')
     } else if (overviewScanTarget.type === 'variant') {
       const variantId = overviewScanTarget.variantId
       const targetVar = detailProduct.variants?.find((v) => v.id === variantId)
@@ -488,7 +493,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
         setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
         setDetailProduct(previousProd)
       }
-      Alert.alert('Barcode Assigned', `Barcode "${trimmedCode}" assigned to variant "${varName}".`)
+      showToast(`Barcode "${trimmedCode}" assigned to variant "${varName}".`, 'success')
     }
 
     setOverviewScannerOpen(false)
