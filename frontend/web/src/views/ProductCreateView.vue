@@ -399,6 +399,20 @@ function fmtMoney(num: number): string {
 
         <div class="flex flex-col gap-4">
           <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Product Name *</label>
+            <Input
+              id="product-name"
+              v-model="form.name"
+              type="text"
+              placeholder="Enter product name"
+              class="h-9 bg-surface"
+              :error="!!productStore.fieldErrors?.name"
+            />
+            <span v-if="productStore.fieldErrors?.name" class="text-xs text-destructive mt-1 block">
+              {{ productStore.fieldErrors.name[0] }}
+            </span>
+          </div>
+          <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Product Type *</label>
             <div class="flex items-center gap-2">
               <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -426,11 +440,6 @@ function fmtMoney(num: number): string {
               Select attributes to generate variant combinations
             </span>
           </div>
-            <span v-if="productStore.fieldErrors?.name" class="text-xs text-destructive mt-1 block">
-              {{ productStore.fieldErrors.name[0] }}
-            </span>
-          </div>
-
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Master Barcode</label>
