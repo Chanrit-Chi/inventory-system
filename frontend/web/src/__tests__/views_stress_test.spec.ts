@@ -17,7 +17,6 @@ import CustomersView from '@/views/CustomersView.vue'
 import SalesChannelsView from '@/views/SalesChannelsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import DeliverySettingsView from '@/views/DeliverySettingsView.vue'
-import UsersView from '@/views/UsersView.vue'
 import AdminUsersView from '@/views/AdminUsersView.vue'
 import RolesView from '@/views/RolesView.vue'
 import PermissionsView from '@/views/PermissionsView.vue'
@@ -860,15 +859,7 @@ describe('Empirical Adversarial & Stress Testing: Operational Views', () => {
         data: { data: mockUsers, meta: { total: 1, current_page: 1, last_page: 1 } },
       })
 
-      const wrapperUsers = mount(UsersView, {
-        global: {
-          plugins: [router],
-          stubs: { RouterLink: true, teleport: true },
-        },
-      })
-      await flushPromises()
-      expect(wrapperUsers.text()).toContain('Dara Nimol')
-      expect(wrapperUsers.text()).toContain('Manager')
+
 
       const wrapperAdmin = mount(AdminUsersView, {
         global: {

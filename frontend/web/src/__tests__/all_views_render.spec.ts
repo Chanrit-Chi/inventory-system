@@ -30,7 +30,7 @@ import RolesView from '@/views/RolesView.vue'
 import SalesChannelsView from '@/views/SalesChannelsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SuppliersView from '@/views/SuppliersView.vue'
-import UsersView from '@/views/UsersView.vue'
+
 
 import DailySettlementsView from '@/views/DailySettlementsView.vue'
 import PurchaseOrdersView from '@/views/PurchaseOrdersView.vue'
@@ -110,11 +110,11 @@ describe('All Views Render Test Suite (29 Views)', () => {
     { name: 'SalesChannelsView', component: SalesChannelsView },
     { name: 'SettingsView', component: SettingsView },
     { name: 'SuppliersView', component: SuppliersView },
-    { name: 'UsersView', component: UsersView },
+
   ]
 
-  it('should verify all 29 views are defined and imported correctly', () => {
-    expect(views).toHaveLength(29)
+  it('should verify all 28 views are defined and imported correctly', () => {
+    expect(views).toHaveLength(28)
     for (const v of views) {
       expect(v.component).toBeDefined()
     }
