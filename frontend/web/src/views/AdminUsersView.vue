@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import api, { ApiError } from '@/api/axios'
+import { useToast } from '@/composables/useToast'
 import {
   Users,
   Shield,
@@ -13,6 +15,17 @@ import {
   Trash2,
   UserCheck,
   Phone,
+  Key,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Calculator,
+  Briefcase,
+  DollarSign,
+  TrendingUp,
+  BarChart2,
+  Lock,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -38,8 +51,17 @@ import {
   DialogFooter,
 } from '@/components/ui'
 
+const router = useRouter()
+const toast = useToast()
+
 // --- Types ---
 type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SELLER'
+
+interface UserStats {
+  total_orders?: number
+  total_sales?: number
+  total_net_paid?: number
+}
 
 interface UserAccount {
   id: string
@@ -51,7 +73,11 @@ interface UserAccount {
   hire_date?: string | null
   notes?: string | null
   base_salary?: number | string | null
+  salary_reason?: string | null
   is_active: boolean
+  isActive?: boolean
+  status?: 'ACTIVE' | 'INACTIVE' | string
+  stats?: UserStats
   created_at?: string
   updated_at?: string
 }
@@ -107,16 +133,34 @@ const usersLoading = ref(false)
 const usersError = ref('')
 const userSearch = ref('')
 
-// Modal state
+// Form Modal State
 const isFormModalOpen = ref(false)
 const isDeleteModalOpen = ref(false)
+const isDetailModalOpen = ref(false)
+const isRaiseModalOpen = ref(false)
+
 const editingUser = ref<UserAccount | null>(null)
 const deletingUser = ref<UserAccount | null>(null)
+const detailUser = ref<UserAccount | null>(null)
+
 const formSaving = ref(false)
 const formError = ref('')
 const fieldErrors = reactive<Record<string, string>>({})
 const deleteLoading = ref(false)
 const toggleLoadingId = ref<string>('')
+
+// Password & Copy helpers in Form
+const showPassword = ref(false)
+const copiedPassword = ref(false)
+
+function generateSecureTemporaryPassword(length = 10): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$'
+  let res = ''
+  for (let i = 0; i < length; i++) {
+    res += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return res
+}
 
 const emptyForm = () => ({
   name: '',
@@ -126,12 +170,45 @@ const emptyForm = () => ({
   department: '',
   hire_date: new Date().toISOString().slice(0, 10),
   base_salary: '',
+  salary_reason: '',
   notes: '',
   password: '',
   is_active: true,
 })
 
 const userForm = reactive<ReturnType<typeof emptyForm>>(emptyForm())
+
+// Live Compensation Accruals in Form
+const formDailyRate = computed(() => {
+  const sal = parseFloat(userForm.base_salary)
+  if (isNaN(sal) || sal <= 0) return '0.00'
+  return (sal / 26).toFixed(2)
+})
+
+const formThirteenthMonthAccrual = computed(() => {
+  const sal = parseFloat(userForm.base_salary)
+  if (isNaN(sal) || sal <= 0) return '0.00'
+  return (sal / 12).toFixed(2)
+})
+
+// Raise Modal State
+const raiseSalaryAmount = ref('')
+const raiseReason = ref('Annual Performance Merit')
+const raiseEffectiveDate = ref(new Date().toISOString().slice(0, 10))
+const raiseSaving = ref(false)
+const raiseError = ref('')
+
+// Staff Detail Performance Tab State
+const detailTab = ref<'overview' | 'performance' | 'salary'>('overview')
+const perfPeriod = ref<'today' | '7d' | '30d' | 'month' | 'year'>('30d')
+const perfData = ref<{
+  total_orders: number
+  total_sales: number
+  total_revenue?: number
+  average_ticket?: number
+  total_incentive?: number
+} | null>(null)
+const perfLoading = ref(false)
 
 // --- Audit Log State ---
 const auditLogs = ref<AuditLogEntry[]>([])
@@ -166,10 +243,10 @@ const DEPARTMENT_OPTIONS = [
   'Inventory & Warehouse',
   'Sales Floor',
   'Management',
-  'Finance',
+  'Finance & Accounting',
   'IT & Systems',
+  'Delivery & Logistics',
   'Marketing',
-  'Other',
 ]
 
 // --- Permission Group Definitions ---
@@ -178,15 +255,15 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
     id: 'grp-super-admin',
     name: 'Super Admin',
     slug: 'SUPER_ADMIN',
-    description: 'Full unrestricted system-wide administrative access',
-    permissions: ['* (All System Capabilities)'],
+    description: 'Full unrestricted system-wide administrative access with root privileges',
+    permissions: ['* (Root Wildcard - All Capabilities)'],
     userCount: 0,
   },
   {
     id: 'grp-admin',
     name: 'Administrator',
     slug: 'ADMIN',
-    description: 'Operations administrator with broad management access',
+    description: 'Operations administrator with broad system management and staff permissions',
     permissions: [
       'products:*',
       'suppliers:*',
@@ -262,11 +339,40 @@ const filteredUsers = computed(() => {
     return (
       (u.name || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
+      (u.phone || '').toLowerCase().includes(q) ||
       (u.department || '').toLowerCase().includes(q) ||
       (u.role || '').toLowerCase().includes(q)
     )
   })
 })
+
+// --- Role & Status Normalization Helpers ---
+function normalizeUserRole(raw: string | undefined | null): UserRole {
+  const upper = String(raw || '').toUpperCase().trim()
+  if (upper === 'SUPER_ADMIN' || upper === 'SUPERADMIN' || upper === 'SUPER-ADMIN' || upper === 'ROOT') {
+    return 'SUPER_ADMIN'
+  }
+  if (upper === 'ADMIN' || upper === 'ADMINISTRATOR') {
+    return 'ADMIN'
+  }
+  if (upper === 'MANAGER' || upper === 'STORE_MANAGER' || upper === 'STORE-MANAGER') {
+    return 'MANAGER'
+  }
+  return 'SELLER'
+}
+
+function isUserActive(u: UserAccount | Record<string, unknown> | undefined | null): boolean {
+  if (!u) return true
+  if (u.status === 'INACTIVE' || u.status === 'inactive' || u.status === 'DEACTIVATED') return false
+  if (u.is_active === false || u.isActive === false) return false
+  return true
+}
+
+const activeUsersCount = computed(() => users.value.filter(u => isUserActive(u)).length)
+const adminUsersCount = computed(() => users.value.filter(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' || u.role === 'MANAGER').length)
+const totalPayrollBase = computed(() =>
+  users.value.reduce((sum, u) => sum + (parseFloat(String(u.base_salary || 0)) || 0), 0)
+)
 
 // --- Helpers ---
 function getInitials(name: string | undefined | null): string {
@@ -315,11 +421,31 @@ function fmtDateOnly(d: string | undefined | null): string {
 function fmtMoney(amount: number | string | undefined | null): string {
   if (amount === undefined || amount === null || amount === '') return '$0.00'
   const val = typeof amount === 'string' ? parseFloat(amount) : amount
-  return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
+  return isNaN(val) ? '$0.00' : `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach(k => delete fieldErrors[k])
+}
+
+// Password Generator and Copy
+function handleRegeneratePassword() {
+  userForm.password = generateSecureTemporaryPassword(10)
+  toast.info('Generated new secure temporary password')
+}
+
+async function handleCopyPassword() {
+  if (!userForm.password) return
+  try {
+    await navigator.clipboard.writeText(userForm.password)
+    copiedPassword.value = true
+    toast.success('Password copied to clipboard')
+    setTimeout(() => {
+      copiedPassword.value = false
+    }, 2000)
+  } catch {
+    toast.error('Failed to copy password to clipboard')
+  }
 }
 
 // --- Staff API Calls ---
@@ -328,14 +454,21 @@ async function loadUsers() {
   usersError.value = ''
   try {
     const res = await api.get('/users')
-    const data = res.data?.data
-    if (Array.isArray(data)) {
-      users.value = data
-    } else if (data && Array.isArray(data.data)) {
-      users.value = data.data
-    } else {
-      users.value = []
-    }
+    const rawList = Array.isArray(res.data?.data)
+      ? res.data.data
+      : (Array.isArray(res.data) ? res.data : (res.data?.data?.data || []))
+
+    users.value = rawList.map((u: Record<string, unknown>) => {
+      const canonicalRole = normalizeUserRole(u.role as string)
+      const active = isUserActive(u)
+      return {
+        ...u,
+        role: canonicalRole,
+        is_active: active,
+        isActive: active,
+        status: active ? 'ACTIVE' : 'INACTIVE',
+      } as UserAccount
+    })
   } catch (e: unknown) {
     if (e instanceof ApiError) {
       usersError.value = e.message
@@ -353,6 +486,8 @@ async function loadUsers() {
 function openCreateModal() {
   editingUser.value = null
   Object.assign(userForm, emptyForm())
+  userForm.password = generateSecureTemporaryPassword(10)
+  showPassword.value = true
   clearFieldErrors()
   formError.value = ''
   isFormModalOpen.value = true
@@ -360,23 +495,28 @@ function openCreateModal() {
 
 function openEditModal(user: UserAccount) {
   editingUser.value = user
+  const canonicalRole = normalizeUserRole(user.role)
+  const active = isUserActive(user)
+
   Object.assign(userForm, {
     name: user.name || '',
     email: user.email || '',
     phone: user.phone || '',
-    role: (user.role || 'SELLER') as UserRole,
+    role: canonicalRole,
     department: user.department || '',
     hire_date: user.hire_date
       ? user.hire_date.slice(0, 10)
       : new Date().toISOString().slice(0, 10),
     base_salary:
-      user.base_salary !== undefined && user.base_salary !== null
+      user.base_salary !== undefined && user.base_salary !== null && Number(user.base_salary) > 0
         ? String(user.base_salary)
         : '',
+    salary_reason: user.salary_reason || '',
     notes: user.notes || '',
     password: '',
-    is_active: user.is_active !== false,
+    is_active: active,
   })
+  showPassword.value = false
   clearFieldErrors()
   formError.value = ''
   isFormModalOpen.value = true
@@ -403,7 +543,7 @@ function validateForm(): boolean {
     fieldErrors.password = 'Password must be at least 8 characters.'
   }
   if (userForm.base_salary && isNaN(parseFloat(userForm.base_salary))) {
-    fieldErrors.base_salary = 'Base salary must be a number.'
+    fieldErrors.base_salary = 'Base salary must be a valid number.'
   }
   return Object.keys(fieldErrors).length === 0
 }
@@ -418,20 +558,22 @@ async function submitUserForm() {
   const parsedSalary =
     userForm.base_salary && !isNaN(parseFloat(userForm.base_salary))
       ? parseFloat(userForm.base_salary)
-      : undefined
+      : 0
 
   try {
     if (editingUser.value) {
       const payload: Record<string, unknown> = {
         name: userForm.name.trim(),
         email: userForm.email.trim(),
-        phone: userForm.phone.trim() || undefined,
+        phone: userForm.phone.trim() || null,
         role: userForm.role,
-        department: userForm.department.trim() || undefined,
-        hire_date: userForm.hire_date || undefined,
+        department: userForm.department.trim() || null,
+        hire_date: userForm.hire_date || null,
         base_salary: parsedSalary,
-        notes: userForm.notes.trim() || undefined,
-        is_active: userForm.is_active,
+        salary_reason: userForm.salary_reason.trim() || undefined,
+        notes: userForm.notes.trim() || null,
+        is_active: Boolean(userForm.is_active),
+        isActive: Boolean(userForm.is_active),
       }
       if (userForm.password && userForm.password.length >= 8) {
         payload.password = userForm.password
@@ -439,20 +581,22 @@ async function submitUserForm() {
       const res = await api.patch(`/users/${editingUser.value.id}`, payload)
       const updated: UserAccount | undefined = res.data?.data
       if (updated) {
-        users.value = users.value.map(u => (u.id === updated.id ? updated : u))
+        users.value = users.value.map(u => (u.id === updated.id ? { ...u, ...updated } : u))
       } else {
         await loadUsers()
       }
+      toast.success(`Staff member "${userForm.name}" updated successfully.`)
     } else {
       const payload: Record<string, unknown> = {
         name: userForm.name.trim(),
         email: userForm.email.trim(),
-        phone: userForm.phone.trim() || undefined,
+        phone: userForm.phone.trim() || null,
         role: userForm.role,
-        department: userForm.department.trim() || undefined,
+        department: userForm.department.trim() || null,
         hire_date: userForm.hire_date || new Date().toISOString().slice(0, 10),
         base_salary: parsedSalary,
-        notes: userForm.notes.trim() || undefined,
+        salary_reason: userForm.salary_reason.trim() || 'Initial Starting Salary Package',
+        notes: userForm.notes.trim() || null,
         password: userForm.password,
       }
       const res = await api.post('/users', payload)
@@ -462,6 +606,7 @@ async function submitUserForm() {
       } else {
         await loadUsers()
       }
+      toast.success(`Staff member "${userForm.name}" created successfully.`)
     }
     closeFormModal()
   } catch (e: unknown) {
@@ -479,6 +624,7 @@ async function submitUserForm() {
     } else {
       formError.value = 'Failed to save staff account.'
     }
+    toast.error(formError.value)
   } finally {
     formSaving.value = false
   }
@@ -500,6 +646,7 @@ async function executeDelete() {
   try {
     await api.delete(`/users/${deletingUser.value.id}`)
     users.value = users.value.filter(u => u.id !== deletingUser.value!.id)
+    toast.success(`Staff account "${deletingUser.value.name}" deleted.`)
     closeDeleteModal()
   } catch (e: unknown) {
     if (e instanceof ApiError) {
@@ -509,6 +656,7 @@ async function executeDelete() {
     } else {
       usersError.value = 'Failed to delete user.'
     }
+    toast.error(usersError.value)
   } finally {
     deleteLoading.value = false
   }
@@ -516,29 +664,104 @@ async function executeDelete() {
 
 async function toggleUserActive(user: UserAccount) {
   if (user.role === 'SUPER_ADMIN') {
-    usersError.value = 'The Super Admin account cannot be deactivated.'
+    toast.warning('The Super Admin account cannot be deactivated.')
     return
   }
   toggleLoadingId.value = user.id
-  const newActive = !user.is_active
+  const currentActive = user.is_active !== false && user.isActive !== false
+  const newActive = !currentActive
+
   // Optimistic update
-  users.value = users.value.map(u => (u.id === user.id ? { ...u, is_active: newActive } : u))
+  users.value = users.value.map(u => (u.id === user.id ? { ...u, is_active: newActive, isActive: newActive } : u))
   try {
     await api.patch(`/users/${user.id}/status`, { is_active: newActive })
+    toast.success(`Staff account "${user.name}" is now ${newActive ? 'Active' : 'Inactive'}.`)
   } catch (e: unknown) {
     // Revert on failure
     users.value = users.value.map(u =>
-      u.id === user.id ? { ...u, is_active: !newActive } : u
+      u.id === user.id ? { ...u, is_active: currentActive, isActive: currentActive } : u
     )
-    if (e instanceof ApiError) {
-      usersError.value = e.message
-    } else if (e instanceof Error) {
-      usersError.value = e.message
-    } else {
-      usersError.value = 'Failed to update user status.'
-    }
+    const err = e instanceof ApiError ? e.message : 'Failed to update user status.'
+    toast.error(err)
   } finally {
     toggleLoadingId.value = ''
+  }
+}
+
+// Staff Detail Drawer / Modal
+async function openDetailModal(user: UserAccount) {
+  detailUser.value = user
+  detailTab.value = 'overview'
+  isDetailModalOpen.value = true
+  await loadPerformanceData()
+}
+
+async function loadPerformanceData() {
+  if (!detailUser.value) return
+  perfLoading.value = true
+  try {
+    const res = await api.get(`/dashboard/staff-performance`, {
+      params: { staff_id: detailUser.value.id, period: perfPeriod.value },
+    })
+    const data = res.data?.data || res.data
+    perfData.value = data || null
+  } catch {
+    // Fallback calculation from user stats
+    perfData.value = {
+      total_orders: detailUser.value.stats?.total_orders || 0,
+      total_sales: detailUser.value.stats?.total_sales || 0,
+      total_revenue: detailUser.value.stats?.total_sales || 0,
+    }
+  } finally {
+    perfLoading.value = false
+  }
+}
+
+watch(perfPeriod, () => {
+  if (isDetailModalOpen.value && detailTab.value === 'performance') {
+    loadPerformanceData()
+  }
+})
+
+// Give Salary Raise
+function openRaiseModal() {
+  if (!detailUser.value) return
+  raiseSalaryAmount.value = String(detailUser.value.base_salary || '')
+  raiseReason.value = 'Annual Performance Merit Raise'
+  raiseEffectiveDate.value = new Date().toISOString().slice(0, 10)
+  raiseError.value = ''
+  isRaiseModalOpen.value = true
+}
+
+async function submitRaise() {
+  if (!detailUser.value) return
+  const sal = parseFloat(raiseSalaryAmount.value)
+  if (isNaN(sal) || sal <= 0) {
+    raiseError.value = 'Please enter a valid salary amount.'
+    return
+  }
+
+  raiseSaving.value = true
+  raiseError.value = ''
+  try {
+    const res = await api.patch(`/users/${detailUser.value.id}`, {
+      base_salary: sal,
+      salary_reason: raiseReason.value,
+      hire_date: raiseEffectiveDate.value,
+    })
+    const updated = res.data?.data
+    const currentName = detailUser.value?.name || 'staff member'
+    if (updated && detailUser.value) {
+      detailUser.value = { ...detailUser.value, ...updated }
+      users.value = users.value.map(u => (u.id === updated.id ? { ...u, ...updated } : u))
+    }
+    toast.success(`Salary adjusted for ${currentName} to $${sal.toFixed(2)}/mo`)
+    isRaiseModalOpen.value = false
+  } catch (e: unknown) {
+    raiseError.value = e instanceof ApiError ? e.message : 'Failed to record salary raise'
+    toast.error(raiseError.value)
+  } finally {
+    raiseSaving.value = false
   }
 }
 
@@ -643,7 +866,6 @@ function loadMoreAudit() {
 function applyDatePreset(preset: typeof auditDatePreset.value) {
   auditDatePreset.value = preset
   if (preset === 'custom') {
-    // Wait for the user to fill both fields and then trigger reload
     return
   }
   loadAuditLogs(true)
@@ -677,9 +899,6 @@ function clearAuditFilters() {
   loadAuditLogs(true)
 }
 
-const activeUsersCount = computed(() => users.value.filter(u => u.is_active).length)
-const adminUsersCount = computed(() => users.value.filter(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' || u.role === 'MANAGER').length)
-
 function getRoleVariant(role: string): 'purple' | 'destructive' | 'info' | 'success' | 'neutral' {
   switch (role) {
     case 'SUPER_ADMIN':
@@ -712,18 +931,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+  <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full pb-12">
     <!-- Page Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-3">
-          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Admin Users & Permissions</h1>
+          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Staff & Users</h1>
           <Badge variant="info" class="font-mono text-xs px-2.5 py-0.5">
-            {{ users.length }} Staff Members
+            {{ users.length }} Staff Profiles
           </Badge>
         </div>
         <p class="text-xs text-muted-foreground mt-0.5">
-          Manage staff rosters, configure role permissions, and review system activity audit trails.
+          Manage staff roster, compensation packages, role security access, and performance analytics.
         </p>
       </div>
 
@@ -744,7 +963,7 @@ onMounted(() => {
           id="btn-open-create-user"
           variant="primary"
           size="sm"
-          class="h-9 px-3.5 gap-1.5"
+          class="h-9 px-3.5 gap-1.5 font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
           @click="openCreateModal"
         >
           <Plus :size="15" />
@@ -758,7 +977,7 @@ onMounted(() => {
       <StatCard
         label="Total Staff"
         :value="users.length"
-        sub="Registered staff profiles"
+        sub="Registered accounts"
         :icon="Users"
         icon-variant="primary"
       />
@@ -770,18 +989,18 @@ onMounted(() => {
         icon-variant="success"
       />
       <StatCard
-        label="Management Tier"
-        :value="adminUsersCount"
-        sub="Admins & Store Managers"
-        :icon="ShieldCheck"
-        icon-variant="purple"
+        label="Monthly Payroll Base"
+        :value="fmtMoney(totalPayrollBase)"
+        sub="Base salary commitment"
+        :icon="DollarSign"
+        icon-variant="warning"
       />
       <StatCard
-        label="Audit Records"
-        :value="auditTotal"
-        sub="Activity log entries"
-        :icon="ShieldAlert"
-        icon-variant="primary"
+        label="Management Tier"
+        :value="adminUsersCount"
+        sub="Super Admin, Admin, Manager"
+        :icon="ShieldCheck"
+        icon-variant="purple"
       />
     </div>
 
@@ -789,28 +1008,28 @@ onMounted(() => {
     <div class="flex border-b border-border gap-2">
       <button
         id="tab-staff"
-        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5"
-        :class="activeTab === 'staff' ? 'border-cta text-cta' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
+        :class="activeTab === 'staff' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'staff'"
       >
         <Users :size="14" />
-        <span>Staff Accounts ({{ users.length }})</span>
+        <span>Staff Management ({{ users.length }})</span>
       </button>
 
       <button
         id="tab-permissions"
-        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5"
-        :class="activeTab === 'permissions' ? 'border-cta text-cta' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
+        :class="activeTab === 'permissions' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'permissions'"
       >
         <Shield :size="14" />
-        <span>Role Permissions</span>
+        <span>Role Permissions Matrix</span>
       </button>
 
       <button
         id="tab-audit"
-        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5"
-        :class="activeTab === 'audit' ? 'border-cta text-cta' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
+        :class="activeTab === 'audit' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'audit'; if (!auditLogs.length) loadAuditLogs(true)"
       >
         <ShieldAlert :size="14" />
@@ -837,11 +1056,11 @@ onMounted(() => {
             id="staff-search-input"
             v-model="userSearch"
             type="text"
-            placeholder="Search by name, email, role, or department…"
-            class="bg-surface"
+            placeholder="Search by name, email, phone, role, or department…"
+            class="bg-surface font-mono text-xs"
           >
             <template #prefix>
-              <Search :size="16" />
+              <Search :size="15" class="text-muted-foreground" />
             </template>
           </Input>
         </div>
@@ -868,7 +1087,7 @@ onMounted(() => {
           :description="userSearch.trim() ? 'No staff match your search query.' : 'Add your first staff member to start managing your team.'"
         >
           <template #action>
-            <Button v-if="!userSearch.trim()" variant="primary" size="sm" class="gap-1.5" @click="openCreateModal">
+            <Button v-if="!userSearch.trim()" variant="primary" size="sm" class="gap-1.5 font-bold text-white bg-[#FF8800]" @click="openCreateModal">
               <Plus :size="15" />
               <span>Add Staff Member</span>
             </Button>
@@ -880,12 +1099,12 @@ onMounted(() => {
             <TableHeader>
               <TableRow class="bg-muted/40">
                 <TableHead>Staff Profile</TableHead>
-                <TableHead>Email & Phone</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Email & Contact</TableHead>
+                <TableHead>Access Role</TableHead>
+                <TableHead>Department / Branch</TableHead>
                 <TableHead>Hire Date</TableHead>
-                <TableHead class="font-mono">Base Salary</TableHead>
-                <TableHead class="text-center">Active</TableHead>
+                <TableHead class="font-mono">Monthly Base</TableHead>
+                <TableHead class="text-center">Status</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -893,11 +1112,13 @@ onMounted(() => {
               <TableRow v-for="u in filteredUsers" :key="u.id" class="hover:bg-surface-subtle/80 transition-colors">
                 <TableCell>
                   <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    <div class="w-8 h-8 rounded-full bg-[#FFF3E0] text-[#924C00] border border-[#FFDCC4] flex items-center justify-center font-bold text-xs flex-shrink-0">
                       {{ getInitials(u.name) }}
                     </div>
                     <div>
-                      <div class="font-semibold text-foreground text-sm">{{ u.name }}</div>
+                      <div class="font-semibold text-foreground text-sm flex items-center gap-1.5">
+                        <span>{{ u.name }}</span>
+                      </div>
                       <div v-if="u.notes" class="text-xs text-muted-foreground truncate max-w-[200px]" :title="u.notes">
                         {{ u.notes }}
                       </div>
@@ -913,12 +1134,20 @@ onMounted(() => {
                   <div v-else class="text-[11px] text-muted-foreground">—</div>
                 </TableCell>
                 <TableCell>
-                  <Badge :variant="getRoleVariant(u.role)" class="text-[10px] px-2 py-0.5 font-mono">
-                    {{ u.role }}
-                  </Badge>
+                  <div class="flex items-center gap-1.5">
+                    <Badge :variant="getRoleVariant(u.role)" class="text-[11px] px-2.5 py-0.5 font-mono font-bold flex items-center gap-1">
+                      <span v-if="u.role === 'SUPER_ADMIN'">👑 Super Admin</span>
+                      <span v-else-if="u.role === 'ADMIN'">🛡️ Admin</span>
+                      <span v-else-if="u.role === 'MANAGER'">👔 Manager</span>
+                      <span v-else>💳 Cashier</span>
+                    </Badge>
+                  </div>
                 </TableCell>
                 <TableCell class="text-xs text-muted-foreground">
-                  {{ u.department || '—' }}
+                  <span v-if="u.department" class="px-2 py-0.5 rounded bg-surface border border-border/70 text-xs">
+                    {{ u.department }}
+                  </span>
+                  <span v-else>—</span>
                 </TableCell>
                 <TableCell class="text-xs font-mono text-muted-foreground">
                   {{ fmtDateOnly(u.hire_date) }}
@@ -927,14 +1156,33 @@ onMounted(() => {
                   {{ fmtMoney(u.base_salary) }}
                 </TableCell>
                 <TableCell class="text-center">
-                  <Switch
-                    :checked="u.is_active"
-                    :disabled="toggleLoadingId === u.id || u.role === 'SUPER_ADMIN'"
-                    @update:checked="() => toggleUserActive(u)"
-                  />
+                  <div class="inline-flex items-center justify-center gap-2">
+                    <span
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
+                      :class="isUserActive(u) ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' : 'bg-muted text-muted-foreground border border-border'"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full" :class="isUserActive(u) ? 'bg-emerald-500' : 'bg-muted-foreground'"></span>
+                      <span>{{ isUserActive(u) ? 'ACTIVE' : 'INACTIVE' }}</span>
+                    </span>
+                    <Switch
+                      :checked="isUserActive(u)"
+                      :disabled="toggleLoadingId === u.id || u.role === 'SUPER_ADMIN'"
+                      @update:checked="() => toggleUserActive(u)"
+                    />
+                  </div>
                 </TableCell>
                 <TableCell class="text-right">
                   <div class="flex items-center justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="h-8 px-2 text-xs gap-1 text-[#924C00] hover:bg-[#FFF3E0]"
+                      title="View Performance & Salary Raises"
+                      @click="openDetailModal(u)"
+                    >
+                      <BarChart2 :size="13" />
+                      <span>Details</span>
+                    </Button>
                     <Button
                       :id="`btn-edit-user-${u.id}`"
                       variant="ghost"
@@ -968,16 +1216,27 @@ onMounted(() => {
     <!-- ============ PERMISSIONS TAB ============ -->
     <template v-else-if="activeTab === 'permissions'">
       <Card class="p-6">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h2 class="font-display font-bold text-base text-foreground">Role Permission Matrix</h2>
             <p class="text-xs text-muted-foreground mt-0.5">
-              Read-only preview of capability grants assigned to each role. Edits require Super Admin access in the roles console.
+              Overview of security grant templates assigned to each role. Customize permissions live in the dedicated Roles console.
             </p>
           </div>
-          <Badge variant="purple" class="font-mono text-xs">
-            {{ PERMISSION_GROUPS.length }} Roles
-          </Badge>
+          <div class="flex items-center gap-2">
+            <Badge variant="purple" class="font-mono text-xs">
+              {{ PERMISSION_GROUPS.length }} Roles
+            </Badge>
+            <Button
+              variant="primary"
+              size="sm"
+              class="h-8 px-3 gap-1.5 text-xs font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
+              @click="router.push('/roles')"
+            >
+              <Key :size="13" />
+              <span>Configure Grants</span>
+            </Button>
+          </div>
         </div>
 
         <div class="flex flex-col gap-4">
@@ -1206,15 +1465,16 @@ onMounted(() => {
       </div>
     </template>
 
-    <!-- ============ STAFF FORM MODAL ============ -->
+    <!-- ============ COMPREHENSIVE STAFF FORM MODAL ============ -->
     <Dialog :open="isFormModalOpen" @update:open="(val) => { if (!val) closeFormModal(); }">
-      <DialogContent class="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle class="font-display">
-            {{ editingUser ? `Edit Staff — ${editingUser.name}` : 'Create New Staff Member' }}
+          <DialogTitle class="font-display flex items-center gap-2">
+            <Users class="w-5 h-5 text-[#FF8800]" />
+            <span>{{ editingUser ? `Edit Staff Member — ${editingUser.name}` : 'Add New Staff Member' }}</span>
           </DialogTitle>
           <DialogDescription>
-            Configure user personal credentials, role hierarchy tier, and store department assignment.
+            Configure user credentials, store department, role security level, and compensation structure.
           </DialogDescription>
         </DialogHeader>
 
@@ -1223,135 +1483,265 @@ onMounted(() => {
           {{ formError }}
         </Alert>
 
-        <form @submit.prevent="submitUserForm" class="flex flex-col gap-3 py-1">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Full Name *</label>
-              <Input
-                id="form-user-name"
-                v-model="userForm.name"
-                type="text"
-                placeholder="e.g. Alex Mercer"
-                class="h-9 bg-surface text-sm"
-              />
-              <span v-if="fieldErrors.name" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.name }}</span>
+        <form @submit.prevent="submitUserForm" class="flex flex-col gap-4 py-1">
+          <!-- SECTION 1: IDENTITY & CREDENTIALS -->
+          <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#924C00] border-b border-border/60 pb-2">
+              <UserCheck :size="15" class="text-[#FF8800]" />
+              <span>1. User Identity & Credentials</span>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Email Address *</label>
-              <Input
-                id="form-user-email"
-                v-model="userForm.email"
-                type="email"
-                placeholder="e.g. alex@store.com"
-                class="h-9 bg-surface text-sm font-mono"
-              />
-              <span v-if="fieldErrors.email" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.email }}</span>
-            </div>
-          </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Full Name *</label>
+                <Input
+                  id="form-user-name"
+                  v-model="userForm.name"
+                  type="text"
+                  placeholder="e.g. Alex Mercer"
+                  class="h-9 bg-surface text-xs"
+                />
+                <span v-if="fieldErrors.name" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.name }}</span>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Email Address *</label>
+                <Input
+                  id="form-user-email"
+                  v-model="userForm.email"
+                  type="email"
+                  placeholder="e.g. alex@store.com"
+                  class="h-9 bg-surface text-xs font-mono"
+                />
+                <span v-if="fieldErrors.email" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.email }}</span>
+              </div>
+            </div>
+
             <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Phone Number</label>
+              <label class="block text-xs font-semibold text-foreground mb-1">Contact Phone</label>
               <Input
                 id="form-user-phone"
                 v-model="userForm.phone"
                 type="tel"
                 placeholder="e.g. +855 12 345 678"
-                class="h-9 bg-surface text-sm font-mono"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Role *</label>
-              <select
-                id="form-user-role"
-                v-model="userForm.role"
-                class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+                class="h-9 bg-surface text-xs font-mono"
               >
-                <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
-              </select>
+                <template #prefix>
+                  <Phone :size="13" class="text-muted-foreground" />
+                </template>
+              </Input>
             </div>
-          </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Department</label>
-              <select
-                id="form-user-department"
-                v-model="userForm.department"
-                class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-              >
-                <option value="">— Select Department —</option>
-                <option v-for="d in DEPARTMENT_OPTIONS" :key="d" :value="d">{{ d }}</option>
-              </select>
+            <!-- Temporary Password Block for New User / Password input for edit -->
+            <div class="rounded-lg border border-border/80 bg-surface-subtle/70 p-3 flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Lock :size="13" class="text-[#FF8800]" />
+                  <span>{{ editingUser ? 'Change Password (leave blank to keep current)' : 'Auto-Generated Temporary Password *' }}</span>
+                </label>
+                <div v-if="!editingUser" class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="h-6 px-2 rounded text-3xs font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Generate new temporary password"
+                    @click="handleRegeneratePassword"
+                  >
+                    <RefreshCw :size="11" />
+                    <span>Regenerate</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="h-6 px-2 rounded text-3xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Copy password to clipboard"
+                    @click="handleCopyPassword"
+                  >
+                    <Check v-if="copiedPassword" :size="11" class="text-success" />
+                    <Copy v-else :size="11" />
+                    <span>{{ copiedPassword ? 'Copied!' : 'Copy' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="relative">
+                <Input
+                  id="form-user-password"
+                  v-model="userForm.password"
+                  :type="showPassword ? 'text' : 'password'"
+                  :placeholder="editingUser ? 'Leave blank to preserve password' : 'Auto-generated password'"
+                  class="h-9 bg-surface text-xs font-mono pr-9"
+                />
+                <button
+                  type="button"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  @click="showPassword = !showPassword"
+                >
+                  <EyeOff v-if="showPassword" :size="14" />
+                  <Eye v-else :size="14" />
+                </button>
+              </div>
+              <span v-if="fieldErrors.password" class="text-[11px] text-destructive block">{{ fieldErrors.password }}</span>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Hire Date</label>
-              <Input
-                id="form-user-hire-date"
-                v-model="userForm.hire_date"
-                type="date"
-                class="h-9 bg-surface text-sm font-mono"
+
+            <!-- Active Status Switch -->
+            <div
+              v-if="!editingUser || editingUser.role !== 'SUPER_ADMIN'"
+              class="flex items-center justify-between p-3 rounded-lg border border-border bg-surface"
+            >
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-xs text-foreground block">Account Status:</span>
+                  <span
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
+                    :class="userForm.is_active ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' : 'bg-muted text-muted-foreground border border-border'"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full" :class="userForm.is_active ? 'bg-emerald-500' : 'bg-muted-foreground'"></span>
+                    <span>{{ userForm.is_active ? 'ACTIVE' : 'INACTIVE' }}</span>
+                  </span>
+                </div>
+                <span class="text-[11px] text-muted-foreground mt-0.5 block">
+                  {{ userForm.is_active ? 'Staff can authenticate, sign in, and perform operations in POS and Web.' : 'Account disabled — all login and POS sessions are blocked.' }}
+                </span>
+              </div>
+              <Switch
+                :checked="userForm.is_active"
+                @update:checked="(val) => userForm.is_active = val"
               />
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Base Salary (USD)</label>
-              <Input
-                id="form-user-salary"
-                v-model="userForm.base_salary"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                class="h-9 bg-surface text-sm font-mono"
-              />
-              <span v-if="fieldErrors.base_salary" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.base_salary }}</span>
+          <!-- SECTION 2: EMPLOYMENT & STORE ASSIGNMENT -->
+          <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#924C00] border-b border-border/60 pb-2">
+              <Briefcase :size="15" class="text-[#FF8800]" />
+              <span>2. Employment & Store Assignment</span>
             </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Department / Branch</label>
+                <select
+                  id="form-user-department"
+                  v-model="userForm.department"
+                  class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+                >
+                  <option value="">— Select Department —</option>
+                  <option v-for="d in DEPARTMENT_OPTIONS" :key="d" :value="d">{{ d }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Hire Date</label>
+                <Input
+                  id="form-user-hire-date"
+                  v-model="userForm.hire_date"
+                  type="date"
+                  class="h-9 bg-surface text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            <!-- Role Selector Buttons -->
             <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">
-                {{ editingUser ? 'New Password (leave blank to keep)' : 'Password *' }}
-              </label>
-              <Input
-                id="form-user-password"
-                v-model="userForm.password"
-                type="password"
-                :placeholder="editingUser ? 'Leave blank to keep current' : 'At least 8 characters'"
-                class="h-9 bg-surface text-sm font-mono"
-              />
-              <span v-if="fieldErrors.password" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.password }}</span>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-xs font-semibold text-foreground">Assigned Security Access Role *</label>
+                <select
+                  id="form-user-role"
+                  v-model="userForm.role"
+                  class="text-xs h-7 px-2 py-0 bg-surface border border-border rounded text-foreground focus:outline-none"
+                >
+                  <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  v-for="r in ROLE_OPTIONS"
+                  :key="r"
+                  type="button"
+                  class="p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer select-none"
+                  :class="[
+                    userForm.role === r
+                      ? 'bg-[#FFF3E0] border-[#FF8800] ring-1 ring-[#FF8800]/30 text-[#924C00]'
+                      : 'bg-surface border-border text-muted-foreground hover:bg-surface-subtle hover:text-foreground'
+                  ]"
+                  @click="userForm.role = r"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-xs">{{ r }}</span>
+                    <Check v-if="userForm.role === r" :size="12" class="text-[#FF8800]" />
+                  </div>
+                  <span class="text-[10px] text-muted-foreground line-clamp-1 leading-tight">
+                    {{ r === 'SUPER_ADMIN' ? 'Root access' : (r === 'ADMIN' ? 'Full admin' : (r === 'MANAGER' ? 'Store operations' : 'Cashier/POS')) }}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Internal Employment Notes / Shift Schedule</label>
+              <textarea
+                id="form-user-notes"
+                v-model="userForm.notes"
+                rows="2"
+                placeholder="e.g. Morning counter lead, handles register reconciliation and petty cash…"
+                class="w-full px-3 py-2 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+              ></textarea>
             </div>
           </div>
 
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Notes</label>
-            <textarea
-              id="form-user-notes"
-              v-model="userForm.notes"
-              rows="2"
-              placeholder="Internal notes about this staff member (role, shift, etc.)…"
-              class="w-full px-3 py-2 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-            ></textarea>
-          </div>
-
-          <div
-            v-if="!editingUser || editingUser.role !== 'SUPER_ADMIN'"
-            class="flex items-center justify-between pt-2 border-t border-border"
-          >
-            <div>
-              <span class="font-semibold text-xs text-foreground block">Account Active</span>
-              <span class="text-[11px] text-muted-foreground">
-                Inactive accounts cannot sign in or perform operations.
-              </span>
+          <!-- SECTION 3: COMPENSATION & SALARY SETUP -->
+          <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-800 border-b border-border/60 pb-2">
+              <DollarSign :size="15" class="text-emerald-600" />
+              <span>3. Compensation & Base Salary Setup</span>
             </div>
-            <Switch
-              :checked="userForm.is_active"
-              @update:checked="(val) => userForm.is_active = val"
-            />
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Monthly Base Salary ($ USD)</label>
+                <Input
+                  id="form-user-salary"
+                  v-model="userForm.base_salary"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 350.00"
+                  class="h-9 bg-surface text-xs font-mono"
+                >
+                  <template #prefix>
+                    <span class="text-xs text-muted-foreground">$</span>
+                  </template>
+                </Input>
+                <span v-if="fieldErrors.base_salary" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.base_salary }}</span>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Salary Package / Adjustment Reason</label>
+                <Input
+                  v-model="userForm.salary_reason"
+                  type="text"
+                  placeholder="e.g. Starting Base / Annual Merit Review"
+                  class="h-9 bg-surface text-xs"
+                />
+              </div>
+            </div>
+
+            <!-- Live Compensation Accruals Card -->
+            <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex flex-col gap-2">
+              <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
+                <Calculator :size="13" class="text-emerald-700" />
+                <span>Live Compensation Accruals</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-emerald-500/10">
+                <div>
+                  <span class="text-[10px] text-muted-foreground font-semibold uppercase block">Daily Rate (26 working days)</span>
+                  <span class="font-mono font-bold text-foreground text-xs">${{ formDailyRate }} / day</span>
+                </div>
+                <div>
+                  <span class="text-[10px] text-muted-foreground font-semibold uppercase block">13th Month Monthly Reserve</span>
+                  <span class="font-mono font-bold text-emerald-700 text-xs">+${{ formThirteenthMonthAccrual }} / mo</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <DialogFooter class="gap-2 sm:gap-0 mt-4">
+          <DialogFooter class="gap-2 sm:gap-0 mt-2">
             <Button
               type="button"
               id="btn-cancel-user-form"
@@ -1365,10 +1755,254 @@ onMounted(() => {
               type="submit"
               id="btn-save-user"
               variant="primary"
+              class="font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
               :disabled="formSaving"
             >
               <span v-if="formSaving" class="animate-spin mr-1">⏳</span>
-              <span>{{ formSaving ? 'Saving…' : (editingUser ? 'Update Staff' : 'Create Staff Account') }}</span>
+              <span>{{ formSaving ? 'Saving…' : (editingUser ? 'Save All Changes' : 'Create Staff Member') }}</span>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ============ STAFF DETAIL & PERFORMANCE MODAL ============ -->
+    <Dialog :open="isDetailModalOpen" @update:open="(val) => { if (!val) isDetailModalOpen = false; }">
+      <DialogContent class="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader v-if="detailUser">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-[#FFF3E0] text-[#924C00] border border-[#FFDCC4] flex items-center justify-center font-bold text-sm">
+              {{ getInitials(detailUser.name) }}
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <DialogTitle class="font-display text-base">{{ detailUser.name }}</DialogTitle>
+                <Badge :variant="getRoleVariant(detailUser.role)" class="font-mono text-3xs font-bold">{{ detailUser.role }}</Badge>
+              </div>
+              <DialogDescription class="text-xs">
+                {{ detailUser.email }} {{ detailUser.phone ? `· ${detailUser.phone}` : '' }} · {{ detailUser.department || 'Main Counter' }}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <!-- Modal Tabs -->
+        <div class="flex border-b border-border gap-2 text-xs font-semibold">
+          <button
+            type="button"
+            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
+            :class="detailTab === 'overview' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            @click="detailTab = 'overview'"
+          >
+            Overview & Stats
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
+            :class="detailTab === 'performance' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            @click="detailTab = 'performance'; loadPerformanceData();"
+          >
+            Sales Analytics
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
+            :class="detailTab === 'salary' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            @click="detailTab = 'salary'"
+          >
+            Compensation & Raises
+          </button>
+        </div>
+
+        <div v-if="detailUser" class="py-2">
+          <!-- Overview Tab -->
+          <div v-if="detailTab === 'overview'" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Total Sales Closed</span>
+                <span class="text-base font-bold font-mono text-foreground">${{ (detailUser.stats?.total_sales || 0).toFixed(2) }}</span>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Orders Processed</span>
+                <span class="text-base font-bold font-mono text-foreground">{{ detailUser.stats?.total_orders || 0 }}</span>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base Salary</span>
+                <span class="text-base font-bold font-mono text-emerald-700">{{ fmtMoney(detailUser.base_salary) }}</span>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-border bg-card p-3 space-y-2 text-xs">
+              <div class="flex justify-between py-1 border-b border-border/50">
+                <span class="text-muted-foreground">Hire Date</span>
+                <span class="font-mono font-medium">{{ fmtDateOnly(detailUser.hire_date) }}</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-border/50">
+                <span class="text-muted-foreground">Department / Branch</span>
+                <span class="font-medium">{{ detailUser.department || 'Main Counter' }}</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-border/50">
+                <span class="text-muted-foreground">Account Status</span>
+                <Badge :variant="detailUser.is_active !== false && detailUser.isActive !== false ? 'success' : 'neutral'" class="text-3xs">
+                  {{ detailUser.is_active !== false && detailUser.isActive !== false ? 'Active' : 'Inactive' }}
+                </Badge>
+              </div>
+              <div v-if="detailUser.notes" class="pt-1">
+                <span class="text-muted-foreground block text-3xs font-bold uppercase mb-1">Employment Notes</span>
+                <p class="text-xs text-foreground bg-surface-subtle p-2 rounded border border-border/60">{{ detailUser.notes }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Performance Tab -->
+          <div v-else-if="detailTab === 'performance'" class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-foreground">Sales Performance</span>
+              <div class="inline-flex rounded-md border border-border bg-surface p-0.5 text-xs font-semibold">
+                <button
+                  v-for="p in (['today', '7d', '30d', 'month', 'year'] as const)"
+                  :key="p"
+                  type="button"
+                  class="px-2 py-0.5 rounded text-3xs transition-all cursor-pointer uppercase font-mono"
+                  :class="perfPeriod === p ? 'bg-white shadow-2xs text-[#924C00] font-bold' : 'text-muted-foreground hover:text-foreground'"
+                  @click="perfPeriod = p"
+                >
+                  {{ p }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="perfLoading" class="py-6 flex justify-center">
+              <RefreshCw :size="20" class="animate-spin text-muted-foreground" />
+            </div>
+
+            <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Revenue Generated</span>
+                <div class="text-base font-bold font-mono text-[#924C00] mt-0.5">
+                  ${{ (perfData?.total_revenue ?? perfData?.total_sales ?? 0).toFixed(2) }}
+                </div>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Orders Completed</span>
+                <div class="text-base font-bold font-mono text-foreground mt-0.5">
+                  {{ perfData?.total_orders ?? 0 }}
+                </div>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Est. Ticket Size</span>
+                <div class="text-base font-bold font-mono text-foreground mt-0.5">
+                  ${{ ((perfData?.total_sales ?? 0) / Math.max(perfData?.total_orders ?? 1, 1)).toFixed(2) }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Salary & Raises Tab -->
+          <div v-else class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-bold text-foreground">Compensation Package</h4>
+                <p class="text-[11px] text-muted-foreground">Current base salary & benefit accruals.</p>
+              </div>
+              <Button variant="primary" size="sm" class="h-7 px-3 text-xs font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]" @click="openRaiseModal">
+                <TrendingUp :size="12" class="mr-1" />
+                <span>Give Salary Raise</span>
+              </Button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base</span>
+                <div class="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                  {{ fmtMoney(detailUser.base_salary) }}
+                </div>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">Daily Rate (26d)</span>
+                <div class="text-base font-bold font-mono text-foreground mt-0.5">
+                  ${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 26).toFixed(2) }}
+                </div>
+              </div>
+              <div class="p-3 rounded-lg border border-border bg-card">
+                <span class="text-3xs text-muted-foreground uppercase font-bold">13th Mo. Reserve</span>
+                <div class="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                  +${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 12).toFixed(2) }}/mo
+                </div>
+              </div>
+            </div>
+
+            <div v-if="detailUser.salary_reason" class="p-3 rounded-lg bg-surface border border-border text-xs">
+              <span class="text-muted-foreground text-3xs uppercase font-bold block mb-0.5">Latest Adjustment Reason</span>
+              <span class="text-foreground font-medium">{{ detailUser.salary_reason }}</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" @click="isDetailModalOpen = false">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ============ GIVE SALARY RAISE MODAL ============ -->
+    <Dialog :open="isRaiseModalOpen" @update:open="(val) => { if (!val) isRaiseModalOpen = false; }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="font-display flex items-center gap-2">
+            <TrendingUp class="w-5 h-5 text-emerald-600" />
+            <span>Grant Salary Raise — {{ detailUser?.name }}</span>
+          </DialogTitle>
+          <DialogDescription>
+            Update base monthly compensation package and record merit history.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Alert v-if="raiseError" variant="error" class="mb-2">
+          {{ raiseError }}
+        </Alert>
+
+        <form @submit.prevent="submitRaise" class="space-y-3 py-1">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">New Monthly Base Salary ($ USD) *</label>
+            <Input
+              v-model="raiseSalaryAmount"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g. 400.00"
+              class="h-9 bg-surface text-xs font-mono"
+            >
+              <template #prefix>
+                <span class="text-xs text-muted-foreground">$</span>
+              </template>
+            </Input>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Raise Reason / Merit Note *</label>
+            <Input
+              v-model="raiseReason"
+              type="text"
+              placeholder="e.g. Annual Merit Promotion / Sales Target Achievement"
+              class="h-9 bg-surface text-xs"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Effective Date</label>
+            <Input
+              v-model="raiseEffectiveDate"
+              type="date"
+              class="h-9 bg-surface text-xs font-mono"
+            />
+          </div>
+
+          <DialogFooter class="gap-2 sm:gap-0 mt-3">
+            <Button variant="outline" type="button" :disabled="raiseSaving" @click="isRaiseModalOpen = false">Cancel</Button>
+            <Button variant="primary" type="submit" class="font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]" :disabled="raiseSaving">
+              <span v-if="raiseSaving" class="animate-spin mr-1">⏳</span>
+              <span>{{ raiseSaving ? 'Saving…' : 'Record Raise' }}</span>
             </Button>
           </DialogFooter>
         </form>
@@ -1412,3 +2046,4 @@ onMounted(() => {
     </Dialog>
   </div>
 </template>
+
