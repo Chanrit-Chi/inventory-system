@@ -13,7 +13,7 @@ import SalesChannelsView from '@/views/SalesChannelsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PayrollView from '@/views/PayrollView.vue'
-import UsersView from '@/views/UsersView.vue'
+import UsersView from '@/views/AdminUsersView.vue'
 import AuditLogsView from '@/views/AuditLogsView.vue'
 import ReportsView from '@/views/ReportsView.vue'
 import InvoicesView from '@/views/InvoicesView.vue'
@@ -27,6 +27,7 @@ import PermissionsView from '@/views/PermissionsView.vue'
 import DailySettlementsView from '@/views/DailySettlementsView.vue'
 import PurchaseOrdersView from '@/views/PurchaseOrdersView.vue'
 import { useAuthStore } from '@/stores/authStore'
+import { usePermissions } from '@/composables/usePermissions'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -34,36 +35,36 @@ export const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true } },
-    { path: '/products', name: 'products.list', component: ProductListView, meta: { requiresAuth: true } },
-    { path: '/products/create', name: 'products.create', component: ProductCreateView, meta: { requiresAuth: true } },
-    { path: '/products/:id/edit', name: 'products.edit', component: ProductEditView, meta: { requiresAuth: true } },
-    { path: '/inventory', name: 'inventory', component: InventoryLedgerView, meta: { requiresAuth: true } },
-    { path: '/purchase-orders', name: 'purchase-orders', component: PurchaseOrdersView, meta: { requiresAuth: true } },
-    { path: '/restock', name: 'restock', component: RestockSessionView, meta: { requiresAuth: true } },
-    { path: '/daily-settlements', name: 'daily-settlements', component: DailySettlementsView, meta: { requiresAuth: true } },
-    { path: '/orders', name: 'orders', component: OrdersView, meta: { requiresAuth: true } },
-    { path: '/customers', name: 'customers', component: CustomersView, meta: { requiresAuth: true } },
-    { path: '/expenses', name: 'expenses', component: ExpensesView, meta: { requiresAuth: true } },
-    { path: '/quotations', name: 'quotations', component: QuotationsView, meta: { requiresAuth: true } },
-    { path: '/sales-channels', name: 'sales-channels', component: SalesChannelsView, meta: { requiresAuth: true } },
-    { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
-    { path: '/pos', name: 'pos', component: () => import('@/views/POSView.vue'), meta: { requiresAuth: true } },
-    { path: '/payroll', name: 'payroll', component: PayrollView, meta: { requiresAuth: true } },
-    { path: '/users', name: 'users', component: UsersView, meta: { requiresAuth: true } },
-    { path: '/audit-logs', name: 'audit-logs', component: AuditLogsView, meta: { requiresAuth: true } },
-    { path: '/reports', name: 'reports', component: ReportsView, meta: { requiresAuth: true } },
-    { path: '/invoices', name: 'invoices', component: InvoicesView, meta: { requiresAuth: true } },
-    { path: '/suppliers', name: 'suppliers', component: SuppliersView, meta: { requiresAuth: true } },
-    { path: '/categories', name: 'categories', component: CategoriesView, meta: { requiresAuth: true } },
-    { path: '/attributes', name: 'attributes', component: AttributesView, meta: { requiresAuth: true } },
-    { path: '/bank-accounts', name: 'bank-accounts', component: BankAccountsView, meta: { requiresAuth: true } },
-    { path: '/delivery-settings', name: 'delivery-settings', component: DeliverySettingsView, meta: { requiresAuth: true } },
-    { path: '/roles', name: 'roles', component: RolesView, meta: { requiresAuth: true } },
-    { path: '/permissions', name: 'permissions', component: PermissionsView, meta: { requiresAuth: true } },
+    { path: '/products', name: 'products.list', component: ProductListView, meta: { requiresAuth: true, permission: 'products:read' } },
+    { path: '/products/create', name: 'products.create', component: ProductCreateView, meta: { requiresAuth: true, permission: 'products:create' } },
+    { path: '/products/:id/edit', name: 'products.edit', component: ProductEditView, meta: { requiresAuth: true, permission: 'products:update' } },
+    { path: '/inventory', name: 'inventory', component: InventoryLedgerView, meta: { requiresAuth: true, permission: 'inventory:adjust' } },
+    { path: '/purchase-orders', name: 'purchase-orders', component: PurchaseOrdersView, meta: { requiresAuth: true, permission: 'purchase-orders:create' } },
+    { path: '/restock', name: 'restock', component: RestockSessionView, meta: { requiresAuth: true, permission: 'inventory:restock' } },
+    { path: '/daily-settlements', name: 'daily-settlements', component: DailySettlementsView, meta: { requiresAuth: true, permission: 'reports:view' } },
+    { path: '/orders', name: 'orders', component: OrdersView, meta: { requiresAuth: true, permission: 'pos:checkout' } },
+    { path: '/customers', name: 'customers', component: CustomersView, meta: { requiresAuth: true, permission: 'customers:view' } },
+    { path: '/expenses', name: 'expenses', component: ExpensesView, meta: { requiresAuth: true, permission: 'expenses:*' } },
+    { path: '/quotations', name: 'quotations', component: QuotationsView, meta: { requiresAuth: true, permission: 'quotations:create' } },
+    { path: '/sales-channels', name: 'sales-channels', component: SalesChannelsView, meta: { requiresAuth: true, permission: 'channels:view' } },
+    { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true, permission: 'settings:*' } },
+    { path: '/pos', name: 'pos', component: () => import('@/views/POSView.vue'), meta: { requiresAuth: true, permission: 'pos:checkout' } },
+    { path: '/payroll', name: 'payroll', component: PayrollView, meta: { requiresAuth: true, permission: 'payroll:view' } },
+    { path: '/users', name: 'users', component: UsersView, meta: { requiresAuth: true, permission: 'users:view' } },
+    { path: '/audit-logs', name: 'audit-logs', component: AuditLogsView, meta: { requiresAuth: true, permission: 'audit:view' } },
+    { path: '/reports', name: 'reports', component: ReportsView, meta: { requiresAuth: true, permission: 'reports:view' } },
+    { path: '/invoices', name: 'invoices', component: InvoicesView, meta: { requiresAuth: true, permission: 'invoices:view' } },
+    { path: '/suppliers', name: 'suppliers', component: SuppliersView, meta: { requiresAuth: true, permission: 'suppliers:view' } },
+    { path: '/categories', name: 'categories', component: CategoriesView, meta: { requiresAuth: true, permission: 'categories:manage' } },
+    { path: '/attributes', name: 'attributes', component: AttributesView, meta: { requiresAuth: true, permission: 'attributes:manage' } },
+    { path: '/bank-accounts', name: 'bank-accounts', component: BankAccountsView, meta: { requiresAuth: true, permission: 'payment-methods:view' } },
+    { path: '/delivery-settings', name: 'delivery-settings', component: DeliverySettingsView, meta: { requiresAuth: true, permission: 'delivery:view' } },
+    { path: '/roles', name: 'roles', component: RolesView, meta: { requiresAuth: true, permission: 'roles:manage' } },
+    { path: '/permissions', name: 'permissions', component: PermissionsView, meta: { requiresAuth: true, permission: 'roles:manage' } },
   ],
 })
 
-// Navigation guard to enforce authentication
+// Navigation guard to enforce authentication and permissions
 router.beforeEach((to, _from, next) => {
   // initAuth is cached (no-op after first call), safe to call on every navigation
   const authStore = useAuthStore()
@@ -83,9 +84,21 @@ router.beforeEach((to, _from, next) => {
   // Protected route - require auth
   if (!authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else {
-    next()
+    return
   }
+
+  // Permission capability check
+  const requiredPermission = to.meta.permission as string | undefined
+  if (requiredPermission) {
+    const { can } = usePermissions()
+    if (!can(requiredPermission)) {
+      next({ name: 'dashboard' })
+      return
+    }
+  }
+
+  next()
 })
 
 export default router
+
