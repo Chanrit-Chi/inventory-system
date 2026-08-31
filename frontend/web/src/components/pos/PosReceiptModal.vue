@@ -111,6 +111,12 @@ const customerDisplay = computed(() => {
   return props.order?.customer_info || props.order?.customer
 })
 
+function isCashPayment(method: string | null | undefined): boolean {
+  if (!method) return true
+  const m = method.toLowerCase()
+  return m.includes('cash') || m.includes('drawer') || m.includes('register')
+}
+
 async function handlePrint() {
   if (props.order?.id) {
     try {
@@ -156,7 +162,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="open && order" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div v-if="open && order" class="fixed inset-0 z-100 flex items-center justify-center p-4">
     <!-- Backdrop -->
     <div
       class="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
@@ -302,14 +308,16 @@ onUnmounted(() => {
               <span>Paid via:</span>
               <span class="font-bold text-[#1A1C1C] uppercase">{{ order.payment_method || 'CASH' }}</span>
             </div>
-            <div v-if="order.tendered_amount && Number(order.tendered_amount) > 0" class="flex justify-between">
-              <span>Tendered:</span>
-              <span>{{ formatMoney(order.tendered_amount) }}</span>
-            </div>
-            <div v-if="order.change_amount && Number(order.change_amount) > 0" class="flex justify-between font-bold text-emerald-800">
-              <span>Change Due:</span>
-              <span>{{ formatMoney(order.change_amount) }}</span>
-            </div>
+            <template v-if="isCashPayment(order.payment_method)">
+              <div v-if="order.tendered_amount && Number(order.tendered_amount) > 0" class="flex justify-between">
+                <span>Tendered:</span>
+                <span>{{ formatMoney(order.tendered_amount) }}</span>
+              </div>
+              <div v-if="order.change_amount && Number(order.change_amount) > 0" class="flex justify-between font-bold text-emerald-800">
+                <span>Change Due:</span>
+                <span>{{ formatMoney(order.change_amount) }}</span>
+              </div>
+            </template>
           </div>
 
           <!-- Barcode Footer Simulation -->
@@ -356,7 +364,7 @@ onUnmounted(() => {
         <button
           type="button"
           @click="handleNewSale"
-          class="flex-1 py-2.5 px-4 rounded-xl bg-[#FF8800] text-[#1A1C1C] font-bold text-xs hover:bg-[#E67A00] transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95"
+          class="flex-1 py-2.5 px-4 rounded-xl bg-[#FF8800] text-white font-bold text-xs hover:bg-[#E67A00] transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95"
         >
           <RotateCcw class="w-4 h-4 stroke-[2.5]" />
           <span>New Sale (Space)</span>
