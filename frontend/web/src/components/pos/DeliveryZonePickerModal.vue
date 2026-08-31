@@ -4,12 +4,14 @@ import ListPickerModal from './ListPickerModal.vue'
 
 interface DeliveryZone {
   id: string
-  company_id: string
-  company_name?: string
-  zone_name: string
-  fee: number
-  estimated_days: string
-  is_active: boolean
+  company_id?: string | null
+  company_name?: string | null
+  name?: string
+  zone_name?: string
+  cost?: number | string
+  fee?: number | string
+  estimated_days?: string
+  is_active?: boolean
 }
 
 interface Props {
@@ -28,12 +30,18 @@ const emit = defineEmits<{
 }>()
 
 const items = computed(() =>
-  props.zones.map((z) => ({
-    id: z.id,
-    name: z.zone_name,
-    description: z.fee > 0 ? `₱${z.fee.toFixed(2)} · Est. ${z.estimated_days} days` : `Free · Est. ${z.estimated_days} days`,
-    icon: '📦',
-  }))
+  props.zones.map((z) => {
+    const zoneName = z.name || z.zone_name || 'Standard Delivery'
+    const feeVal = parseFloat(String(z.cost ?? z.fee ?? 0)) || 0
+    const est = z.estimated_days ? ` · Est. ${z.estimated_days} days` : ''
+    const desc = feeVal > 0 ? `$${feeVal.toFixed(2)}${est}` : `Free${est}`
+    return {
+      id: z.id,
+      name: zoneName,
+      description: desc,
+      icon: '📦',
+    }
+  })
 )
 </script>
 

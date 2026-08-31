@@ -26,7 +26,9 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-vue-next'
+import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
 import {
   Button,
   Badge,
@@ -60,6 +62,30 @@ const viewMode = ref<'table' | 'grid'>('table')
 const deletingProduct = ref<Product | null>(null)
 const deleteLoading = ref(false)
 const isDeleteDialogOpen = ref(false)
+
+// Quick Stock Adjustment Modal State
+const showAdjustmentModal = ref(false)
+const selectedAdjustmentVariant = ref<any>(null)
+const selectedAdjustmentProductName = ref('')
+
+function openStockAdjust(p: Product) {
+  selectedAdjustmentProductName.value = p.name
+  const variants = p.variants || []
+  const variant = variants.length > 0 ? variants[0] : null
+  selectedAdjustmentVariant.value = variant ? {
+    id: variant.id,
+    product_name: p.name,
+    name: (variant as any).name,
+    sku: variant.sku || (p as any).barcode || (p as any).sku || '',
+    quantity_on_hand: variant.quantity_on_hand ?? totalStock(p),
+  } : {
+    id: p.id,
+    product_name: p.name,
+    sku: (p as any).barcode || (p as any).sku || '',
+    quantity_on_hand: totalStock(p),
+  }
+  showAdjustmentModal.value = true
+}
 
 // Computed KPIs from loaded products
 const totalProductsCount = computed(() => productStore.meta?.total ?? productStore.products.length)
@@ -407,6 +433,16 @@ onMounted(() => {
               <TableCell class="text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 px-2 text-xs gap-1"
+                    title="Quick Stock Adjustment"
+                    @click="openStockAdjust(p)"
+                  >
+                    <SlidersHorizontal :size="13" />
+                    <span>Adjust</span>
+                  </Button>
+                  <Button
                     :id="`btn-edit-product-${p.id}`"
                     variant="ghost"
                     size="sm"
@@ -493,6 +529,15 @@ onMounted(() => {
             <Button
               variant="outline"
               size="sm"
+              class="h-7 px-2 text-xs gap-1"
+              @click="openStockAdjust(p)"
+            >
+              <SlidersHorizontal :size="12" />
+              <span>Adjust</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               class="h-7 px-2.5 text-xs gap-1"
               @click="router.push(`/products/${p.id}/edit`)"
             >
@@ -570,5 +615,13 @@ onMounted(() => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Quick Stock Adjustment Modal -->
+    <StockAdjustmentModal
+      v-model:open="showAdjustmentModal"
+      :variant="selectedAdjustmentVariant"
+      :product-name="selectedAdjustmentProductName"
+      @success="loadProducts"
+    />
   </div>
 </template>

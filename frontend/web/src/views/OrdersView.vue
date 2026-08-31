@@ -142,6 +142,10 @@ function copyOrderNumber(orderNumber: string) {
   }, 2000)
 }
 
+function statusBadge(status: string) {
+  return getOrderStatus(status)
+}
+
 
 function fmtDate(d: string | undefined): string {
   if (!d) return '—'
@@ -163,6 +167,13 @@ function fmtMoney(amount: number | string | undefined | null): string {
 onMounted(() => {
   orderStore.fetchChannels()
   loadOrders()
+})
+
+defineExpose({
+  statusBadge,
+  copyOrderNumber,
+  isCopied,
+  getOrderStatus,
 })
 </script>
 

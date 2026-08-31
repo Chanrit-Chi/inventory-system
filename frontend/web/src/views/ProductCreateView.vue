@@ -4,7 +4,6 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useAttributeStore, type Attribute } from '@/stores/attributeStore'
 import { useProductStore } from '@/stores/productStore'
 import { useCategoryStore } from '@/stores/categoryStore'
-import { useToast } from '@/composables/useToast'
 import {
   ArrowLeft,
   Check,
@@ -33,7 +32,6 @@ const router = useRouter()
 const attrStore = useAttributeStore()
 const productStore = useProductStore()
 const categoryStore = useCategoryStore()
-const toast = useToast()
 
 const imagePreviewUrl = ref<string>('')
 
@@ -253,7 +251,6 @@ async function submit() {
       purchase_price: pPrice,
       selling_price: sPrice,
       default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
-      image_url: form.value.image_url.trim() || undefined,
       description: form.value.description.trim() || undefined,
       is_active: form.value.is_active,
       product_type: form.value.product_type,

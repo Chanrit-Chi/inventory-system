@@ -13,12 +13,14 @@ export interface ApiErrorPayload {
 export class ApiError extends Error {
   errors?: Record<string, string[]>
   status?: number
+  isNetworkError: boolean
 
-  constructor(message: string, errors?: Record<string, string[]>, status?: number) {
+  constructor(message: string, errors?: Record<string, string[]>, status?: number, isNetworkError: boolean = false) {
     super(message)
     this.name = 'ApiError'
     this.errors = errors
     this.status = status
+    this.isNetworkError = isNetworkError
   }
 }
 
@@ -47,9 +49,26 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<{ success?: boolean; message?: string; errors?: Record<string, string[]> }>) => {
-    const data = error.response?.data
-    const status = error.response?.status
-    const message = data?.message || error.message || 'An unexpected error occurred.'
+    if (!error.response) {
+      const message = error.message || 'Cannot reach the server. Please check your network connection.'
+      return Promise.reject(new ApiError(message, undefined, undefined, true))
+    }
+
+    const data = error.response.data
+    const status = error.response.status
+    
+    // Extract first validation error if present
+    let message = data?.message
+    if (data?.errors && typeof data.errors === 'object') {
+      const firstFieldErrors = Object.values(data.errors).flat()
+      if (firstFieldErrors.length > 0 && typeof firstFieldErrors[0] === 'string') {
+        message = firstFieldErrors[0]
+      }
+    }
+    if (!message) {
+      message = error.message || 'An unexpected error occurred.'
+    }
+
     const errors = data?.errors
 
     // Clear auth on 401 Unauthorized and notify user
@@ -60,7 +79,7 @@ api.interceptors.response.use(
       toast.warning('Your session has expired. Please log in again.')
     }
 
-    return Promise.reject(new ApiError(message, errors, status))
+    return Promise.reject(new ApiError(message, errors, status, false))
   }
 )
 

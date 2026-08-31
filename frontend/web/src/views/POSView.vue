@@ -15,6 +15,7 @@ import {
   Clock,
   CheckCircle2,
   Package,
+  FileCheck2,
 } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
 import { useDeliveryZoneStore } from '@/stores/deliveryZoneStore'
@@ -30,6 +31,7 @@ import PosCustomerModal, { type Customer } from '@/components/pos/PosCustomerMod
 import PosHoldOrdersModal from '@/components/pos/PosHoldOrdersModal.vue'
 import PosItemNoteModal from '@/components/pos/PosItemNoteModal.vue'
 import SellerPickerModal from '@/components/pos/SellerPickerModal.vue'
+import SellerDailySummaryModal from '@/components/seller/SellerDailySummaryModal.vue'
 import {
   Button,
   Dialog,
@@ -163,6 +165,7 @@ const completedOrder = ref<OrderResult | null>(null)
 const showCustomerModal = ref(false)
 const showHoldOrdersModal = ref(false)
 const showSellerModal = ref(false)
+const showShiftSummaryModal = ref(false)
 const showClearCartDialog = ref(false)
 
 const showItemNoteModal = ref(false)
@@ -393,12 +396,26 @@ function handleOpenCheckout() {
 async function handleCompleteCheckout() {
   if (posStore.items.length === 0) return
 
+  const channelId = posStore.activeChannelId || activeChannel.value?.id || channels.value[0]?.id
+  if (!channelId) {
+    toast.error('A sales channel is required to complete checkout.')
+    return
+  }
+
   checkoutLoading.value = true
 
   try {
+    const mutationId = crypto.randomUUID()
     const payload = {
-      channel_id: posStore.activeChannelId || (activeChannel.value?.id ?? null),
+      client_mutation_id: mutationId,
+      channel_id: channelId,
       seller_id: posStore.activeSeller?.id ?? null,
+      customer: posStore.customer
+        ? {
+            name: posStore.customer.name || null,
+            phone: posStore.customer.phone || null,
+          }
+        : null,
       customer_info: posStore.customer
         ? {
             name: posStore.customer.name || null,
@@ -410,47 +427,68 @@ async function handleCompleteCheckout() {
       is_delivery: posStore.isDelivery,
       delivery_address: posStore.isDelivery ? posStore.deliveryAddress : null,
       delivery_region: posStore.isDelivery ? posStore.deliveryRegion : null,
+      region: posStore.isDelivery ? posStore.deliveryRegion : null,
       delivery_company_id: posStore.isDelivery ? posStore.deliveryCompanyId : null,
       delivery_zone_id: posStore.isDelivery ? posStore.deliveryZoneId : null,
+      delivery_cost: posStore.isDelivery ? posStore.deliveryFee : 0,
+      delivery_fee: posStore.isDelivery ? posStore.deliveryFee : 0,
       items: posStore.items.map((item) => ({
         product_id: item.product_id,
-        variant_id: item.variant_id || null,
+        variant_id: item.variant_id || item.product_id || item.sku,
         sku: item.sku,
         quantity: item.quantity,
         unit_price: item.price,
         discount: item.discount,
+        discount_amount: item.discount,
         discount_type: item.discount_type,
         notes: item.notes,
       })),
       subtotal: posStore.subtotal,
+      discount: posStore.orderDiscountAmount,
       discount_type: posStore.discountType,
       discount_value: posStore.discountValue,
+      tax_type: 'percentage',
       tax_rate: posStore.taxRate,
       tax_amount: posStore.taxAmount,
-      delivery_fee: posStore.isDelivery ? posStore.deliveryFee : 0,
       total_amount: posStore.total,
       payment_method: posStore.paymentMethod,
+      payment_amount: posStore.total,
       tendered_amount: posStore.paymentMethod === 'CASH' ? posStore.tenderedAmount : posStore.total,
+      note: posStore.orderNotes || null,
       notes: posStore.orderNotes || null,
+      status: 'paid',
     }
 
     // Try API first; if network fails, fall back to offline queue
     let res: any
     try {
       res = await api.post<any>('/orders/checkout', payload)
-    } catch (apiError) {
-      // Enqueue mutation for offline retry and notify user
-      const { enqueueMutation } = useOfflineQueue()
-      const mutationId = crypto.randomUUID()
-      enqueueMutation({
-        id: mutationId,
-        type: 'checkout',
-        endpoint: '/orders/checkout',
-        payload,
-      })
-      toast.error('Network unavailable. Sale saved offline — will sync when back online.')
-      checkoutLoading.value = false
-      return
+    } catch (apiError: any) {
+      const isNetworkError =
+        apiError?.isNetworkError === true ||
+        apiError?.status === 0 ||
+        apiError?.status === undefined ||
+        apiError?.name === 'NetworkError' ||
+        (typeof navigator !== 'undefined' && !navigator.onLine)
+
+      if (isNetworkError) {
+        // Enqueue mutation for offline retry and notify user
+        const { enqueueMutation } = useOfflineQueue()
+        enqueueMutation({
+          id: mutationId,
+          type: 'checkout',
+          endpoint: '/orders/checkout',
+          payload,
+        })
+        toast.error('Network unavailable. Sale saved offline — will sync when back online.')
+        checkoutLoading.value = false
+        return
+      } else {
+        const errorMsg = apiError?.message || apiError?.response?.data?.message || 'Failed to finalize transaction'
+        toast.error(errorMsg)
+        checkoutLoading.value = false
+        return
+      }
     }
     const orderData = res.data?.data || res.data
 
@@ -497,6 +535,22 @@ async function handleCompleteCheckout() {
   } finally {
     checkoutLoading.value = false
   }
+}
+
+function handleDeliveryZoneSelect(zoneId: string | null) {
+  if (!zoneId) {
+    posStore.setDelivery({ isDelivery: posStore.isDelivery, zoneId: null, fee: 0 })
+    return
+  }
+  const zone = deliveryStore.zones.find((z: any) => z.id === zoneId)
+  const fee = zone ? (parseFloat(String((zone as any).cost ?? (zone as any).fee ?? 0)) || 0) : 0
+  const zoneName = zone ? ((zone as any).name || (zone as any).zone_name || '') : ''
+  posStore.setDelivery({
+    isDelivery: posStore.isDelivery,
+    zoneId,
+    fee,
+    region: zoneName || posStore.deliveryRegion,
+  })
 }
 
 // ============================================================================
@@ -687,7 +741,16 @@ async function loadProducts(showLoader = true) {
 
     if (deliveryZonesRes.status === 'fulfilled') {
       const rawDelZo = (deliveryZonesRes.value.data as any)?.data ?? deliveryZonesRes.value.data ?? []
-      deliveryStore.zones = Array.isArray(rawDelZo) ? rawDelZo : []
+      const list = Array.isArray(rawDelZo) ? rawDelZo : []
+      deliveryStore.zones = list.map((z: any) => ({
+        ...z,
+        name: z.name || z.zone_name || 'Delivery Zone',
+        zone_name: z.zone_name || z.name || 'Delivery Zone',
+        cost: typeof z.cost === 'number' ? z.cost : (parseFloat(String(z.cost ?? z.fee ?? 0)) || 0),
+        fee: typeof z.fee === 'number' ? z.fee : (parseFloat(String(z.fee ?? z.cost ?? 0)) || 0),
+        estimated_days: z.estimated_days || '1-2',
+        is_active: z.is_active ?? true,
+      }))
     }
   } catch (e) {
     console.error('Failed to load POS catalog data:', e)
@@ -769,6 +832,17 @@ onUnmounted(() => {
           >
             <User class="w-3.5 h-3.5 text-[#924C00]" />
             <span class="max-w-[100px] truncate">{{ activeSeller?.name || 'Staff' }}</span>
+          </button>
+
+          <!-- Shift Daily Summary Button -->
+          <button
+            type="button"
+            @click="showShiftSummaryModal = true"
+            class="px-3 py-2 rounded-xl border border-[#E8E2D9] bg-white hover:bg-[#FAF7F2] text-xs font-bold text-[#1A1C1C] flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+            title="Daily Shift Settlement & Drawer Reconciliation"
+          >
+            <FileCheck2 class="w-3.5 h-3.5 text-[#924C00]" />
+            <span class="hidden md:inline">Shift Summary</span>
           </button>
         </div>
       </header>
@@ -1263,7 +1337,7 @@ onUnmounted(() => {
       @update:delivery-address="(val) => posStore.setDelivery({ isDelivery: posStore.isDelivery, address: val })"
       @update:delivery-region="(val) => posStore.setDelivery({ isDelivery: posStore.isDelivery, region: val })"
       @update:delivery-company="(val) => posStore.setDelivery({ isDelivery: posStore.isDelivery, companyId: val })"
-      @update:delivery-zone="(val) => posStore.setDelivery({ isDelivery: posStore.isDelivery, zoneId: val })"
+      @update:delivery-zone="handleDeliveryZoneSelect"
       @update:discount-type="(val) => posStore.setOrderDiscount(val, posStore.discountValue)"
       @update:discount-value="(val) => posStore.setOrderDiscount(posStore.discountType, val)"
       @update:tax-rate="(val) => posStore.setTaxRate(val)"
@@ -1351,6 +1425,12 @@ onUnmounted(() => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- 10. Cashier Daily Shift Summary & Settlement Modal -->
+    <SellerDailySummaryModal
+      v-model:open="showShiftSummaryModal"
+      :target-seller-id="posStore.activeSeller?.id ? String(posStore.activeSeller.id) : null"
+    />
   </div>
 </template>
 

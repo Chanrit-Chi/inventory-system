@@ -54,7 +54,8 @@ const vipCount = computed(() =>
   customerStore.customers.filter(c => {
     const spent = parseFloat(String(c.total_spent)) || 0
     const orders = c.total_purchased ?? 0
-    return getTier(spent, orders) === 'GOLD' || getTier(spent, orders) === 'PLATINUM'
+    const t = getTier(spent, orders)
+    return t.name === 'Gold' || t.name === 'Platinum'
   }).length
 )
 

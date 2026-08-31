@@ -32,6 +32,9 @@ import SettingsView from '@/views/SettingsView.vue'
 import SuppliersView from '@/views/SuppliersView.vue'
 import UsersView from '@/views/UsersView.vue'
 
+import DailySettlementsView from '@/views/DailySettlementsView.vue'
+import PurchaseOrdersView from '@/views/PurchaseOrdersView.vue'
+
 // Mock axios methods
 vi.mock('@/api/axios', () => {
   const mockApi = {
@@ -60,23 +63,21 @@ vi.mock('@/api/axios', () => {
   }
 })
 
-describe('All 27 Operational Views Empirical Rendering Test', () => {
+describe('All Views Render Test Suite (29 Views)', () => {
   let router: any
 
   beforeEach(() => {
-    window.location.href = 'http://localhost:3000/'
-    const pinia = createPinia()
-    setActivePinia(pinia)
-
+    setActivePinia(createPinia())
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: { template: '<div>home</div>' } },
-        { path: '/products/:id/edit', component: ProductEditView },
+        { path: '/', component: { template: '<div>Home</div>' } },
+        { path: '/products', component: { template: '<div>Products</div>' } },
+        { path: '/daily-settlements', component: { template: '<div>Daily Settlements</div>' } },
+        { path: '/purchase-orders', component: { template: '<div>Purchase Orders</div>' } },
       ],
     })
-
-    localStorage.clear()
+    localStorage.setItem('auth_token', 'test-token')
     localStorage.setItem('omnipos_token', 'test-token')
   })
 
@@ -88,6 +89,7 @@ describe('All 27 Operational Views Empirical Rendering Test', () => {
     { name: 'CategoriesView', component: CategoriesView },
     { name: 'CustomersView', component: CustomersView },
     { name: 'DashboardView', component: DashboardView },
+    { name: 'DailySettlementsView', component: DailySettlementsView },
     { name: 'DeliverySettingsView', component: DeliverySettingsView },
     { name: 'ExpensesView', component: ExpensesView },
     { name: 'InventoryLedgerView', component: InventoryLedgerView },
@@ -100,6 +102,7 @@ describe('All 27 Operational Views Empirical Rendering Test', () => {
     { name: 'ProductCreateView', component: ProductCreateView },
     { name: 'ProductEditView', component: ProductEditView },
     { name: 'ProductListView', component: ProductListView },
+    { name: 'PurchaseOrdersView', component: PurchaseOrdersView },
     { name: 'QuotationsView', component: QuotationsView },
     { name: 'ReportsView', component: ReportsView },
     { name: 'RestockSessionView', component: RestockSessionView },
@@ -110,8 +113,8 @@ describe('All 27 Operational Views Empirical Rendering Test', () => {
     { name: 'UsersView', component: UsersView },
   ]
 
-  it('should verify all 27 views are defined and imported correctly', () => {
-    expect(views).toHaveLength(27)
+  it('should verify all 29 views are defined and imported correctly', () => {
+    expect(views).toHaveLength(29)
     for (const v of views) {
       expect(v.component).toBeDefined()
     }

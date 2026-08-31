@@ -30,7 +30,8 @@ import {
   Boxes,
   FileSpreadsheet,
   LogOut,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ShieldCheck,
 } from 'lucide-vue-next'
 
 export interface NavItem {
@@ -100,6 +101,13 @@ const navGroups: NavGroup[] = [
         badge: 'Live',
         badgeVariant: 'primary',
       },
+      {
+        to: '/daily-settlements',
+        label: 'Shift Settlements',
+        icon: ShieldCheck,
+        badge: 'Reconcile',
+        badgeVariant: 'success',
+      },
     ],
   },
   {
@@ -140,6 +148,13 @@ const navGroups: NavGroup[] = [
         icon: Boxes,
         badge: 'Stock',
         badgeVariant: 'warning',
+      },
+      {
+        to: '/purchase-orders',
+        label: 'Purchase Orders',
+        icon: FileText,
+        badge: 'PO',
+        badgeVariant: 'info',
       },
       {
         to: '/restock',

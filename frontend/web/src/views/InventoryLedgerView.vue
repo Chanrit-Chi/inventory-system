@@ -13,6 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -29,7 +32,7 @@ import {
   EmptyState,
   Skeleton,
 } from '@/components/ui'
-import { ChevronDown, ChevronUp } from 'lucide-vue-next'
+import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
 
 interface Product {
   id: string
@@ -155,6 +158,17 @@ function collapseAll() {
   expandedGroups.value = new Set()
 }
 
+// Quick Stock Adjustment Modal State
+const showAdjustmentModal = ref(false)
+const selectedAdjustmentVariant = ref<Variant | null>(null)
+const selectedProductName = ref('')
+
+function openAdjustmentModal(v: Variant, prodName: string) {
+  selectedAdjustmentVariant.value = v
+  selectedProductName.value = prodName
+  showAdjustmentModal.value = true
+}
+
 async function loadInventory() {
   loading.value = true
   error.value = null
@@ -165,8 +179,13 @@ async function loadInventory() {
     }
 
     const res = await api.get('/products', { params })
-    products.value = (res.data.data ?? []) as Product[]
+    const list = (res.data.data ?? []) as Product[]
+    products.value = list
     meta.value = res.data.meta ?? null
+    // Auto-expand if list is small or single product
+    if (list.length <= 5) {
+      expandedGroups.value = new Set(list.map(p => p.id))
+    }
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Failed to load inventory ledger.'
   } finally {
@@ -458,15 +477,25 @@ onMounted(() => {
                   </TableCell>
 
                   <TableCell class="text-right">
-                    <RouterLink
-                      v-if="variant.quantity_on_hand <= variant.reorder_level"
-                      to="/restock"
-                    >
-                      <Button variant="outline" size="sm" class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10">
-                        + Restock
+                    <div class="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 px-2 text-xs font-semibold gap-1"
+                        @click.stop="openAdjustmentModal(variant, product.name)"
+                      >
+                        <SlidersHorizontal class="w-3 h-3" />
+                        <span>Adjust</span>
                       </Button>
-                    </RouterLink>
-                    <span v-else class="text-xs text-muted-foreground">Healthy</span>
+                      <RouterLink
+                        v-if="variant.quantity_on_hand <= variant.reorder_level"
+                        to="/restock"
+                      >
+                        <Button variant="outline" size="sm" class="h-7 px-2 text-xs font-semibold border-warning/40 text-warning-foreground hover:bg-warning/10">
+                          + Restock
+                        </Button>
+                      </RouterLink>
+                    </div>
                   </TableCell>
                 </TableRow>
               </template>
@@ -578,5 +607,13 @@ onMounted(() => {
         All stock mutations in OmniPOS are atomic and strictly recorded in the stock movements ledger with quantity snapshots.
       </p>
     </div>
+
+    <!-- Quick Stock Adjustment Modal -->
+    <StockAdjustmentModal
+      v-model:open="showAdjustmentModal"
+      :variant="selectedAdjustmentVariant"
+      :product-name="selectedProductName"
+      @success="loadInventory"
+    />
   </div>
 </template>

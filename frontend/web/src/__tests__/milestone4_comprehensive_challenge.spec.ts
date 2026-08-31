@@ -59,8 +59,8 @@ describe('Milestone 4 Empirical Challenge: Store Reactions, Dialog Lifecycles, a
     setActivePinia(pinia)
 
     const allRoutes = [
-      '/', '/dashboard', '/pos', '/orders', '/products', '/products/create', '/products/:id/edit',
-      '/categories', '/attributes', '/inventory', '/restock', '/suppliers', '/delivery-settings',
+      '/', '/dashboard', '/pos', '/orders', '/daily-settlements', '/products', '/products/create', '/products/:id/edit',
+      '/categories', '/attributes', '/inventory', '/purchase-orders', '/restock', '/suppliers', '/delivery-settings',
       '/customers', '/quotations', '/invoices', '/expenses', '/bank-accounts', '/payroll',
       '/sales-channels', '/reports', '/audit-logs', '/settings', '/users', '/roles', '/permissions',
     ]
@@ -458,28 +458,28 @@ describe('Milestone 4 Empirical Challenge: Store Reactions, Dialog Lifecycles, a
       })
       const vm = wrapper.vm as any
 
-      // Bronze: < $100
+      // Bronze: < $200
       const t0 = vm.getTier(0)
       expect(t0.name).toBe('Bronze')
-      expect(t0.remainingToNext).toBe(100)
+      expect(t0.remainingToNext).toBe(200)
 
       const t99 = vm.getTier(99.99)
       expect(t99.name).toBe('Bronze')
 
-      // Silver: $100 - $249
-      const t100 = vm.getTier(100)
-      expect(t100.name).toBe('Silver')
-      expect(t100.remainingToNext).toBe(150) // $250 - $100
+      // Silver: $200 - $499
+      const t200 = vm.getTier(200)
+      expect(t200.name).toBe('Silver')
+      expect(t200.remainingToNext).toBe(300) // $500 - $200
 
-      // Gold: $250 - $499
-      const t250 = vm.getTier(250)
-      expect(t250.name).toBe('Gold')
-      expect(t250.remainingToNext).toBe(250) // $500 - $250
-
-      // Platinum: >= $500
+      // Gold: $500 - $999
       const t500 = vm.getTier(500)
-      expect(t500.name).toBe('Platinum')
-      expect(t500.remainingToNext).toBe(0)
+      expect(t500.name).toBe('Gold')
+      expect(t500.remainingToNext).toBe(500) // $1000 - $500
+
+      // Platinum: >= $1000
+      const t1000 = vm.getTier(1000)
+      expect(t1000.name).toBe('Platinum')
+      expect(t1000.remainingToNext).toBe(0)
 
       // Test order items toggle in customer modal
       vm.toggleOrderExpand('ord-99')

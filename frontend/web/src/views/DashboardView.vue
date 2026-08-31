@@ -15,7 +15,6 @@ import {
   Star,
   Zap,
   Clock,
-  TrendingUp,
   Minus,
   RefreshCw,
   Plus,
@@ -212,7 +211,7 @@ async function fetchLowStockProducts() {
 async function loadStats() {
   loading.value = true
   try {
-    const [summary, recentOrders, lowStockItems] = await Promise.all([
+    const [summary, recentOrdersData, lowStockItemsData] = await Promise.all([
       fetchDashboardSummary(),
       fetchRecentOrders(),
       fetchLowStockProducts(),
@@ -276,11 +275,11 @@ async function loadStats() {
     ]
 
     // Load recent orders and low stock items from parallel fetches
-    if (Array.isArray(recentOrders)) {
-      recentOrders.value = recentOrders
+    if (Array.isArray(recentOrdersData)) {
+      recentOrders.value = recentOrdersData
     }
-    if (Array.isArray(lowStockItems)) {
-      lowStockItems.value = lowStockItems
+    if (Array.isArray(lowStockItemsData)) {
+      lowStockItems.value = lowStockItemsData
     }
 
     const now = new Date()

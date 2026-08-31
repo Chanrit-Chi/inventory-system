@@ -10,6 +10,7 @@ import {
   Check,
   Receipt,
 } from 'lucide-vue-next'
+import api from '@/api/axios'
 import { useToast } from '@/composables/useToast'
 import DeliveryCompanyPickerModal from './DeliveryCompanyPickerModal.vue'
 import DeliveryZonePickerModal from './DeliveryZonePickerModal.vue'
@@ -25,12 +26,14 @@ export interface DeliveryCompany {
 
 export interface DeliveryZone {
   id: string
-  company_id: string
-  company_name?: string
-  zone_name: string
-  fee: number
-  estimated_days: string
-  is_active: boolean
+  company_id?: string | null
+  company_name?: string | null
+  name?: string
+  zone_name?: string
+  cost?: number | string
+  fee?: number | string
+  estimated_days?: string
+  is_active?: boolean
 }
 
 interface Props {
@@ -98,6 +101,24 @@ const emit = defineEmits<{
   'cancel': []
 }>()
 
+export interface BankAccount {
+  id: string
+  bank_name: string
+  account_name: string
+  account_number: string
+  qr_code_url?: string | null
+  is_active: boolean
+  currency?: string
+}
+
+export interface CustomerSuggestion {
+  id: string
+  name: string
+  phone: string
+  loyalty_tier?: string
+  total_spent?: number | string
+}
+
 const toast = useToast()
 
 // Local modal state
@@ -108,6 +129,62 @@ const cardRef = ref<string>('')
 const openCompanyPicker = ref(false)
 const openZonePicker = ref(false)
 
+// Dynamic Bank Accounts
+const bankAccounts = ref<BankAccount[]>([])
+const selectedBankId = ref<string>('')
+
+const selectedBank = computed(() => {
+  return bankAccounts.value.find((b) => b.id === selectedBankId.value) || bankAccounts.value[0] || null
+})
+
+async function fetchBankAccounts() {
+  try {
+    const res = await api.get('/bank-accounts')
+    const list = res.data?.data || res.data || []
+    bankAccounts.value = (Array.isArray(list) ? list : []).filter((b: any) => b.is_active !== false)
+    if (bankAccounts.value.length > 0 && !selectedBankId.value) {
+      selectedBankId.value = bankAccounts.value[0].id
+    }
+  } catch (e) {
+    // Ignore fallback
+  }
+}
+
+// Inline Customer Search
+const customerSearchQuery = ref(props.customerPhone || '')
+const customerSuggestions = ref<CustomerSuggestion[]>([])
+const showSuggestions = ref(false)
+let customerSearchTimeout: ReturnType<typeof setTimeout> | null = null
+
+function handleCustomerSearchInput(val: string) {
+  customerSearchQuery.value = val
+  emit('update:customer-phone', val)
+  if (customerSearchTimeout) clearTimeout(customerSearchTimeout)
+  if (!val.trim() || val.length < 2) {
+    customerSuggestions.value = []
+    showSuggestions.value = false
+    return
+  }
+  customerSearchTimeout = setTimeout(async () => {
+    try {
+      const res = await api.get('/customers', { params: { search: val } })
+      const list = res.data?.data || res.data || []
+      customerSuggestions.value = Array.isArray(list) ? list : []
+      showSuggestions.value = customerSuggestions.value.length > 0
+    } catch {
+      customerSuggestions.value = []
+      showSuggestions.value = false
+    }
+  }, 250)
+}
+
+function selectCustomerSuggestion(c: CustomerSuggestion) {
+  emit('update:customer-name', c.name)
+  emit('update:customer-phone', c.phone)
+  customerSearchQuery.value = c.phone
+  showSuggestions.value = false
+}
+
 // Sync from props
 watch(
   () => props.open,
@@ -115,6 +192,8 @@ watch(
     if (isOpen) {
       localPaymentMethod.value = props.paymentMethod || 'CASH'
       localTendered.value = props.tenderedAmount > 0 ? props.tenderedAmount : props.total
+      customerSearchQuery.value = props.customerPhone || ''
+      fetchBankAccounts()
     }
   },
   { immediate: true }
@@ -259,7 +338,9 @@ const selectedZoneLabel = computed(() => {
   if (!props.deliveryZoneId) return ''
   const z = props.zones.find((item) => item.id === props.deliveryZoneId)
   if (!z) return ''
-  return `${z.zone_name} (${z.fee > 0 ? `$${z.fee.toFixed(2)}` : 'Free'})`
+  const zoneName = z.name || z.zone_name || 'Delivery Zone'
+  const feeVal = parseFloat(String(z.cost ?? z.fee ?? 0)) || 0
+  return `${zoneName} (${feeVal > 0 ? `$${feeVal.toFixed(2)}` : 'Free'})`
 })
 </script>
 
@@ -299,32 +380,76 @@ const selectedZoneLabel = computed(() => {
       <!-- Modal Body -->
       <div class="p-6 overflow-y-auto space-y-5 flex-1">
         <!-- Prominent Total & Customer Banner -->
-        <div class="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] flex items-center justify-between">
-          <div>
-            <span class="text-xs font-bold text-[#6B6358] uppercase tracking-wider">Total Amount Due</span>
-            <div class="text-3xl font-black text-[#1A1C1C] font-display mt-0.5">
-              {{ formatMoney(total) }}
+        <div class="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-[#6B6358] uppercase tracking-wider">Total Amount Due</span>
+              <div class="text-3xl font-black text-[#1A1C1C] font-display mt-0.5">
+                {{ formatMoney(total) }}
+              </div>
+            </div>
+
+            <!-- Customer Chip -->
+            <div class="text-right">
+              <span class="text-2xs text-[#6B6358] block mb-1">Linked Customer</span>
+              <div
+                v-if="customerName"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E8E2D9] text-xs font-bold text-[#1A1C1C]"
+              >
+                <User class="w-3.5 h-3.5 text-[#924C00]" />
+                <span>{{ customerName }}</span>
+                <span
+                  v-if="customerLoyaltyTier"
+                  class="px-1.5 py-0.2 text-3xs font-semibold rounded-full bg-amber-50 text-amber-800 border border-amber-200"
+                >
+                  {{ customerLoyaltyTier }}
+                </span>
+              </div>
+              <div v-else class="text-xs text-[#8C827A] italic">
+                Walk-in Guest
+              </div>
             </div>
           </div>
 
-          <!-- Customer Chip -->
-          <div class="text-right">
-            <span class="text-2xs text-[#6B6358] block mb-1">Customer Account</span>
+          <!-- Inline Customer Phone Quick Autocomplete Search -->
+          <div class="relative pt-1 border-t border-[#E8E2D9]">
+            <label class="block text-2xs font-bold text-[#6B6358] uppercase tracking-wider mb-1">
+              Customer Phone / Quick Search
+            </label>
+            <input
+              :value="customerSearchQuery"
+              @input="handleCustomerSearchInput(($event.target as HTMLInputElement).value)"
+              placeholder="Search or enter customer phone (e.g. 012 345 678)..."
+              class="w-full px-3 py-1.5 rounded-lg border border-[#E8E2D9] bg-white text-xs text-[#1A1C1C] focus:border-[#FF8800] outline-hidden font-mono"
+            />
+
+            <!-- Autocomplete Suggestions Dropdown -->
             <div
-              v-if="customerName"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E8E2D9] text-xs font-bold text-[#1A1C1C]"
+              v-if="showSuggestions && customerSuggestions.length > 0"
+              class="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-[#E8E2D9] rounded-xl shadow-lg divide-y divide-[#E8E2D9] max-h-48 overflow-y-auto"
             >
-              <User class="w-3.5 h-3.5 text-[#924C00]" />
-              <span>{{ customerName }}</span>
-              <span
-                v-if="customerLoyaltyTier"
-                class="px-1.5 py-0.2 text-3xs font-semibold rounded-full bg-amber-50 text-amber-800 border border-amber-200"
+              <div
+                v-for="sug in customerSuggestions"
+                :key="sug.id"
+                @click="selectCustomerSuggestion(sug)"
+                class="p-2.5 hover:bg-[#FAF7F2] cursor-pointer flex items-center justify-between transition-colors"
               >
-                {{ customerLoyaltyTier }}
-              </span>
-            </div>
-            <div v-else class="text-xs text-[#8C827A] italic">
-              Walk-in Guest
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-xs text-[#1A1C1C]">{{ sug.name }}</span>
+                    <span
+                      v-if="sug.loyalty_tier"
+                      class="px-1.5 py-0.2 text-3xs font-semibold rounded-full bg-amber-50 text-amber-800 border border-amber-200"
+                    >
+                      {{ sug.loyalty_tier }}
+                    </span>
+                  </div>
+                  <span class="text-3xs text-[#6B6358] font-mono">{{ sug.phone }}</span>
+                </div>
+                <span class="text-3xs text-emerald-600 font-mono font-bold">
+                  {{ sug.total_spent ? `$${parseFloat(String(sug.total_spent)).toFixed(2)}` : '' }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -380,11 +505,11 @@ const selectedZoneLabel = computed(() => {
           </div>
         </div>
 
-        <!-- Tender Specific Interface -->
+        <!-- Dynamic Tender Inputs Based on Selected Method -->
         <!-- 1. Cash Tender -->
-        <div v-if="localPaymentMethod === 'CASH'" class="space-y-3.5 p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9]">
+        <div v-if="localPaymentMethod === 'CASH'" class="p-4 rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] space-y-3">
           <div>
-            <label class="block text-xs font-bold text-[#1A1C1C] mb-1.5">Cash Tendered Amount</label>
+            <label class="block text-xs font-bold text-[#1A1C1C] mb-1.5">Tendered Cash Amount ($)</label>
             <div class="relative">
               <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[#6B6358]">$</span>
               <input
@@ -473,14 +598,40 @@ const selectedZoneLabel = computed(() => {
           </div>
         </div>
 
-        <!-- 3. QR Code / Mobile Payment -->
+        <!-- 3. Dynamic QR Code / Mobile Bank Payment -->
         <div v-else-if="localPaymentMethod === 'QR'" class="p-5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] text-center space-y-3">
-          <div class="w-32 h-32 mx-auto bg-white p-2 rounded-xl border border-[#E8E2D9] shadow-xs flex items-center justify-center">
-            <QrCode class="w-24 h-24 text-[#1A1C1C]" />
+          <!-- Dynamic Bank Account Selection Tabs -->
+          <div v-if="bankAccounts.length > 0" class="flex items-center justify-center gap-2 flex-wrap">
+            <button
+              v-for="b in bankAccounts"
+              :key="b.id"
+              type="button"
+              @click="selectedBankId = b.id"
+              :class="[
+                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer',
+                selectedBank?.id === b.id
+                  ? 'bg-[#924C00] text-white border-[#924C00] shadow-xs'
+                  : 'bg-white text-[#1A1C1C] border-[#E8E2D9] hover:bg-[#FAF7F2]'
+              ]"
+            >
+              {{ b.bank_name }}
+            </button>
           </div>
+
+          <div class="w-36 h-36 mx-auto bg-white p-2.5 rounded-xl border border-[#E8E2D9] shadow-xs flex flex-col items-center justify-center">
+            <QrCode class="w-24 h-24 text-[#1A1C1C]" />
+            <span class="text-[9px] font-bold text-[#924C00] mt-1 font-mono uppercase">
+              {{ selectedBank ? selectedBank.bank_name : 'KHQR' }}
+            </span>
+          </div>
+
           <div>
-            <h4 class="text-sm font-bold text-[#1A1C1C]">Scan to Pay</h4>
-            <p class="text-xs text-[#6B6358]">Ask customer to scan with Banking / Mobile Wallet App</p>
+            <h4 class="text-sm font-bold text-[#1A1C1C]">Scan with Mobile Banking</h4>
+            <div v-if="selectedBank" class="text-xs text-[#6B6358] mt-1 space-y-0.5">
+              <p class="font-bold text-[#1A1C1C]">{{ selectedBank.account_name }}</p>
+              <p class="font-mono text-3xs text-[#6B6358]">{{ selectedBank.account_number }}</p>
+            </div>
+            <p v-else class="text-xs text-[#6B6358] mt-1">Scan QR code using any Mobile Banking app</p>
           </div>
         </div>
 

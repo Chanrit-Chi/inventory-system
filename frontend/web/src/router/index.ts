@@ -11,7 +11,6 @@ import ExpensesView from '@/views/ExpensesView.vue'
 import QuotationsView from '@/views/QuotationsView.vue'
 import SalesChannelsView from '@/views/SalesChannelsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
-import POSView from '@/views/POSView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PayrollView from '@/views/PayrollView.vue'
 import UsersView from '@/views/UsersView.vue'
@@ -25,6 +24,8 @@ import BankAccountsView from '@/views/BankAccountsView.vue'
 import DeliverySettingsView from '@/views/DeliverySettingsView.vue'
 import RolesView from '@/views/RolesView.vue'
 import PermissionsView from '@/views/PermissionsView.vue'
+import DailySettlementsView from '@/views/DailySettlementsView.vue'
+import PurchaseOrdersView from '@/views/PurchaseOrdersView.vue'
 import { useAuthStore } from '@/stores/authStore'
 
 export const router = createRouter({
@@ -37,14 +38,16 @@ export const router = createRouter({
     { path: '/products/create', name: 'products.create', component: ProductCreateView, meta: { requiresAuth: true } },
     { path: '/products/:id/edit', name: 'products.edit', component: ProductEditView, meta: { requiresAuth: true } },
     { path: '/inventory', name: 'inventory', component: InventoryLedgerView, meta: { requiresAuth: true } },
+    { path: '/purchase-orders', name: 'purchase-orders', component: PurchaseOrdersView, meta: { requiresAuth: true } },
     { path: '/restock', name: 'restock', component: RestockSessionView, meta: { requiresAuth: true } },
+    { path: '/daily-settlements', name: 'daily-settlements', component: DailySettlementsView, meta: { requiresAuth: true } },
     { path: '/orders', name: 'orders', component: OrdersView, meta: { requiresAuth: true } },
     { path: '/customers', name: 'customers', component: CustomersView, meta: { requiresAuth: true } },
     { path: '/expenses', name: 'expenses', component: ExpensesView, meta: { requiresAuth: true } },
     { path: '/quotations', name: 'quotations', component: QuotationsView, meta: { requiresAuth: true } },
     { path: '/sales-channels', name: 'sales-channels', component: SalesChannelsView, meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
-    { path: '/pos', name: 'pos', component: POSView, meta: { requiresAuth: true } },
+    { path: '/pos', name: 'pos', component: () => import('@/views/POSView.vue'), meta: { requiresAuth: true } },
     { path: '/payroll', name: 'payroll', component: PayrollView, meta: { requiresAuth: true } },
     { path: '/users', name: 'users', component: UsersView, meta: { requiresAuth: true } },
     { path: '/audit-logs', name: 'audit-logs', component: AuditLogsView, meta: { requiresAuth: true } },

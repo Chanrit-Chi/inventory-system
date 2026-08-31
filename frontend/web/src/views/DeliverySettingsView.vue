@@ -54,7 +54,7 @@ const totalCouriers = computed(() => companies.value.length)
 const activeZonesCount = computed(() => zones.value.filter(z => z.is_active).length)
 const avgDeliveryFee = computed(() => {
   if (!zones.value.length) return '$0.00'
-  const sum = zones.value.reduce((acc, z) => acc + (parseFloat(String(z.fee)) || 0), 0)
+  const sum = zones.value.reduce((acc, z) => acc + (parseFloat(String(z.cost ?? z.fee ?? 0)) || 0), 0)
   return '$' + (sum / zones.value.length).toFixed(2)
 })
 
@@ -105,26 +105,41 @@ function confirmDeleteCompany(id: string) {
 }
 
 function openZoneCreate() {
-  editingZone.value = { company_id: companies.value[0]?.id || '', zone_name: '', fee: 0, estimated_days: '1-2', is_active: true }
+  editingZone.value = { company_id: companies.value[0]?.id || '', name: '', zone_name: '', cost: 0, fee: 0, estimated_days: '1-2', is_active: true }
   showZoneModal.value = true
 }
 
 function openZoneEdit(z: DeliveryZone) {
-  editingZone.value = { ...z }
+  editingZone.value = {
+    ...z,
+    name: z.name || z.zone_name || '',
+    zone_name: z.zone_name || z.name || '',
+    cost: typeof z.cost === 'number' ? z.cost : (parseFloat(String(z.cost ?? z.fee ?? 0)) || 0),
+    fee: typeof z.fee === 'number' ? z.fee : (parseFloat(String(z.fee ?? z.cost ?? 0)) || 0),
+  }
   showZoneModal.value = true
 }
 
 async function saveZone() {
-  if (!editingZone.value || !editingZone.value.zone_name?.trim()) {
+  const nameVal = editingZone.value?.name?.trim() || editingZone.value?.zone_name?.trim()
+  if (!editingZone.value || !nameVal) {
     toast.error('Zone name is required')
     return
   }
   try {
+    const costVal = editingZone.value.cost ?? editingZone.value.fee ?? 0
+    const payload = {
+      ...editingZone.value,
+      name: nameVal,
+      zone_name: nameVal,
+      cost: costVal,
+      fee: costVal,
+    }
     if (editingZone.value.id) {
-      await store.updateZone(editingZone.value.id, editingZone.value)
+      await store.updateZone(editingZone.value.id, payload)
       toast.success('Zone updated')
     } else {
-      await store.createZone(editingZone.value)
+      await store.createZone(payload)
       toast.success('Zone created')
     }
     showZoneModal.value = false
@@ -359,17 +374,17 @@ onMounted(loadAll)
             <TableBody>
               <TableRow v-for="z in zones" :key="z.id" class="hover:bg-surface-subtle/80 transition-colors">
                 <TableCell class="text-xs font-semibold text-foreground">
-                  {{ z.company_name || z.company_id }}
+                  {{ z.company_name || z.company_id || 'Direct Courier' }}
                 </TableCell>
                 <TableCell class="font-semibold text-foreground flex items-center gap-1.5">
                   <MapPin :size="14" class="text-primary flex-shrink-0" />
-                  <span>{{ z.zone_name }}</span>
+                  <span>{{ z.name || z.zone_name || 'Coverage Zone' }}</span>
                 </TableCell>
                 <TableCell class="font-mono text-sm font-bold text-primary tabular-nums">
-                  ${{ parseFloat(String(z.fee)).toFixed(2) }}
+                  ${{ (parseFloat(String(z.cost ?? z.fee ?? 0)) || 0).toFixed(2) }}
                 </TableCell>
                 <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                  {{ z.estimated_days }} days
+                  {{ z.estimated_days || '1-2' }} days
                 </TableCell>
                 <TableCell>
                   <Badge :variant="z.is_active ? 'success' : 'neutral'" class="text-[10px] px-2 py-0.5">
@@ -464,13 +479,25 @@ onMounted(loadAll)
 
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Zone Name *</label>
-            <Input v-model="editingZone.zone_name" placeholder="e.g. Phnom Penh Central, Provinces" class="h-9 bg-surface text-sm" />
+            <Input
+              :model-value="editingZone.name || editingZone.zone_name"
+              @update:model-value="(val) => { if (editingZone) { editingZone.name = String(val); editingZone.zone_name = String(val); } }"
+              placeholder="e.g. Phnom Penh Central, Provinces"
+              class="h-9 bg-surface text-sm"
+            />
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Delivery Fee ($) *</label>
-              <Input v-model.number="editingZone.fee" type="number" step="0.01" min="0" class="h-9 bg-surface text-sm font-mono" />
+              <Input
+                :model-value="editingZone.cost ?? editingZone.fee"
+                @update:model-value="(val) => { if (editingZone) { editingZone.cost = Number(val); editingZone.fee = Number(val); } }"
+                type="number"
+                step="0.01"
+                min="0"
+                class="h-9 bg-surface text-sm font-mono"
+              />
             </div>
 
             <div>

@@ -78,6 +78,10 @@ export const useAuthStore = defineStore('auth', () => {
     initialized.value = false
   }
 
+  function handleSessionExpired() {
+    logout()
+  }
+
   // Refresh user from API (optional)
   async function fetchCurrentUser() {
     if (!token.value) return
@@ -102,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     initAuth,
     login,
     logout,
+    handleSessionExpired,
     fetchCurrentUser,
   }
 })
