@@ -1,11 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import { matchPermission, usePermissions } from '@/composables/usePermissions'
 import { useAuthStore } from '@/stores/authStore'
 import { usePermissionStore } from '@/stores/permissionStore'
 import { useRoleStore } from '@/stores/roleStore'
 import api from '@/api/axios'
+
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    { path: '/permissions', component: { template: '<div>Permissions</div>' } },
+    { path: '/roles', component: { template: '<div>Roles</div>' } },
+    { path: '/dashboard', component: { template: '<div>Dashboard</div>' } },
+    { path: '/pos', component: { template: '<div>POS</div>' } },
+    { path: '/products', component: { template: '<div>Products</div>' } },
+  ],
+})
 
 vi.mock('@/api/axios', () => ({
   default: {
@@ -194,7 +206,12 @@ describe('System Permissions & RBAC Module', () => {
       vi.spyOn(api, 'get').mockResolvedValue({ data: { data: mockPermissions } } as any)
 
       const { default: PermissionsView } = await import('@/views/PermissionsView.vue')
-      const wrapper = mount(PermissionsView)
+      const wrapper = mount(PermissionsView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true },
+        },
+      })
       await flushPromises()
 
       expect(wrapper.text()).toContain('System Permissions')
@@ -238,7 +255,12 @@ describe('System Permissions & RBAC Module', () => {
       })
 
       const { default: RolesView } = await import('@/views/RolesView.vue')
-      const wrapper = mount(RolesView)
+      const wrapper = mount(RolesView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true },
+        },
+      })
       await flushPromises()
 
       const vm = wrapper.vm as any

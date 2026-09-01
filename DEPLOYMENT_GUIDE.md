@@ -102,22 +102,42 @@ This guide walks you through deploying your omnichannel inventory system using *
 
 ---
 
-## Step 3: Deploy Frontend Web to Cloudflare Pages
+## Step 3: Deploy Frontend Web to Cloudflare
 
-1. Push your repository to **GitHub**.
-2. Log into **[Cloudflare Dashboard](https://dash.cloudflare.com/)** ➔ go to **Workers & Pages** ➔ click **Create application** ➔ **Pages** ➔ **Connect to Git**.
-3. Select your inventory system repository.
-4. Set the build configuration:
-   - **Framework preset**: `Vue` (or `Vite`)
-   - **Root directory**: `frontend/web`
-   - **Build command**: `npm run build`
-   - **Build output directory**: `dist`
-5. Add the Environment Variable:
-   - Variable name: `VITE_API_BASE_URL`
-   - Value: `https://my-inventory-api.fly.dev/api/v1`
-6. Click **"Save and Deploy"**.
-   - Cloudflare will build and give you a free `https://[your-app].pages.dev` URL.
-   - You can optionally attach a free custom domain (e.g. `app.yourdomain.com`).
+Cloudflare has two interfaces depending on whether you are using the new **Workers & Pages CI/CD Build** or the classic **Pages** interface. Both work seamlessly.
+
+### If you see the screen with "Build configuration", "Deploy command", etc. (as shown in Cloudflare Workers / Builds):
+
+Configure the fields exactly as follows:
+
+| Field in Cloudflare | Value to Enter | Note |
+|---|---|---|
+| **Build command** | `npm run build` | ⚠️ **Required** (do not leave as `None`) |
+| **Deploy command** | `npx wrangler deploy` | Keep default |
+| **Version command** | `npx wrangler versions upload` | Keep default |
+| **Root directory** | `frontend/web` (or `/frontend/web`) | Tells Cloudflare where the web app lives |
+| **Production branch** | `main` | Your default Git branch |
+| **Include paths** | `*` (or `frontend/web/**`) | Triggers build when web code changes |
+| **Exclude paths** | `node_modules/**, .git/` | Keep default |
+
+#### Add Environment Variables (under "Variables and secrets"):
+Click **"Add variable"**:
+- **Variable Name**: `VITE_API_BASE_URL`
+- **Value**: `https://my-inventory-api.fly.dev/api/v1` (replace with your actual Fly.io backend URL)
+- *(Optional)* **Variable Name**: `NODE_VERSION`, **Value**: `20`
+
+---
+
+### If you see the Classic Cloudflare Pages screen:
+1. **Framework preset**: `Vue` (or `Vite`)
+2. **Root directory**: `frontend/web`
+3. **Build command**: `npm run build`
+4. **Build output directory**: `dist`
+5. **Environment Variable**: `VITE_API_BASE_URL` = `https://my-inventory-api.fly.dev/api/v1`
+
+---
+
+Click **"Save and Deploy"**. Cloudflare will build the frontend and give you a free `https://[your-app].pages.dev` or `workers.dev` URL with global CDN caching and SSL.
 
 ---
 
