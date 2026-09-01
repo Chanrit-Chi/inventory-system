@@ -53,12 +53,36 @@ class AuditLog extends Model
 
     public function getIpAttribute(): ?string
     {
-        return $this->metadata['ip'] ?? null;
+        if (!empty($this->metadata['ip'])) {
+            return $this->metadata['ip'];
+        }
+        if (!empty($this->metadata['ip_address'])) {
+            return $this->metadata['ip_address'];
+        }
+        if ($this->details && str_contains($this->details, 'IP: ')) {
+            $parts = explode('IP: ', $this->details);
+            if (isset($parts[1])) {
+                return trim(explode(' ', $parts[1])[0]);
+            }
+        }
+        return null;
     }
 
     public function getDeviceAttribute(): ?string
     {
-        return $this->metadata['device'] ?? null;
+        if (!empty($this->metadata['device'])) {
+            return $this->metadata['device'];
+        }
+        if (!empty($this->metadata['user_agent'])) {
+            return $this->metadata['user_agent'];
+        }
+        if ($this->details && str_contains($this->details, 'Device: ')) {
+            $parts = explode('Device: ', $this->details);
+            if (isset($parts[1])) {
+                return trim(explode(' •', $parts[1])[0]);
+            }
+        }
+        return null;
     }
 
     /**

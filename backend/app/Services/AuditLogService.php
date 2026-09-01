@@ -23,6 +23,13 @@ class AuditLogService
         array $metadata = [],
         ?\DateTimeInterface $occurredAt = null
     ): void {
+        if (!isset($metadata['ip']) && function_exists('request') && request()) {
+            $metadata['ip'] = request()->ip();
+        }
+        if (!isset($metadata['device']) && function_exists('request') && request()) {
+            $metadata['device'] = request()->userAgent();
+        }
+
         AuditLog::create([
             'id' => (string) Str::uuid(),
             'source_type' => $sourceType,

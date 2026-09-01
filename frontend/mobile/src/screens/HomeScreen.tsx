@@ -54,6 +54,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  const canViewFinancials = useMemo(() => {
+    return (
+      can('reports:view') ||
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.role === 'SUPER_ADMIN' ||
+      currentUser?.role === 'MANAGER'
+    )
+  }, [currentUser?.role, can])
+
+  const isSeller = !canViewFinancials || currentUser?.role === 'SELLER'
+
   const canEditTarget = useMemo(() => {
     return (
       currentUser?.role !== 'SELLER' &&
@@ -233,19 +244,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         />
       )}
 
-      {/* Hero Financial Performance Card */}
-      <HeroFinancialCard
-        summary={summary}
-        dailyTarget={dailyTarget}
-        targetProgress={targetProgress}
-        canEditTarget={canEditTarget}
-        onOpenTargetModal={() => {
-          setTargetInput(String(dailyTarget))
-          setTargetModalOpen(true)
-        }}
-      />
+      {/* Hero Financial Performance Card (Admins & Managers with Financial Reporting access) */}
+      {Boolean(canViewFinancials) && (
+        <HeroFinancialCard
+          summary={summary}
+          dailyTarget={dailyTarget}
+          targetProgress={targetProgress}
+          canEditTarget={canEditTarget}
+          onOpenTargetModal={() => {
+            setTargetInput(String(dailyTarget))
+            setTargetModalOpen(true)
+          }}
+        />
+      )}
 
-      {/* Personal Staff Shift & Earnings Card */}
+      {/* Personal Staff Shift & Earnings Card (Hero position for Sellers, shift overview for all) */}
       <PersonalShiftCard
         currentUser={currentUser}
         myPerformance={myPerformance}
@@ -269,6 +282,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         canRestock={Boolean(can('inventory:restock'))}
         canReadProducts={Boolean(can('products:read'))}
         onLowStockPress={handleLowStockPress}
+        isSeller={isSeller}
+        myPerformance={myPerformance}
       />
 
       {/* Quick Operations Grid */}
@@ -276,6 +291,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         onNavigate={onNavigate}
         onQuickStockIn={handleQuickStockIn}
         onQuickStockAdj={handleQuickStockAdj}
+        canRestock={Boolean(can('inventory:restock'))}
+        canAdjustStock={Boolean(can('inventory:adjust'))}
       />
 
       {/* Feature Modules Grid */}

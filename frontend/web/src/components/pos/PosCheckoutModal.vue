@@ -2,19 +2,33 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   X,
-  CreditCard,
   Banknote,
-  QrCode,
   Truck,
   Check,
   Receipt,
+  Share2,
+  AlertTriangle,
 } from 'lucide-vue-next'
 import api from '@/api/axios'
 import { useToast } from '@/composables/useToast'
+import type { CartItem } from '@/stores/posStore'
 import DeliveryCompanyPickerModal from './DeliveryCompanyPickerModal.vue'
 import DeliveryZonePickerModal from './DeliveryZonePickerModal.vue'
 import CustomerLookupRow from './CustomerLookupRow.vue'
+import SocialPlatformIcon, { getPlatformMeta } from './SocialPlatformIcon.vue'
+import BankBrandIcon from './BankBrandIcon.vue'
 import { calculateLoyalty } from '@/utils/loyalty'
+
+export interface SalesChannel {
+  id: string
+  name: string
+  platform: 'telegram' | 'facebook' | 'instagram' | 'tiktok' | 'pos' | 'web' | 'online' | string
+  code?: string
+  type?: string
+  image_url?: string
+  is_active?: boolean
+  is_default?: boolean
+}
 
 export interface DeliveryCompany {
   id: string
@@ -61,6 +75,11 @@ interface Props {
   companies?: DeliveryCompany[]
   zones?: DeliveryZone[]
   loading?: boolean
+  activeSeller?: { id: number | string; name: string; role?: string } | null
+  isSellingOnBehalf?: boolean
+  channels?: SalesChannel[]
+  selectedChannelId?: string | null
+  cartItems?: CartItem[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -83,6 +102,11 @@ const props = withDefaults(defineProps<Props>(), {
   companies: () => [],
   zones: () => [],
   loading: false,
+  activeSeller: null,
+  isSellingOnBehalf: false,
+  channels: () => [],
+  selectedChannelId: null,
+  cartItems: () => [],
 })
 
 const emit = defineEmits<{
@@ -102,6 +126,9 @@ const emit = defineEmits<{
   'update:tendered': [value: number]
   'update:payment-method': [value: string]
   'update:bank-account-id': [value: string | null]
+  'update:channel-id': [value: string]
+  'open-seller-picker': []
+  'reset-seller': []
   'complete': []
   'cancel': []
 }>()
@@ -137,9 +164,64 @@ const toast = useToast()
 // Local modal state
 const localTendered = ref<number>(0)
 const localNotes = ref<string>('')
-const cardRef = ref<string>('')
 const openCompanyPicker = ref(false)
 const openZonePicker = ref(false)
+
+// Sales Channels State & Helpers
+const availableChannels = computed(() => {
+  const list = Array.isArray(props.channels) ? props.channels : []
+  return list.filter((c) => c.is_active !== false)
+})
+
+const currentSelectedChannel = computed(() => {
+  if (props.selectedChannelId) {
+    const found = availableChannels.value.find((c) => String(c.id) === String(props.selectedChannelId))
+    if (found) return found
+  }
+  const def = availableChannels.value.find((c) => c.is_default)
+  return def || availableChannels.value[0] || null
+})
+
+const isWalkInChannel = computed(() => {
+  const ch = currentSelectedChannel.value
+  if (!ch) return true
+  const platform = (ch.platform || ch.type || '').toLowerCase().trim()
+  const name = (ch.name || '').toLowerCase().trim()
+  return platform === 'pos' || name.includes('walk-in') || name.includes('in-store') || name.includes('counter')
+})
+
+function handleSelectChannel(channelId: string) {
+  emit('update:channel-id', channelId)
+  const ch = availableChannels.value.find((c) => String(c.id) === String(channelId))
+  if (ch) {
+    const platform = (ch.platform || ch.type || '').toLowerCase().trim()
+    const name = (ch.name || '').toLowerCase().trim()
+    const isWalkIn = platform === 'pos' || name.includes('walk-in') || name.includes('in-store') || name.includes('counter')
+    if (isWalkIn) {
+      emit('update:delivery', false)
+    } else {
+      emit('update:delivery', true)
+    }
+  }
+}
+
+// Watch for channel changes and automatically set delivery mode
+watch(
+  () => isWalkInChannel.value,
+  (isWalkIn) => {
+    if (isWalkIn) {
+      emit('update:delivery', false)
+    } else {
+      emit('update:delivery', true)
+    }
+  }
+)
+
+// Stock Pre-flight Verification
+const overStockedItems = computed(() => {
+  const list = Array.isArray(props.cartItems) ? props.cartItems : []
+  return list.filter((i) => i.max_stock !== undefined && i.max_stock !== null && i.quantity > i.max_stock)
+})
 
 // Dynamic Bank Accounts
 const bankAccounts = ref<BankAccount[]>([])
@@ -175,20 +257,13 @@ function getBankCategory(b: BankAccount | null): 'CASH' | 'CARD' | 'QR' {
   return 'QR'
 }
 
-function getBankIcon(b: BankAccount | null) {
-  const cat = getBankCategory(b)
-  if (cat === 'CASH') return Banknote
-  if (cat === 'CARD') return CreditCard
-  return QrCode
-}
-
 const isCashSelected = computed(() => {
   return getBankCategory(selectedBank.value) === 'CASH'
 })
 
 function selectBankAccount(b: BankAccount) {
   selectedBankId.value = b.id
-  emit('update:bank-account-id', b.id)
+  emit('update:bank-account-id', b.id === 'cash' ? null : b.id)
   emit('update:payment-method', b.bank_name)
   if (getBankCategory(b) === 'CASH' && (localTendered.value === 0 || localTendered.value < props.total)) {
     localTendered.value = props.total
@@ -197,51 +272,55 @@ function selectBankAccount(b: BankAccount) {
 }
 
 async function fetchBankAccounts() {
+  const defaultCash: BankAccount = {
+    id: 'cash',
+    bank_name: 'Cash',
+    account_name: 'Cash Drawer',
+    account_number: '',
+    is_active: true,
+  }
+
   try {
     const res = await api.get('/bank-accounts')
     const list = res.data?.data || res.data || []
     const activeList = (Array.isArray(list) ? list : []).filter((b: any) => b.is_active !== false)
     
-    if (activeList.length > 0) {
-      bankAccounts.value = activeList
-    } else {
-      bankAccounts.value = [
-        { id: 'cash-drawer', bank_name: 'Cash Drawer', account_name: 'Cash Register', account_number: 'POS-01', is_default: true, is_active: true },
-        { id: 'aba-khqr', bank_name: 'ABA Bank', account_name: 'ABA PayWay KHQR', account_number: '000 123 456', is_default: false, is_active: true },
-        { id: 'card-pos', bank_name: 'Credit Card', account_name: 'Card Terminal EFT', account_number: 'EFT-01', is_default: false, is_active: true },
-      ]
-    }
+    // Ensure Cash is ALWAYS present as a payment option
+    const hasCash = activeList.some((b: any) => {
+      const name = (b.bank_name || '').toLowerCase()
+      return name === 'cash' || name.includes('cash') || name.includes('drawer')
+    })
 
-    if (props.selectedBankAccountId) {
-      const match = bankAccounts.value.find(b => b.id === props.selectedBankAccountId)
-      if (match) {
-        selectedBankId.value = match.id
-        return
-      }
-    }
+    const combined = hasCash ? activeList : [defaultCash, ...activeList]
+    bankAccounts.value = combined
 
-    if (props.paymentMethod) {
-      const match = bankAccounts.value.find(b => b.bank_name.toLowerCase() === props.paymentMethod?.toLowerCase())
-      if (match) {
-        selectedBankId.value = match.id
-        return
-      }
-    }
+    // 1. Highest priority: The account flagged as default in the payment methods data
+    const defaultAccount = bankAccounts.value.find((b: any) => b.is_default || b.isDefault)
 
-    if (!selectedBankId.value && bankAccounts.value.length > 0) {
-      const def = bankAccounts.value.find(b => b.is_default) || bankAccounts.value[0]
-      selectedBankId.value = def.id
-      selectBankAccount(def)
+    // 2. Second priority: If an explicit bank account ID was selected
+    const explicitIdMatch = props.selectedBankAccountId
+      ? bankAccounts.value.find(b => b.id === props.selectedBankAccountId)
+      : null
+
+    // Determine target selection (default from DB takes priority)
+    const target = defaultAccount || explicitIdMatch || (props.paymentMethod ? bankAccounts.value.find(b => b.bank_name.toLowerCase() === props.paymentMethod?.toLowerCase()) : null) || bankAccounts.value[0]
+
+    if (target) {
+      selectedBankId.value = target.id
+      selectBankAccount(target)
     }
   } catch (e) {
     bankAccounts.value = [
-      { id: 'cash-drawer', bank_name: 'Cash Drawer', account_name: 'Cash Register', account_number: 'POS-01', is_default: true, is_active: true },
+      defaultCash,
       { id: 'aba-khqr', bank_name: 'ABA Bank', account_name: 'ABA PayWay KHQR', account_number: '000 123 456', is_default: false, is_active: true },
+      { id: 'acleda-bank', bank_name: 'ACLEDA Bank', account_name: 'ACLEDA Mobile', account_number: '000 789 012', is_default: false, is_active: true },
+      { id: 'wing-bank', bank_name: 'Wing Bank', account_name: 'Wing KHQR', account_number: '000 345 678', is_default: false, is_active: true },
       { id: 'card-pos', bank_name: 'Credit Card', account_name: 'Card Terminal EFT', account_number: 'EFT-01', is_default: false, is_active: true },
     ]
-    if (!selectedBankId.value) {
-      selectedBankId.value = bankAccounts.value[0].id
-      selectBankAccount(bankAccounts.value[0])
+    const def = bankAccounts.value.find((b: any) => b.is_default || b.isDefault) || bankAccounts.value[0]
+    if (def) {
+      selectedBankId.value = def.id
+      selectBankAccount(def)
     }
   }
 }
@@ -376,6 +455,17 @@ watch(
       localTendered.value = props.tenderedAmount > 0 ? props.tenderedAmount : props.total
       customerPhoneInput.value = props.customerPhone || ''
       customerNameInput.value = props.customerName || ''
+      
+      // Ensure the selected channel is properly in sync
+      if (!props.selectedChannelId && currentSelectedChannel.value) {
+        emit('update:channel-id', currentSelectedChannel.value.id)
+      }
+
+      // Ensure delivery mode corresponds to the selected sales channel
+      if (!isWalkInChannel.value) {
+        emit('update:delivery', true)
+      }
+
       if (props.customerPhone || props.customerName) {
         if (props.customerLoyaltyTier) {
           customerOption.value = 'existing'
@@ -475,19 +565,59 @@ const changeDue = computed(() => {
   return 0
 })
 
+const hasCustomerInfo = computed(() => {
+  return !!(
+    customerPhoneInput.value.trim() ||
+    customerNameInput.value.trim() ||
+    matchedCustomer.value ||
+    props.customerPhone?.trim() ||
+    props.customerName?.trim()
+  )
+})
+
 const canComplete = computed(() => {
   if (props.loading) return false
   if (props.total <= 0) return false
+  if (overStockedItems.value.length > 0) return false
   if (isCashSelected.value && localTendered.value < props.total) {
     return false
   }
-  if (props.isDelivery && !props.deliveryAddress.trim()) {
-    return false
+  if (!isWalkInChannel.value) {
+    // 100% need Customer & Loyalty input for online sales channel
+    if (!hasCustomerInfo.value) return false
+    // Need delivery for sure
+    if (!props.isDelivery) return false
+    if (!props.deliveryAddress.trim()) return false
+  } else {
+    // Walk-in: delivery is optional, but if delivery is checked, address is required
+    if (props.isDelivery && !props.deliveryAddress.trim()) {
+      return false
+    }
   }
   return true
 })
 
 function handleComplete() {
+  if (overStockedItems.value.length > 0) {
+    toast.error('Cannot complete checkout: one or more items exceed available stock')
+    return
+  }
+
+  if (!isWalkInChannel.value) {
+    if (!hasCustomerInfo.value) {
+      toast.warning('Customer name or phone is required for online sales channels')
+      return
+    }
+    if (!props.isDelivery) {
+      toast.warning('Delivery is required for online sales channels')
+      return
+    }
+    if (!props.deliveryAddress.trim()) {
+      toast.warning('Please enter a delivery address for the order')
+      return
+    }
+  }
+
   if (!canComplete.value) {
     if (isCashSelected.value && localTendered.value < props.total) {
       toast.warning('Tendered amount must be at least the total amount')
@@ -542,10 +672,16 @@ const selectedCompanyName = computed(() => {
 
 const selectedZoneLabel = computed(() => {
   if (!props.deliveryZoneId) return ''
+  if (props.deliveryZoneId === 'custom') {
+    const feeVal = props.deliveryFee || 0
+    return `Custom / Negotiated (${feeVal > 0 ? `$${feeVal.toFixed(2)}` : 'Free'})`
+  }
   const z = props.zones.find((item) => item.id === props.deliveryZoneId)
   if (!z) return ''
   const zoneName = z.name || z.zone_name || 'Delivery Zone'
-  const feeVal = parseFloat(String(z.cost ?? z.fee ?? 0)) || 0
+  const feeVal = props.deliveryFee !== undefined && props.deliveryFee !== null
+    ? props.deliveryFee
+    : (parseFloat(String(z.cost ?? z.fee ?? 0)) || 0)
   return `${zoneName} (${feeVal > 0 ? `$${feeVal.toFixed(2)}` : 'Free'})`
 })
 
@@ -576,30 +712,30 @@ defineExpose({
   <div v-if="open" class="fixed inset-0 z-100 flex items-center justify-center p-4">
     <!-- Backdrop -->
     <div
-      class="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+      class="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       @click="close"
     />
 
     <!-- Modal Dialog -->
     <div
-      class="relative w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-[#E8E2D9] overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in-0 zoom-in-95 duration-150"
+      class="relative w-full max-w-xl rounded-2xl bg-card shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in-0 zoom-in-95 duration-150 text-foreground"
     >
       <!-- Modal Header -->
-      <div class="px-5 py-3.5 bg-[#FAF7F2] border-b border-[#E8E2D9] flex items-center justify-between">
+      <div class="px-5 py-3.5 bg-surface-subtle border-b border-border flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-[#FFF3E0] border border-[#FFDCC4] flex items-center justify-center text-[#924C00] shadow-2xs">
+          <div class="w-8 h-8 rounded-lg bg-cta-muted border border-border-strong flex items-center justify-center text-primary shadow-2xs">
             <Receipt class="w-4 h-4" />
           </div>
           <div>
-            <h3 class="text-sm font-bold text-[#1A1C1C] font-display">Tender & Fast Checkout</h3>
-            <p class="text-3xs text-[#6B6358]">Select payment method and finalize transaction</p>
+            <h3 class="text-sm font-bold text-foreground font-display">Tender & Fast Checkout</h3>
+            <p class="text-3xs text-muted-foreground">Select payment method and finalize transaction</p>
           </div>
         </div>
 
         <button
           type="button"
           @click="close"
-          class="p-1.5 rounded-lg text-[#6B6358] hover:text-[#1A1C1C] hover:bg-[#F0EAE1] transition-colors cursor-pointer"
+          class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-subtle transition-colors cursor-pointer"
         >
           <X class="w-4 h-4" />
         </button>
@@ -607,33 +743,148 @@ defineExpose({
 
       <!-- Scrollable Content -->
       <div class="p-5 overflow-y-auto space-y-4 flex-1">
+        <!-- Overstock Alert Banner -->
+        <div v-if="overStockedItems.length > 0" class="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 space-y-1">
+          <div class="flex items-center gap-2 font-bold text-xs">
+            <AlertTriangle class="w-4 h-4 text-red-500 shrink-0" />
+            <span>Stock Limit Exceeded</span>
+          </div>
+          <p class="text-3xs text-red-600 dark:text-red-400">
+            One or more items in cart exceed available inventory. Please adjust quantities before checkout:
+          </p>
+          <ul class="text-3xs font-mono space-y-0.5 pt-1">
+            <li v-for="item in overStockedItems" :key="item.id" class="text-red-700 dark:text-red-300">
+              • <strong>{{ item.name }}</strong><span v-if="item.variant_name"> ({{ item.variant_name }})</span>: {{ item.quantity }} in cart, only {{ item.max_stock }} in stock.
+            </li>
+          </ul>
+        </div>
+
         <!-- Amount Breakdown Card -->
-        <div class="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] space-y-2">
-          <div class="flex items-center justify-between text-xs text-[#6B6358]">
+        <div class="p-3.5 rounded-xl bg-surface-subtle border border-border space-y-2">
+          <div class="flex items-center justify-between text-xs text-muted-foreground">
             <span>Subtotal</span>
-            <span class="font-mono font-bold text-[#1A1C1C]">{{ formatMoney(subtotal) }}</span>
+            <span class="font-mono font-bold text-foreground">{{ formatMoney(subtotal) }}</span>
           </div>
 
-          <div v-if="discountValue && discountValue > 0" class="flex items-center justify-between text-xs text-amber-900">
+          <div v-if="discountValue && discountValue > 0" class="flex items-center justify-between text-xs text-amber-700 dark:text-amber-300">
             <span>Order Discount</span>
             <span class="font-mono font-bold">
               -{{ formatMoney(subtotal * (discountValue / 100)) }} ({{ discountValue }}%)
             </span>
           </div>
 
-          <div v-if="taxRate && taxRate > 0" class="flex items-center justify-between text-xs text-[#6B6358]">
+          <div v-if="taxRate && taxRate > 0" class="flex items-center justify-between text-xs text-muted-foreground">
             <span>Tax ({{ taxRate }}%)</span>
-            <span class="font-mono font-bold text-[#1A1C1C]">+{{ formatMoney(taxAmount) }}</span>
+            <span class="font-mono font-bold text-foreground">+{{ formatMoney(taxAmount) }}</span>
           </div>
 
-          <div v-if="isDelivery && deliveryFee && deliveryFee > 0" class="flex items-center justify-between text-xs text-[#6B6358]">
+          <div v-if="isDelivery && deliveryFee && deliveryFee > 0" class="flex items-center justify-between text-xs text-muted-foreground">
             <span>Delivery Fee</span>
-            <span class="font-mono font-bold text-[#1A1C1C]">+{{ formatMoney(deliveryFee) }}</span>
+            <span class="font-mono font-bold text-foreground">+{{ formatMoney(deliveryFee) }}</span>
           </div>
 
-          <div class="pt-2 border-t border-[#E8E2D9] flex items-center justify-between">
-            <span class="font-bold text-sm text-[#1A1C1C]">Total Due</span>
-            <span class="text-xl font-bold font-mono text-[#924C00]">{{ formatMoney(total) }}</span>
+          <div class="pt-2 border-t border-border flex items-center justify-between">
+            <span class="font-bold text-sm text-foreground">Total Due</span>
+            <span class="text-xl font-bold font-mono text-primary">{{ formatMoney(total) }}</span>
+          </div>
+        </div>
+
+        <!-- Sales Channel (Source Platform / Stream) Selector -->
+        <div v-if="availableChannels.length > 0" class="p-3.5 rounded-xl border border-border bg-card space-y-2.5 shadow-2xs">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-surface-subtle border border-border flex items-center justify-center text-primary">
+              <Share2 class="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span class="text-xs font-bold text-foreground">Sales Channel</span>
+              <span class="text-3xs text-muted-foreground block">Order origin platform or stream</span>
+            </div>
+          </div>
+
+          <!-- Channel Selection Chips -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <button
+              v-for="chan in availableChannels"
+              :key="chan.id"
+              type="button"
+              @click="handleSelectChannel(chan.id)"
+              :class="[
+                'p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer shadow-2xs relative',
+                String(selectedChannelId || currentSelectedChannel?.id) === String(chan.id)
+                  ? 'bg-cta-muted border-cta ring-2 ring-cta/25'
+                  : 'bg-surface-subtle border-border hover:bg-card hover:border-border-strong'
+              ]"
+            >
+              <!-- Real Brand Icon in Platform-Tinted Container -->
+              <div
+                class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border"
+                :style="{
+                  backgroundColor: getPlatformMeta(chan.platform, chan.name).bg,
+                  borderColor: getPlatformMeta(chan.platform, chan.name).border,
+                }"
+              >
+                <SocialPlatformIcon :platform="chan.platform" :name="chan.name" :size="18" />
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <span class="text-xs font-bold text-foreground truncate block leading-tight">
+                  {{ chan.name }}
+                </span>
+              </div>
+
+              <span v-if="chan.is_default" class="text-[8px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded font-mono font-bold shrink-0">
+                DEF
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sales Representative Attribution (Seller Credit) -->
+        <div class="p-3 rounded-xl border border-border bg-card flex items-center justify-between gap-2.5 shadow-2xs">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-cta-muted border border-border-strong flex items-center justify-center text-primary shrink-0 font-bold text-xs uppercase">
+              {{ activeSeller?.name ? activeSeller.name.charAt(0) : 'S' }}
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-3xs uppercase font-bold text-muted-foreground tracking-wider">Credited Seller:</span>
+                <span
+                  v-if="isSellingOnBehalf"
+                  class="px-2 py-0.5 rounded-full bg-cta text-cta-foreground text-3xs font-bold uppercase tracking-wider"
+                >
+                  On Behalf
+                </span>
+                <span
+                  v-else
+                  class="px-2 py-0.5 rounded-full bg-success-bg text-success-text border border-success-border text-3xs font-bold uppercase tracking-wider"
+                >
+                  Direct
+                </span>
+              </div>
+              <span class="text-xs font-bold text-foreground truncate block mt-0.5">
+                {{ activeSeller?.name || 'Current User' }}
+                <span v-if="activeSeller?.role" class="text-3xs font-normal text-muted-foreground">({{ activeSeller.role }})</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              v-if="isSellingOnBehalf"
+              type="button"
+              @click="emit('reset-seller')"
+              class="px-2 py-1 rounded-lg text-3xs font-bold text-primary bg-cta-muted hover:bg-accent border border-border-strong transition-colors cursor-pointer"
+              title="Reset attribution to logged-in user"
+            >
+              Reset to Me
+            </button>
+            <button
+              type="button"
+              @click="emit('open-seller-picker')"
+              class="px-2.5 py-1 rounded-lg text-xs font-bold text-foreground bg-surface-subtle hover:bg-card border border-border transition-colors cursor-pointer"
+            >
+              Change
+            </button>
           </div>
         </div>
 
@@ -645,6 +896,7 @@ defineExpose({
           :suggestions="customerSuggestions"
           :status="lookupStatus"
           :loyalty-info="matchedCustomer ? calculateLoyalty(matchedCustomer) : null"
+          :required="!isWalkInChannel"
           @update:phone="handlePhoneSearchInput"
           @update:name="handleNameInput"
           @select="selectCustomerSuggestion"
@@ -652,86 +904,84 @@ defineExpose({
           @reset="handleResetCustomer"
         />
 
-        <!-- Payment Tender Method (Scrollable Bank Accounts Selector) -->
+        <!-- Payment Method Selection -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <label class="block text-xs font-bold text-[#1A1C1C]">Select Payment Method (Bank Accounts)</label>
-            <span class="text-[10px] text-[#6B6358] font-mono">
-              {{ filteredBankAccounts.length }} / {{ bankAccounts.length }} Account{{ bankAccounts.length === 1 ? '' : 's' }}
+            <label class="block text-xs font-bold text-foreground">Select Payment Method</label>
+            <span class="text-[10px] text-muted-foreground font-mono">
+              {{ filteredBankAccounts.length }} / {{ bankAccounts.length }} Method{{ bankAccounts.length === 1 ? '' : 's' }}
             </span>
           </div>
 
           <!-- Quick Search Filter if multiple bank accounts exist -->
-          <div v-if="bankAccounts.length > 3" class="relative">
+          <div v-if="bankAccounts.length > 6" class="relative">
             <input
               v-model="bankSearchQuery"
               type="text"
-              placeholder="Search bank name or account..."
-              class="w-full px-3 py-1 rounded-lg border border-[#E8E2D9] bg-[#FAF7F2] text-2xs text-[#1A1C1C] focus:bg-white focus:border-[#FF8800] outline-hidden font-sans"
+              placeholder="Search payment method..."
+              class="w-full px-3 py-1 rounded-lg border border-input bg-surface-subtle text-2xs text-foreground focus:bg-card focus:border-cta outline-hidden font-sans"
             />
           </div>
 
-          <!-- Scrollable Bank Accounts Grid -->
+          <!-- Payment Selection Grid: Logo + Name Aligned -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
             <button
-              v-for="(b, idx) in filteredBankAccounts"
+              v-for="b in filteredBankAccounts"
               :key="b.id"
               type="button"
               @click="selectBankAccount(b)"
               :class="[
-                'p-2.5 rounded-xl border text-xs flex flex-col items-center gap-1 transition-all cursor-pointer shadow-2xs relative text-center',
+                'p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer shadow-2xs relative',
                 selectedBank?.id === b.id
-                  ? 'bg-[#FFF3E0] border-[#FF8800] text-[#924C00] ring-2 ring-[#FF8800]/20 font-bold'
-                  : 'bg-white border-[#E8E2D9] text-[#6B6358] hover:bg-[#FAF7F2] hover:text-[#1A1C1C] font-semibold'
+                  ? 'bg-cta-muted border-cta ring-2 ring-cta/25'
+                  : 'bg-surface-subtle border-border hover:bg-card hover:border-border-strong'
               ]"
             >
-              <component :is="getBankIcon(b)" class="w-4 h-4" />
-              <span class="truncate max-w-full text-xs">{{ b.bank_name }}</span>
-              <span class="text-[10px] font-mono text-[#8C827A] truncate max-w-full font-normal">
-                {{ b.account_name || b.account_number }}
-              </span>
-              <span v-if="idx < 9 && !bankSearchQuery" class="text-[9px] font-mono text-[#8C827A]/80 absolute bottom-1 right-1.5 opacity-60">
-                Alt+{{ idx + 1 }}
-              </span>
-              <span v-if="b.is_default" class="absolute top-1 right-1 px-1 py-0.2 rounded bg-amber-500/10 text-[#924C00] text-[8px] font-bold">
+              <BankBrandIcon :bank-name="b.bank_name" :logo-url="b.logo_icon || (b as any).logo_url" :size="18" />
+
+              <div class="min-w-0 flex-1">
+                <span class="text-xs font-bold truncate block leading-tight text-foreground">
+                  {{ b.bank_name }}
+                </span>
+              </div>
+
+              <span v-if="b.is_default" class="text-[8px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded font-mono font-bold shrink-0">
                 DEF
               </span>
             </button>
           </div>
         </div>
 
-        <!-- Dynamic Tender Inputs Based on Selected Bank Account Category -->
-        <!-- 1. Cash Tender -->
-        <div v-if="isCashSelected" class="p-3.5 rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] space-y-2.5">
+        <!-- Cash Tender Inputs (Only shown when Cash is selected) -->
+        <div v-if="isCashSelected" class="p-3.5 rounded-xl border border-border bg-surface-subtle space-y-2.5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1.5">
-              <Banknote class="w-4 h-4 text-[#924C00]" />
-              <span class="text-xs font-bold text-[#1A1C1C]">{{ selectedBank?.bank_name || 'Cash' }}</span>
-              <span class="text-[10px] font-mono text-[#6B6358]">({{ selectedBank?.account_name || 'Register' }})</span>
+              <Banknote class="w-4 h-4 text-primary" />
+              <span class="text-xs font-bold text-foreground">Cash Received</span>
             </div>
-            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-mono font-bold">
               Cash Drawer
             </span>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-[#1A1C1C] mb-1">Tendered Cash Amount ($)</label>
+            <label class="block text-xs font-bold text-foreground mb-1">Tendered Cash Amount ($)</label>
             <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[#6B6358]">$</span>
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">$</span>
               <input
                 :value="localTendered"
                 @input="setTendered(parseFloat(($event.target as HTMLInputElement).value) || 0)"
                 type="number"
                 min="0"
                 step="any"
-                class="w-full pl-7 pr-3 py-2 rounded-xl border border-[#E8E2D9] bg-white text-base font-bold font-mono text-[#1A1C1C] focus:border-[#FF8800] focus:ring-2 focus:ring-[#FF8800]/20 outline-hidden transition-all"
+                class="w-full pl-7 pr-3 py-2 rounded-xl border border-input bg-card text-base font-bold font-mono text-foreground focus:border-cta focus:ring-2 focus:ring-cta/20 outline-hidden transition-all"
               />
             </div>
           </div>
 
           <!-- Quick Cash Pill Presets -->
           <div>
-            <span class="text-3xs font-bold text-[#6B6358] uppercase tracking-wider block mb-1">1-Click Quick Cash</span>
+            <span class="text-3xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">1-Click Quick Cash</span>
             <div class="flex flex-wrap gap-1.5">
               <button
                 v-for="preset in quickCashPresets"
@@ -741,8 +991,8 @@ defineExpose({
                 :class="[
                   'px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all border shadow-2xs cursor-pointer',
                   localTendered === preset.value
-                    ? 'bg-[#924C00] text-white border-[#924C00]'
-                    : 'bg-white text-[#1A1C1C] border-[#E8E2D9] hover:bg-[#FFF3E0] hover:border-[#FF8800]'
+                    ? 'bg-cta text-cta-foreground border-cta'
+                    : 'bg-card text-foreground border-border hover:bg-accent hover:border-cta'
                 ]"
               >
                 {{ preset.label }}
@@ -750,21 +1000,21 @@ defineExpose({
               <button
                 type="button"
                 @click="addTendered(10)"
-                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-white text-[#6B6358] border border-[#E8E2D9] hover:bg-[#FAF7F2] cursor-pointer"
+                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-card text-muted-foreground border border-border hover:bg-surface-subtle cursor-pointer"
               >
                 +$10
               </button>
               <button
                 type="button"
                 @click="addTendered(20)"
-                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-white text-[#6B6358] border border-[#E8E2D9] hover:bg-[#FAF7F2] cursor-pointer"
+                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-card text-muted-foreground border border-border hover:bg-surface-subtle cursor-pointer"
               >
                 +$20
               </button>
               <button
                 type="button"
                 @click="addTendered(50)"
-                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-white text-[#6B6358] border border-[#E8E2D9] hover:bg-[#FAF7F2] cursor-pointer"
+                class="px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono bg-card text-muted-foreground border border-border hover:bg-surface-subtle cursor-pointer"
               >
                 +$50
               </button>
@@ -772,14 +1022,14 @@ defineExpose({
           </div>
 
           <!-- Change Due Display -->
-          <div class="pt-2 border-t border-[#E8E2D9] flex items-center justify-between">
-            <span class="text-xs font-bold text-[#6B6358]">Change Due:</span>
+          <div class="pt-2 border-t border-border flex items-center justify-between">
+            <span class="text-xs font-bold text-muted-foreground">Change Due:</span>
             <span
               :class="[
                 'text-base font-bold font-mono px-2.5 py-0.5 rounded-lg',
                 changeDue > 0
-                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                  : 'text-[#1A1C1C]'
+                  ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                  : 'text-foreground'
               ]"
             >
               {{ formatMoney(changeDue) }}
@@ -787,115 +1037,67 @@ defineExpose({
           </div>
         </div>
 
-        <!-- 2. Card Tender -->
-        <div v-else-if="getBankCategory(selectedBank) === 'CARD'" class="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] text-center space-y-2.5">
-          <CreditCard class="w-8 h-8 mx-auto text-[#924C00]" />
-          <div>
-            <h4 class="text-xs font-bold text-[#1A1C1C]">{{ selectedBank?.bank_name || 'Card Terminal' }}</h4>
-            <p class="text-3xs text-[#6B6358]">Swipe, tap, or insert chip on {{ selectedBank?.account_name || 'card terminal' }}</p>
-            <p v-if="selectedBank?.account_number" class="text-3xs font-mono text-[#8C827A] mt-0.5">Terminal / Acc: {{ selectedBank.account_number }}</p>
-          </div>
-          <div class="max-w-xs mx-auto pt-1">
-            <input
-              v-model="cardRef"
-              type="text"
-              placeholder="Authorization / Reference code (Optional)"
-              class="w-full px-3 py-1.5 rounded-lg border border-[#E8E2D9] bg-white text-xs text-[#1A1C1C] focus:border-[#FF8800] outline-hidden text-center"
-            />
-          </div>
-        </div>
-
-        <!-- 3. Dynamic QR Code / Mobile Bank Payment -->
-        <div v-else class="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] text-center space-y-2.5">
-          <div class="w-28 h-28 mx-auto bg-white p-2 rounded-xl border border-[#E8E2D9] shadow-2xs flex flex-col items-center justify-center overflow-hidden">
-            <img
-              v-if="selectedBank?.qr_image_url || selectedBank?.qr_code_url"
-              :src="selectedBank.qr_image_url || selectedBank.qr_code_url!"
-              alt="Bank QR Code"
-              class="w-full h-full object-contain"
-            />
-            <template v-else>
-              <QrCode class="w-18 h-18 text-[#1A1C1C]" />
-              <span class="text-[9px] font-bold text-[#924C00] font-mono uppercase truncate max-w-full">
-                {{ selectedBank ? selectedBank.bank_name : 'KHQR' }}
-              </span>
-            </template>
-          </div>
-
-          <div>
-            <h4 class="text-xs font-bold text-[#1A1C1C]">Scan with {{ selectedBank?.bank_name || 'Mobile Banking' }}</h4>
-            <div v-if="selectedBank" class="text-xs text-[#6B6358] mt-0.5 space-y-0.5">
-              <p class="font-bold text-[#1A1C1C] text-xs">{{ selectedBank.account_name }}</p>
-              <p class="font-mono text-3xs text-[#6B6358]">{{ selectedBank.account_number }}</p>
-              <span v-if="selectedBank.currency" class="inline-block mt-0.5 px-1.5 py-0.2 rounded bg-[#FAF7F2] border border-[#E8E2D9] text-[9px] font-mono font-bold text-[#924C00]">
-                Currency: {{ selectedBank.currency }}
-              </span>
-            </div>
-            <p v-else class="text-3xs text-[#6B6358] mt-0.5">Scan QR code using any Mobile Banking app</p>
-          </div>
-
-          <div class="max-w-xs mx-auto pt-1">
-            <input
-              v-model="cardRef"
-              type="text"
-              placeholder="Transaction Slip Ref (Optional)"
-              class="w-full px-3 py-1.5 rounded-lg border border-[#E8E2D9] bg-white text-xs text-[#1A1C1C] focus:border-[#FF8800] outline-hidden text-center"
-            />
-          </div>
-        </div>
-
         <!-- Delivery & Fulfillment Option (Collapsible Toggle) -->
-        <div class="p-3.5 rounded-xl border border-[#E8E2D9] bg-white space-y-2.5">
+        <div class="p-3.5 rounded-xl border border-border bg-card space-y-2.5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <Truck class="w-4 h-4 text-[#924C00]" />
+              <Truck class="w-4 h-4 text-primary" />
               <div>
-                <span class="text-xs font-bold text-[#1A1C1C]">Delivery / Shipping Order</span>
-                <p class="text-3xs text-[#6B6358]">Attach carrier, destination zone, and shipping address</p>
+                <span class="text-xs font-bold text-foreground">Delivery / Shipping Order</span>
+                <p class="text-3xs text-muted-foreground">Attach carrier, destination zone, and shipping address</p>
               </div>
             </div>
 
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                :checked="isDelivery"
-                @change="emit('update:delivery', ($event.target as HTMLInputElement).checked)"
-                class="sr-only peer"
-              />
-              <div class="w-8 h-4.5 bg-[#E8E2D9] peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-[#924C00]"></div>
-            </label>
+            <div class="flex items-center gap-2">
+              <span
+                v-if="!isWalkInChannel"
+                class="text-3xs font-bold text-warning-text bg-warning-bg border border-warning-border px-2 py-0.5 rounded-full"
+              >
+                Required for Online
+              </span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  :checked="isDelivery"
+                  :disabled="!isWalkInChannel"
+                  @change="emit('update:delivery', ($event.target as HTMLInputElement).checked)"
+                  class="sr-only peer"
+                />
+                <div class="w-8 h-4.5 bg-muted peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-cta peer-disabled:opacity-80"></div>
+              </label>
+            </div>
           </div>
 
-          <div v-if="isDelivery" class="space-y-2.5 pt-2 border-t border-[#E8E2D9]">
+          <div v-if="isDelivery" class="space-y-2.5 pt-2 border-t border-border">
             <div>
-              <label class="block text-3xs font-bold text-[#1A1C1C] mb-1">Delivery Address *</label>
+              <label class="block text-3xs font-bold text-foreground mb-1">Delivery Address *</label>
               <input
                 :value="deliveryAddress"
                 @input="emit('update:delivery-address', ($event.target as HTMLInputElement).value)"
                 type="text"
                 placeholder="Full delivery street address (Auto-filled from customer or edit for this order)..."
-                class="w-full px-3 py-1.5 rounded-lg border border-[#E8E2D9] bg-[#FAF7F2] text-xs text-[#1A1C1C] focus:bg-white focus:border-[#FF8800] outline-hidden"
+                class="w-full px-3 py-1.5 rounded-lg border border-input bg-surface-subtle text-xs text-foreground focus:bg-card focus:border-cta outline-hidden"
               />
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <label class="block text-3xs font-bold text-[#1A1C1C] mb-1">Delivery Carrier</label>
+                <label class="block text-3xs font-bold text-foreground mb-1">Delivery Carrier</label>
                 <button
                   type="button"
                   @click="openCompanyPicker = true"
-                  class="w-full px-2.5 py-1.5 rounded-lg border border-[#E8E2D9] bg-[#FAF7F2] text-xs text-left font-medium text-[#1A1C1C] hover:bg-white truncate cursor-pointer"
+                  class="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface-subtle text-xs text-left font-medium text-foreground hover:bg-card truncate cursor-pointer"
                 >
                   {{ selectedCompanyName || 'Select Company...' }}
                 </button>
               </div>
 
               <div>
-                <label class="block text-3xs font-bold text-[#1A1C1C] mb-1">Delivery Zone & Fee</label>
+                <label class="block text-3xs font-bold text-foreground mb-1">Delivery Zone & Fee</label>
                 <button
                   type="button"
                   @click="openZonePicker = true"
-                  class="w-full px-2.5 py-1.5 rounded-lg border border-[#E8E2D9] bg-[#FAF7F2] text-xs text-left font-medium text-[#1A1C1C] hover:bg-white truncate cursor-pointer"
+                  class="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface-subtle text-xs text-left font-medium text-foreground hover:bg-card truncate cursor-pointer"
                 >
                   {{ selectedZoneLabel || 'Select Zone...' }}
                 </button>
@@ -906,22 +1108,22 @@ defineExpose({
 
         <!-- Order Notes -->
         <div>
-          <label class="block text-3xs font-bold text-[#1A1C1C] uppercase mb-1">Order Notes (Optional)</label>
+          <label class="block text-3xs font-bold text-foreground uppercase mb-1">Order Notes (Optional)</label>
           <input
             v-model="localNotes"
             type="text"
             placeholder="e.g. Rush delivery, VIP customer, special packaging..."
-            class="w-full px-3 py-1.5 rounded-lg border border-[#E8E2D9] bg-[#FAF7F2] text-xs text-[#1A1C1C] focus:bg-white focus:border-[#FF8800] outline-hidden"
+            class="w-full px-3 py-1.5 rounded-lg border border-input bg-surface-subtle text-xs text-foreground focus:bg-card focus:border-cta outline-hidden"
           />
         </div>
       </div>
 
       <!-- Footer CTA -->
-      <div class="px-5 py-3 bg-[#FAF7F2] border-t border-[#E8E2D9] flex items-center justify-between gap-2.5">
+      <div class="px-5 py-3 bg-surface-subtle border-t border-border flex items-center justify-between gap-2.5">
         <button
           type="button"
           @click="close"
-          class="h-9 px-4 rounded-xl border border-[#E8E2D9] bg-white text-[#1A1C1C] font-bold text-xs hover:bg-[#FAF7F2] transition-colors cursor-pointer"
+          class="h-9 px-4 rounded-xl border border-border bg-card text-foreground font-bold text-xs hover:bg-surface-subtle transition-colors cursor-pointer"
         >
           Cancel (Esc)
         </button>
@@ -930,7 +1132,7 @@ defineExpose({
           type="button"
           @click="handleComplete"
           :disabled="!canComplete"
-          class="flex-1 h-9 px-5 rounded-xl bg-[#FF8800] text-white font-bold text-xs hover:bg-[#E67A00] transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-98"
+          class="flex-1 h-9 px-5 rounded-xl bg-cta text-cta-foreground font-bold text-xs hover:brightness-110 transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-98"
         >
           <div v-if="loading" class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           <Check v-else class="w-4 h-4 stroke-[2.5]" />

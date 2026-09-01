@@ -4,22 +4,35 @@ import api, { ApiError } from '@/api/axios'
 
 export interface AuditLog {
   id: string
-  user_id: string
-  user_name: string
   action: string
-  description: string
+  category?: string
+  target?: string
+  actor_name?: string
+  actor_role?: string
+  details?: string
+  metadata?: Record<string, unknown>
+  occurred_at?: string
+  created_at?: string
+  by?: string
+  time?: string
+  ip?: string
+  ip_address?: string
+  device?: string
+  user_id?: string
+  user_name?: string
+  description?: string
   subject_type?: string
   subject_id?: string
-  metadata?: Record<string, unknown>
-  ip_address?: string
-  created_at: string
 }
 
 export interface AuditLogFilters {
   page?: number
   per_page?: number
   user_id?: string
+  category?: string
   action?: string
+  date_from?: string
+  date_to?: string
   from?: string
   to?: string
   search?: string

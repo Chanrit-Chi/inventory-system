@@ -26,6 +26,8 @@ import {
   DialogDescription,
   DialogFooter,
   Skeleton,
+  DatePicker,
+  SelectField,
 } from '@/components/ui'
 
 export interface PurchaseOrderItem {
@@ -96,6 +98,16 @@ const loading = ref(false)
 const search = ref('')
 const statusFilter = ref<'ALL' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'>('ALL')
 const selectedSupplierFilter = ref<string>('ALL')
+
+const supplierFilterOptions = computed(() => [
+  { label: 'All Suppliers', value: 'ALL' },
+  ...suppliers.value.map(s => ({ label: s.name, value: s.id })),
+])
+
+const createSupplierOptions = computed(() => suppliers.value.map(s => ({
+  label: `${s.name}${s.lead_time_days ? ` (${s.lead_time_days}d lead time)` : ''}`,
+  value: s.id,
+})))
 
 // Create Modal State
 const showCreateModal = ref(false)
@@ -428,7 +440,7 @@ function getStatusBadge(status: string) {
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <Button variant="primary" size="sm" class="gap-1.5" @click="openCreateModal">
           <Plus class="w-4 h-4" />
           <span>New Purchase Order</span>
@@ -471,11 +483,11 @@ function getStatusBadge(status: string) {
       <Card class="p-4 bg-card border-border shadow-2xs">
         <div class="flex items-center justify-between">
           <span class="text-2xs font-bold uppercase tracking-wider text-muted-foreground">Received Intake Units</span>
-          <div class="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+          <div class="p-2 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
             <Boxes class="w-4 h-4" />
           </div>
         </div>
-        <div class="text-2xl font-black text-emerald-600 font-display mt-2">
+        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-display mt-2">
           {{ totalReceivedUnits.toLocaleString() }}
         </div>
         <span class="text-3xs text-muted-foreground block mt-1">
@@ -511,15 +523,12 @@ function getStatusBadge(status: string) {
           />
         </div>
 
-        <select
+        <SelectField
           v-model="selectedSupplierFilter"
-          class="h-9 px-2.5 text-xs bg-surface border border-border rounded-lg text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-        >
-          <option value="ALL">All Suppliers</option>
-          <option v-for="s in suppliers" :key="s.id" :value="s.id">
-            {{ s.name }}
-          </option>
-        </select>
+          :options="supplierFilterOptions"
+          placeholder="All Suppliers"
+          class="h-9 w-40 bg-surface text-xs"
+        />
       </div>
 
       <!-- Status Tabs -->
@@ -654,22 +663,20 @@ function getStatusBadge(status: string) {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Target Supplier *</label>
-              <select
+              <SelectField
                 v-model="createSupplierId"
-                class="w-full h-9 px-3 text-xs bg-surface border border-border rounded-lg text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-              >
-                <option v-for="s in suppliers" :key="s.id" :value="s.id">
-                  {{ s.name }} {{ s.lead_time_days ? `(${s.lead_time_days}d lead time)` : '' }}
-                </option>
-              </select>
+                :options="createSupplierOptions"
+                placeholder="Select supplier"
+                class="w-full h-9 bg-surface text-xs"
+              />
             </div>
 
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Expected Delivery Date</label>
-              <input
-                type="date"
+              <DatePicker
                 v-model="createExpectedDate"
-                class="w-full h-9 px-3 text-xs bg-surface border border-border rounded-lg text-foreground font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
+                placeholder="Pick delivery date"
+                class="w-full h-9 bg-surface text-xs"
               />
             </div>
           </div>

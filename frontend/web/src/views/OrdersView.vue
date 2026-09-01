@@ -4,6 +4,7 @@ import { useOrderStore } from '@/stores/orderStore'
 import { getOrderStatus } from '@/utils/orderStatus'
 import { usePrintStore } from '@/stores/printStore'
 import { useToast } from '@/composables/useToast'
+import api from '@/api/axios'
 import {
   Receipt,
   Search,
@@ -19,6 +20,7 @@ import {
   User,
   Calendar,
   AlertCircle,
+  Ban,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -40,6 +42,8 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  DatePicker,
+  SelectField,
 } from '@/components/ui'
 
 const orderStore = useOrderStore()
@@ -53,20 +57,36 @@ const dateFrom = ref('')
 const dateTo = ref('')
 const page = ref(1)
 
+const channelOptions = computed(() => [
+  { label: 'All Channels', value: '' },
+  ...(orderStore.channels || []).map((ch: any) => ({ label: ch.name, value: ch.id })),
+])
+
+const statusOptions = [
+  { label: 'All Statuses', value: '' },
+  { label: 'COMPLETED', value: 'COMPLETED' },
+  { label: 'PENDING', value: 'PENDING' },
+  { label: 'PROCESSING', value: 'PROCESSING' },
+  { label: 'CANCELLED', value: 'CANCELLED' },
+]
+
 const isCopied = ref(false)
 const showPrintReceipt = ref(false)
 
 // KPI Summary Computations
-const totalOrdersCount = computed(() => orderStore.meta?.total ?? orderStore.orders.length)
-const totalGrossSales = computed(() =>
-  orderStore.orders.reduce((sum, o) => sum + (parseFloat(String(o.total_amount)) || 0), 0)
-)
-const completedOrdersCount = computed(() =>
-  orderStore.orders.filter(o => o.status === 'COMPLETED').length
-)
-const pendingOrdersCount = computed(() =>
-  orderStore.orders.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length
-)
+const totalOrdersCount = computed(() => orderStore.meta?.total ?? (Array.isArray(orderStore.orders) ? orderStore.orders.length : 0))
+const totalGrossSales = computed(() => {
+  const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
+  return list.reduce((sum, o) => sum + (parseFloat(String(o.total_amount)) || 0), 0)
+})
+const completedOrdersCount = computed(() => {
+  const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
+  return list.filter(o => o.status === 'COMPLETED').length
+})
+const pendingOrdersCount = computed(() => {
+  const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
+  return list.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length
+})
 
 async function loadOrders() {
   const params: Record<string, unknown> = {
@@ -115,6 +135,71 @@ function closeModal() {
   orderStore.clearSelectedOrder()
   isCopied.value = false
   showPrintReceipt.value = false
+  isCancelModalOpen.value = false
+}
+
+// Order Cancellation State
+const isCancelModalOpen = ref(false)
+const cancelReason = ref('Customer changed mind / cancelled')
+const isCancelling = ref(false)
+
+function openCancelModal() {
+  cancelReason.value = 'Customer changed mind / cancelled'
+  isCancelModalOpen.value = true
+}
+
+async function confirmCancelOrder() {
+  if (!orderStore.selectedOrder) return
+  isCancelling.value = true
+  try {
+    const orderId = orderStore.selectedOrder.id
+    const reasonText = cancelReason.value.trim() || 'Cancelled by manager'
+    
+    let updatedOrder: any = null
+    if (typeof (orderStore as any).updateOrderStatus === 'function') {
+      updatedOrder = await orderStore.updateOrderStatus(orderId, 'CANCELLED', reasonText)
+    } else {
+      const res = await api.patch(`/orders/${orderId}/status`, {
+        status: 'CANCELLED',
+        notes: reasonText,
+      })
+      updatedOrder = res.data.data
+    }
+
+    if (orderStore.selectedOrder && orderStore.selectedOrder.id === orderId) {
+      orderStore.selectedOrder = {
+        ...orderStore.selectedOrder,
+        ...(updatedOrder || {}),
+        status: 'CANCELLED',
+        notes: reasonText,
+      }
+    }
+
+    const idx = orderStore.orders.findIndex(o => o.id === orderId)
+    if (idx !== -1) {
+      orderStore.orders[idx] = {
+        ...orderStore.orders[idx],
+        ...(updatedOrder || {}),
+        status: 'CANCELLED',
+      }
+    }
+
+    toast.success(`Order #${orderStore.selectedOrder?.order_number || ''} cancelled. Stock automatically restored to inventory!`)
+    isCancelModalOpen.value = false
+    await orderStore.fetchOrders({
+      page: page.value,
+      status: selectedStatus.value,
+      channel_id: selectedChannel.value,
+      date_from: dateFrom.value,
+      date_to: dateTo.value,
+      search: search.value,
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to cancel order.'
+    toast.error(msg)
+  } finally {
+    isCancelling.value = false
+  }
 }
 
 function printReceipt(orderId: string) {
@@ -193,7 +278,7 @@ defineExpose({
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <Button
           id="btn-refresh-orders"
           variant="outline"
@@ -270,30 +355,23 @@ defineExpose({
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
-          <select
+          <SelectField
             id="order-channel-filter"
             v-model="selectedChannel"
-            class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+            :options="channelOptions"
+            placeholder="All Channels"
+            class="h-9 w-40 bg-surface text-xs"
             @change="onFilterChange"
-          >
-            <option value="">All Channels</option>
-            <option v-for="ch in orderStore.channels" :key="ch.id" :value="ch.id">
-              {{ ch.name }}
-            </option>
-          </select>
+          />
 
-          <select
+          <SelectField
             id="order-status-filter"
             v-model="selectedStatus"
-            class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+            :options="statusOptions"
+            placeholder="All Statuses"
+            class="h-9 w-40 bg-surface text-xs"
             @change="onFilterChange"
-          >
-            <option value="">All Statuses</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="PENDING">PENDING</option>
-            <option value="PROCESSING">PROCESSING</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
+          />
 
           <Button id="btn-reset-orders" variant="outline" size="sm" class="h-9 text-xs px-3" @click="resetFilters">
             Reset Filters
@@ -307,9 +385,9 @@ defineExpose({
           <span>Date Range:</span>
         </div>
         <div class="flex items-center gap-2">
-          <Input id="order-date-from" type="date" v-model="dateFrom" class="h-8 w-36 bg-surface text-xs font-mono" @change="onFilterChange" />
+          <DatePicker id="order-date-from" v-model="dateFrom" placeholder="From date" class="h-8 w-36 bg-surface text-xs" @change="onFilterChange" />
           <span class="text-muted-foreground">to</span>
-          <Input id="order-date-to" type="date" v-model="dateTo" class="h-8 w-36 bg-surface text-xs font-mono" @change="onFilterChange" />
+          <DatePicker id="order-date-to" v-model="dateTo" placeholder="To date" class="h-8 w-36 bg-surface text-xs" @change="onFilterChange" />
         </div>
       </div>
     </div>
@@ -469,6 +547,22 @@ defineExpose({
             </DialogDescription>
           </DialogHeader>
 
+          <!-- Order Cancelled Status Alert -->
+          <Alert v-if="orderStore.selectedOrder.status === 'CANCELLED'" variant="error" class="my-1 text-xs">
+            <div class="flex flex-col gap-0.5">
+              <div class="font-bold flex items-center gap-1.5 text-destructive">
+                <Ban :size="14" />
+                <span>Order Cancelled & Stock Returned</span>
+              </div>
+              <p class="text-muted-foreground text-[11px]">
+                All line items have been restored to active inventory (CANCELLATION_REVERSAL). Customer VIP lifetime spending has been reversed.
+              </p>
+              <div v-if="orderStore.selectedOrder.notes" class="text-foreground font-medium mt-0.5">
+                Cancellation Notes: <span class="italic font-normal">{{ orderStore.selectedOrder.notes }}</span>
+              </div>
+            </div>
+          </Alert>
+
           <!-- Customer & Order Meta -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
             <div class="p-3 rounded-lg border border-border/80 bg-surface-subtle/60 text-xs">
@@ -487,13 +581,21 @@ defineExpose({
 
             <div class="p-3 rounded-lg border border-border/80 bg-surface-subtle/60 text-xs">
               <span class="font-semibold text-foreground uppercase tracking-wider text-[10px] block mb-1">Transaction Details</span>
-              <div class="space-y-0.5">
-                <div class="text-muted-foreground">Channel: <span class="font-semibold text-foreground">{{ orderStore.selectedOrder.channel?.name ?? 'Main POS' }}</span></div>
-                <div v-if="orderStore.selectedOrder.notes" class="text-muted-foreground">
-                  Notes: <span class="font-medium text-foreground">{{ orderStore.selectedOrder.notes }}</span>
+              <div class="space-y-1">
+                <div class="text-muted-foreground flex items-center justify-between">
+                  <span>Sales Channel:</span>
+                  <span class="font-semibold text-foreground">{{ orderStore.selectedOrder.channel?.name ?? 'Main POS' }}</span>
                 </div>
-                <div class="font-mono text-[10px] text-muted-foreground/80 mt-1">
-                  ID: {{ orderStore.selectedOrder.id }}
+                <div class="text-muted-foreground flex items-center justify-between">
+                  <span>Processed By:</span>
+                  <span class="font-semibold text-foreground">{{ orderStore.selectedOrder.seller?.name || orderStore.selectedOrder.user?.name || 'System Cashier' }}</span>
+                </div>
+                <div class="text-muted-foreground flex items-center justify-between">
+                  <span>Date & Time:</span>
+                  <span class="font-medium text-foreground">{{ fmtDate(orderStore.selectedOrder.created_at) }}</span>
+                </div>
+                <div v-if="orderStore.selectedOrder.notes" class="text-muted-foreground pt-0.5 border-t border-border/50">
+                  <span class="font-medium text-foreground">Note:</span> {{ orderStore.selectedOrder.notes }}
                 </div>
               </div>
             </div>
@@ -572,22 +674,85 @@ defineExpose({
             </div>
           </div>
 
-          <DialogFooter class="gap-2 sm:gap-0 mt-4">
-            <Button
-              id="btn-print-order"
-              variant="outline"
-              size="sm"
-              class="gap-1.5 text-xs"
-              @click="printReceipt(orderStore.selectedOrder.id)"
-            >
-              <Printer :size="14" />
-              <span>Print Receipt</span>
-            </Button>
-            <Button id="btn-close-order-modal" variant="primary" size="sm" @click="closeModal">
-              Close Order
-            </Button>
+          <DialogFooter class="gap-2 sm:gap-0 mt-4 flex-wrap justify-between">
+            <div>
+              <Button
+                v-if="orderStore.selectedOrder.status !== 'CANCELLED'"
+                id="btn-cancel-order"
+                variant="destructive"
+                size="sm"
+                class="gap-1.5 text-xs"
+                @click="openCancelModal"
+              >
+                <Ban :size="14" />
+                <span>Cancel Order</span>
+              </Button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <Button
+                id="btn-print-order"
+                variant="outline"
+                size="sm"
+                class="gap-1.5 text-xs"
+                @click="printReceipt(orderStore.selectedOrder.id)"
+              >
+                <Printer :size="14" />
+                <span>Print Receipt</span>
+              </Button>
+              <Button id="btn-close-order-modal" variant="primary" size="sm" @click="closeModal">
+                Close
+              </Button>
+            </div>
           </DialogFooter>
         </template>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Order Cancellation Confirmation Modal -->
+    <Dialog :open="isCancelModalOpen" @update:open="(val) => { isCancelModalOpen = val }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="font-display text-destructive flex items-center gap-2">
+            <AlertCircle :size="18" />
+            <span>Cancel Order & Restore Stock</span>
+          </DialogTitle>
+          <DialogDescription class="text-xs">
+            Cancelling order <strong class="font-mono text-foreground">#{{ orderStore.selectedOrder?.order_number }}</strong> will immediately return all item quantities to warehouse stock and record an audited ledger reversal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="flex flex-col gap-3 py-2 text-xs">
+          <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-900 text-xs">
+            <strong>Inventory Impact:</strong> {{ orderStore.selectedOrder?.items?.length }} line item(s) will be returned to stock (+quantity) via a <code class="font-mono font-bold">CANCELLATION_REVERSAL</code> movement.
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Cancellation Reason / Notes *</label>
+            <Input
+              v-model="cancelReason"
+              placeholder="e.g. Customer changed mind, defect return, accidental order"
+              class="h-9 bg-surface text-xs"
+            />
+          </div>
+        </div>
+
+        <DialogFooter class="gap-2 sm:gap-0 mt-3">
+          <Button variant="outline" size="sm" :disabled="isCancelling" @click="isCancelModalOpen = false">
+            Keep Active
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            :disabled="isCancelling"
+            class="gap-1.5"
+            @click="confirmCancelOrder"
+          >
+            <span v-if="isCancelling" class="animate-spin mr-1">⏳</span>
+            <Ban v-else :size="14" />
+            <span>{{ isCancelling ? 'Cancelling…' : 'Confirm Cancellation' }}</span>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>

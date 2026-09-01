@@ -37,7 +37,7 @@ function close() {
     <Transition name="modal">
       <div
         v-if="modelValue"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs p-4 sm:p-6"
+        class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 backdrop-blur-xs p-4 sm:p-6"
         @click.self="closeOnBackdrop && close()"
       >
         <div

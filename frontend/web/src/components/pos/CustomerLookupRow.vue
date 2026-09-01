@@ -15,6 +15,7 @@ import {
 } from 'lucide-vue-next'
 import type { Customer, LookupStatus, CustomerLoyaltyInfo } from '@/composables/useCustomerLookup'
 import { getTierDetails, calculateLoyalty } from '@/utils/loyalty'
+import Badge from '@/components/ui/Badge.vue'
 
 interface Props {
   phone: string
@@ -25,6 +26,7 @@ interface Props {
   loyaltyInfo?: CustomerLoyaltyInfo | null
   phoneError?: string
   nameError?: string
+  required?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -33,6 +35,7 @@ const props = withDefaults(defineProps<Props>(), {
   loyaltyInfo: null,
   phoneError: '',
   nameError: '',
+  required: false,
 })
 
 const emit = defineEmits<{
@@ -94,46 +97,51 @@ function handleReset() {
 </script>
 
 <template>
-  <div class="customer-lookup-row rounded-xl border border-[#E8E2D9] bg-white p-3.5 space-y-2.5 shadow-2xs">
+  <div class="customer-lookup-row rounded-xl border border-border bg-card p-3.5 space-y-2.5 shadow-2xs">
     <!-- Header Bar: Title, Status/Tier Badge, and Reset Button -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded-lg bg-[#FFF3E0] border border-[#FFDCC4] flex items-center justify-center text-[#924C00]">
+        <div class="w-6 h-6 rounded-lg bg-cta-muted border border-border-strong flex items-center justify-center text-primary">
           <User class="w-3.5 h-3.5" />
         </div>
-        <span class="text-xs font-bold uppercase tracking-wider text-[#924C00]">Customer & Loyalty</span>
+        <span class="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1">
+          Customer & Loyalty
+          <span v-if="required" class="text-red-500 font-bold" title="Required for online sales channel">*</span>
+        </span>
       </div>
 
       <div class="flex items-center gap-1.5">
+        <span
+          v-if="required && !matchedCustomer && !phone && !name"
+          class="text-3xs font-bold text-warning-text bg-warning-bg border border-warning-border px-2 py-0.5 rounded-full"
+        >
+          Required
+        </span>
         <!-- Lookup status indicator: Searching spinner -->
         <div
           v-if="status === 'searching'"
-          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFF3E0] text-[#924C00] border border-[#FFDCC4] text-[10px] font-bold animate-pulse"
+          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-cta-muted text-primary border border-border-strong text-[10px] font-bold animate-pulse"
         >
-          <div class="w-2.5 h-2.5 border-2 border-[#924C00] border-t-transparent rounded-full animate-spin" />
+          <div class="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <span>Searching...</span>
         </div>
 
         <!-- Matched Tier Badge -->
-        <div
+        <Badge
           v-if="matchedCustomer && tierDetails"
-          :class="[
-            'flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wide transition-all shadow-2xs',
-            tierDetails.bg,
-            tierDetails.text,
-            tierDetails.border
-          ]"
+          :variant="tierDetails.variant"
+          class="text-[10px] px-1.5 py-0.5 font-semibold gap-1 shadow-2xs"
         >
           <component :is="getTierIcon(tierDetails.tier)" class="w-3 h-3" />
           <span>{{ tierDetails.label }}</span>
-        </div>
+        </Badge>
 
         <!-- + New Member Badge -->
         <div
           v-if="!matchedCustomer && suggestions.length === 0 && phone.trim().length >= 3 && status !== 'searching'"
-          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FAF7F2] border border-[#E8E2D9] text-[#6B6358] text-[10px] font-bold"
+          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-subtle border border-border text-muted-foreground text-[10px] font-bold"
         >
-          <Sparkles class="w-2.5 h-2.5 text-[#924C00]" />
+          <Sparkles class="w-2.5 h-2.5 text-primary" />
           <span>+ New Member</span>
         </div>
 
@@ -142,7 +150,7 @@ function handleReset() {
           v-if="hasContent"
           type="button"
           @click="handleReset"
-          class="text-xs font-bold text-red-600 hover:text-red-700 hover:underline px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+          class="text-xs font-bold text-red-500 hover:text-red-400 hover:underline px-1.5 py-0.5 rounded transition-colors cursor-pointer"
         >
           {{ matchedCustomer ? 'Change' : 'Clear' }}
         </button>
@@ -155,61 +163,61 @@ function handleReset() {
       <div>
         <div
           :class="[
-            'flex items-center rounded-lg border bg-[#FAF7F2] px-2.5 py-1.5 transition-all focus-within:bg-white focus-within:border-[#FF8800] focus-within:ring-2 focus-within:ring-[#FF8800]/20',
-            phoneError ? 'border-red-500 bg-red-50/20' : 'border-[#E8E2D9]'
+            'flex items-center rounded-lg border bg-surface-subtle px-2.5 py-1.5 transition-all focus-within:bg-card focus-within:border-cta focus-within:ring-2 focus-within:ring-cta/20',
+            phoneError ? 'border-red-500 bg-red-500/10' : 'border-input'
           ]"
         >
-          <Phone class="w-3.5 h-3.5 text-[#6B6358] mr-2 shrink-0" />
+          <Phone class="w-3.5 h-3.5 text-muted-foreground mr-2 shrink-0" />
           <input
             data-testid="input-customer-phone"
             type="tel"
             :value="phone"
             @input="handlePhoneInput"
             placeholder="Customer phone..."
-            class="w-full text-xs font-mono text-[#1A1C1C] placeholder:text-[#6B6358]/60 bg-transparent outline-none"
+            class="w-full text-xs font-mono text-foreground placeholder:text-muted-foreground/60 bg-transparent outline-none"
           />
         </div>
-        <p v-if="phoneError" class="text-[10px] text-red-600 mt-1 pl-1">{{ phoneError }}</p>
+        <p v-if="phoneError" class="text-[10px] text-red-500 mt-1 pl-1">{{ phoneError }}</p>
       </div>
 
       <!-- Customer Name Input -->
       <div>
         <div
           :class="[
-            'flex items-center rounded-lg border bg-[#FAF7F2] px-2.5 py-1.5 transition-all focus-within:bg-white focus-within:border-[#FF8800] focus-within:ring-2 focus-within:ring-[#FF8800]/20',
-            nameError ? 'border-red-500 bg-red-50/20' : 'border-[#E8E2D9]'
+            'flex items-center rounded-lg border bg-surface-subtle px-2.5 py-1.5 transition-all focus-within:bg-card focus-within:border-cta focus-within:ring-2 focus-within:ring-cta/20',
+            nameError ? 'border-red-500 bg-red-500/10' : 'border-input'
           ]"
         >
-          <Tag class="w-3.5 h-3.5 text-[#6B6358] mr-2 shrink-0" />
+          <Tag class="w-3.5 h-3.5 text-muted-foreground mr-2 shrink-0" />
           <input
             data-testid="input-customer-name"
             type="text"
             :value="name"
             @input="handleNameInput"
             placeholder="Customer name..."
-            class="w-full text-xs text-[#1A1C1C] placeholder:text-[#6B6358]/60 bg-transparent outline-none"
+            class="w-full text-xs text-foreground placeholder:text-muted-foreground/60 bg-transparent outline-none"
           />
         </div>
-        <p v-if="nameError" class="text-[10px] text-red-600 mt-1 pl-1">{{ nameError }}</p>
+        <p v-if="nameError" class="text-[10px] text-red-500 mt-1 pl-1">{{ nameError }}</p>
       </div>
     </div>
 
     <!-- Suggestions Popover / Dropdown -->
     <div
       v-if="showSuggestions"
-      class="rounded-xl border border-[#FFDCC4] bg-[#FFFDF9] p-2.5 space-y-2 shadow-md animate-in fade-in-0 duration-150 relative z-20"
+      class="rounded-xl border border-border-strong bg-card p-2.5 space-y-2 shadow-md animate-in fade-in-0 duration-150 relative z-20"
     >
-      <div class="flex items-center justify-between pb-1.5 border-b border-[#E8E2D9]">
+      <div class="flex items-center justify-between pb-1.5 border-b border-border">
         <div class="flex items-center gap-1.5">
-          <Search class="w-3 h-3 text-[#924C00]" />
-          <span class="text-[11px] font-bold uppercase tracking-wider text-[#924C00]">
+          <Search class="w-3 h-3 text-primary" />
+          <span class="text-[11px] font-bold uppercase tracking-wider text-primary">
             Matching Customers ({{ suggestions.length }})
           </span>
         </div>
         <button
           type="button"
           @click="dismiss"
-          class="text-[#6B6358] hover:text-[#1A1C1C] p-0.5 rounded cursor-pointer transition-colors"
+          class="text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
           title="Dismiss suggestions"
         >
           <XCircle class="w-4 h-4" />
@@ -221,39 +229,35 @@ function handleReset() {
           v-for="cust in suggestions"
           :key="cust.id || cust.phone"
           @click="selectSuggestion(cust)"
-          class="p-2 rounded-lg border border-[#E8E2D9] bg-white hover:bg-[#FFF9F2] hover:border-[#FF8800] transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
+          class="p-2 rounded-lg border border-border bg-surface-subtle hover:bg-accent hover:border-cta transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
         >
           <div class="space-y-0.5 min-w-0 flex-1 mr-2">
             <div class="flex items-center gap-1.5">
-              <span class="text-xs font-bold text-[#1A1C1C] truncate">{{ cust.name }}</span>
-              <span
+              <span class="text-xs font-bold text-foreground truncate">{{ cust.name }}</span>
+              <Badge
                 v-if="cust.loyalty_tier || cust.total_spent || cust.total_purchased"
-                :class="[
-                  'px-1.5 py-0.2 rounded text-[9px] font-bold border shrink-0',
-                  getTierDetails(calculateLoyalty(cust).tier).bg,
-                  getTierDetails(calculateLoyalty(cust).tier).text,
-                  getTierDetails(calculateLoyalty(cust).tier).border
-                ]"
+                :variant="getTierDetails(calculateLoyalty(cust).tier).variant"
+                class="text-[9px] px-1.5 py-0.5 font-semibold shrink-0"
               >
                 {{ calculateLoyalty(cust).tier }}
-              </span>
+              </Badge>
             </div>
 
-            <div class="flex items-center gap-2 text-[10px] text-[#6B6358] font-mono">
+            <div class="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
               <span v-if="cust.phone">📞 {{ cust.phone }}</span>
               <span v-if="cust.delivery_address || cust.address" class="truncate">
                 📍 {{ cust.delivery_address || cust.address }}
               </span>
             </div>
 
-            <div class="text-[9.5px] text-[#8C827A] font-mono">
+            <div class="text-[9.5px] text-muted-foreground font-mono">
               Spent ${{ (parseFloat(String(cust.total_spent || 0)) || 0).toFixed(2) }} • {{ cust.total_purchased ?? 0 }} {{ (cust.total_purchased ?? 0) === 1 ? 'order' : 'orders' }}
             </div>
           </div>
 
           <button
             type="button"
-            class="px-2.5 py-1 rounded-full bg-[#FFF3E0] border border-[#FFDCC4] text-[#924C00] text-[11px] font-bold group-hover:bg-[#FF8800] group-hover:text-white group-hover:border-[#FF8800] transition-all flex items-center gap-0.5 shadow-2xs shrink-0 cursor-pointer"
+            class="px-2.5 py-1 rounded-full bg-cta-muted border border-border-strong text-primary text-[11px] font-bold group-hover:bg-cta group-hover:text-cta-foreground group-hover:border-cta transition-all flex items-center gap-0.5 shadow-2xs shrink-0 cursor-pointer"
           >
             <span>Select</span>
             <ChevronRight class="w-3 h-3" />
@@ -265,25 +269,25 @@ function handleReset() {
     <!-- Matched Customer Loyalty Stats Card (3 Columns) -->
     <div
       v-if="matchedCustomer && resolvedLoyalty"
-      class="grid grid-cols-3 divide-x divide-[#E8E2D9] rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] py-2 px-3 text-center shadow-2xs animate-in fade-in-0 duration-150"
+      class="grid grid-cols-3 divide-x divide-border rounded-xl bg-surface-subtle border border-border py-2 px-3 text-center shadow-2xs animate-in fade-in-0 duration-150"
     >
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-[#6B6358]">POINTS</div>
-        <div class="text-xs font-black text-[#924C00] font-mono mt-0.5">
+        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">POINTS</div>
+        <div class="text-xs font-black text-primary font-mono mt-0.5">
           ⭐ {{ pointsEstimate.toLocaleString() }}
         </div>
       </div>
 
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-[#6B6358]">LIFETIME SPENT</div>
-        <div class="text-xs font-black text-[#1A1C1C] font-mono mt-0.5">
+        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">LIFETIME SPENT</div>
+        <div class="text-xs font-black text-foreground font-mono mt-0.5">
           ${{ resolvedLoyalty.totalSpent.toFixed(2) }}
         </div>
       </div>
 
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-[#6B6358]">ORDERS</div>
-        <div class="text-xs font-black text-[#1A1C1C] font-mono mt-0.5">
+        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">ORDERS</div>
+        <div class="text-xs font-black text-foreground font-mono mt-0.5">
           {{ resolvedLoyalty.totalPurchased }} {{ resolvedLoyalty.totalPurchased === 1 ? 'sale' : 'sales' }}
         </div>
       </div>

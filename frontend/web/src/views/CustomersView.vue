@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useCustomerStore } from '@/stores/customerStore'
+import { usePosStore } from '@/stores/posStore'
+import { useToast } from '@/composables/useToast'
+import api from '@/api/axios'
 import {
   Users,
   Search,
@@ -13,6 +17,12 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  ShoppingBag,
+  Plus,
+  Edit2,
+  LayoutGrid,
+  List,
+  Phone,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -22,6 +32,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   StatCard,
   Alert,
@@ -33,14 +44,99 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  SelectField,
 } from '@/components/ui'
 import { getTier as computeTier, type Tier } from '@/utils/loyalty'
 
+const router = useRouter()
 const customerStore = useCustomerStore()
+const posStore = usePosStore()
+const toast = useToast()
 
 const search = ref('')
 const page = ref(1)
 const sortBy = ref('total_spent')
+const viewMode = ref<'table' | 'grid'>('table')
+
+const sortOptions = [
+  { label: 'Highest Lifetime Spend ($)', value: 'total_spent' },
+  { label: 'Most Orders Count', value: 'total_purchased' },
+  { label: 'Newest Registered', value: 'latest' },
+  { label: 'Customer Name (A-Z)', value: 'name' },
+]
+
+// Create / Edit Customer Modal State
+const isCustomerFormOpen = ref(false)
+const editingCustomerId = ref<string | null>(null)
+const customerForm = ref({
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  preferred_delivery_company: '',
+})
+const formSubmitting = ref(false)
+
+function openCreateCustomer() {
+  editingCustomerId.value = null
+  customerForm.value = {
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    preferred_delivery_company: '',
+  }
+  isCustomerFormOpen.value = true
+}
+
+function openEditCustomer(c: any) {
+  editingCustomerId.value = c.id
+  customerForm.value = {
+    name: c.name || '',
+    phone: c.phone || '',
+    email: c.email || '',
+    address: c.address || '',
+    preferred_delivery_company: c.preferred_delivery_company || '',
+  }
+  isCustomerFormOpen.value = true
+}
+
+async function saveCustomerForm() {
+  if (!customerForm.value.name.trim() || !customerForm.value.phone.trim()) {
+    toast.error('Customer name and phone number are required')
+    return
+  }
+  formSubmitting.value = true
+  try {
+    if (editingCustomerId.value) {
+      await api.put(`/customers/${editingCustomerId.value}`, customerForm.value)
+      toast.success('Customer updated successfully!')
+    } else {
+      await api.post('/customers', customerForm.value)
+      toast.success('Customer registered successfully!')
+    }
+    isCustomerFormOpen.value = false
+    await loadCustomers()
+  } catch (err: any) {
+    toast.error(err.response?.data?.message || err.message || 'Failed to save customer')
+  } finally {
+    formSubmitting.value = false
+  }
+}
+
+function startPOSSale(c: any) {
+  const tierInfo = getTier(c.total_spent, c.total_purchased)
+  posStore.setCustomer({
+    id: c.id,
+    name: c.name,
+    phone: c.phone || '',
+    email: c.email || '',
+    address: c.address || '',
+    loyalty_tier: tierInfo.name,
+  })
+  toast.success(`Customer "${c.name}" linked to active POS register!`)
+  router.push('/pos')
+}
 
 // Tier thresholds (aligned with mobile reference: dual-criteria spent OR orders)
 const TIER_THRESHOLDS: Record<Exclude<Tier, 'BRONZE'>, { spent: number; orders: number }> = {
@@ -215,17 +311,28 @@ onMounted(() => {
         </p>
       </div>
 
-      <Button
-        id="btn-refresh-customers"
-        variant="outline"
-        size="sm"
-        class="h-9 px-3 gap-1.5 text-xs"
-        :disabled="customerStore.loading"
-        @click="loadCustomers"
-      >
-        <RefreshCw :size="14" :class="{ 'animate-spin': customerStore.loading }" />
-        <span>Refresh CRM</span>
-      </Button>
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <Button
+          id="btn-refresh-customers"
+          variant="outline"
+          size="sm"
+          class="h-9 px-3 gap-1.5 text-xs"
+          :disabled="customerStore.loading"
+          @click="loadCustomers"
+        >
+          <RefreshCw :size="14" :class="{ 'animate-spin': customerStore.loading }" />
+          <span>Refresh CRM</span>
+        </Button>
+        <Button
+          variant="cta"
+          size="sm"
+          class="h-9 px-3.5 gap-1.5 text-xs font-bold"
+          @click="openCreateCustomer"
+        >
+          <Plus :size="15" />
+          <span>New Customer</span>
+        </Button>
+      </div>
     </div>
 
     <!-- KPI Summary Cards -->
@@ -267,7 +374,7 @@ onMounted(() => {
           id="customer-search-input"
           v-model="search"
           type="text"
-          placeholder="Search by customer name or phone number…"
+          placeholder="Search by customer name, phone, or email…"
           class="bg-surface"
           @input="onSearchInput"
         >
@@ -277,19 +384,44 @@ onMounted(() => {
         </Input>
       </div>
 
-      <div class="flex items-center gap-2">
-        <label for="customer-sort-select" class="text-xs text-muted-foreground font-medium">Sort by:</label>
-        <select
-          id="customer-sort-select"
-          v-model="sortBy"
-          class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-          @change="page = 1; loadCustomers()"
-        >
-          <option value="total_spent">Highest Lifetime Spend ($)</option>
-          <option value="total_purchased">Most Orders Count</option>
-          <option value="latest">Newest Registered</option>
-          <option value="name">Customer Name (A-Z)</option>
-        </select>
+      <div class="flex items-center gap-3">
+        <!-- View Mode Switcher -->
+        <div class="flex items-center p-0.5 bg-muted rounded-lg border border-border">
+          <button
+            type="button"
+            @click="viewMode = 'table'"
+            :class="[
+              'p-1.5 rounded-md transition-all cursor-pointer',
+              viewMode === 'table' ? 'bg-card shadow-2xs text-foreground font-bold' : 'text-muted-foreground hover:text-foreground'
+            ]"
+            title="Table View"
+          >
+            <List :size="16" />
+          </button>
+          <button
+            type="button"
+            @click="viewMode = 'grid'"
+            :class="[
+              'p-1.5 rounded-md transition-all cursor-pointer',
+              viewMode === 'grid' ? 'bg-card shadow-2xs text-foreground font-bold' : 'text-muted-foreground hover:text-foreground'
+            ]"
+            title="Card Grid View"
+          >
+            <LayoutGrid :size="16" />
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label for="customer-sort-select" class="text-xs text-muted-foreground font-medium">Sort by:</label>
+          <SelectField
+            id="customer-sort-select"
+            v-model="sortBy"
+            :options="sortOptions"
+            placeholder="Sort by"
+            class="h-9 w-52 bg-surface text-xs"
+            @change="page = 1; loadCustomers()"
+          />
+        </div>
       </div>
     </div>
 
@@ -302,7 +434,7 @@ onMounted(() => {
       <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadCustomers">Retry</Button>
     </Alert>
 
-    <!-- Customers Table Container -->
+    <!-- Customers View Container -->
     <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
       <div v-if="customerStore.loading" class="p-6 space-y-3">
         <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
@@ -312,10 +444,11 @@ onMounted(() => {
         v-else-if="customerStore.customers.length === 0"
         :icon="Users"
         title="No customer profiles found"
-        description="Customers are created automatically when entering contact details at POS checkout."
+        description="Add a customer or they will be created automatically when entering contact details at POS checkout."
       />
 
-      <div v-else class="overflow-x-auto">
+      <!-- 1. Table View -->
+      <div v-else-if="viewMode === 'table'" class="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow class="bg-muted/40">
@@ -325,7 +458,7 @@ onMounted(() => {
               <TableHead class="font-mono">Lifetime Spend</TableHead>
               <TableHead>Loyalty Tier & Progression</TableHead>
               <TableHead class="font-mono">Last Purchase</TableHead>
-              <TableHead class="text-right">Action</TableHead>
+              <TableHead class="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -389,19 +522,115 @@ onMounted(() => {
               </TableCell>
 
               <TableCell class="text-right">
-                <Button
-                  :id="`btn-view-customer-${c.id}`"
-                  variant="ghost"
-                  size="sm"
-                  class="h-8 px-2.5 text-xs text-primary hover:text-cta"
-                  @click="openCustomerModal(c.id)"
-                >
-                  Order History
-                </Button>
+                <div class="flex items-center justify-end gap-1.5">
+                  <Button
+                    variant="cta"
+                    size="sm"
+                    class="h-7 px-2 text-xs font-bold gap-1 shadow-2xs"
+                    title="Start POS checkout linked to this customer"
+                    @click.stop="startPOSSale(c)"
+                  >
+                    <ShoppingBag :size="12" />
+                    <span>Start Sale</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 px-2 text-xs"
+                    @click.stop="openCustomerModal(c.id)"
+                  >
+                    History
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    @click.stop="openEditCustomer(c)"
+                  >
+                    <Edit2 :size="13" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           </TableBody>
         </Table>
+      </div>
+
+      <!-- 2. Bento Card Grid View -->
+      <div v-else-if="viewMode === 'grid'" class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          v-for="c in customerStore.customers"
+          :key="c.id"
+          class="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between gap-3 hover:shadow-xs hover:border-border-strong transition-all"
+        >
+          <div class="flex items-start justify-between gap-2.5">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-sm shrink-0">
+                {{ getInitials(c.name) }}
+              </div>
+              <div class="min-w-0">
+                <h3
+                  class="font-bold text-sm text-foreground truncate hover:text-primary cursor-pointer"
+                  @click="openCustomerModal(c.id)"
+                >
+                  {{ c.name }}
+                </h3>
+                <p class="text-xs font-mono text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <Phone :size="11" />
+                  <span>{{ c.phone || 'No phone' }}</span>
+                </p>
+              </div>
+            </div>
+
+            <Badge :variant="getTier(c.total_spent, c.total_purchased).variant" class="text-[10px] px-2 py-0.5 font-bold shrink-0">
+              {{ getTier(c.total_spent, c.total_purchased).name }}
+            </Badge>
+          </div>
+
+          <!-- Spend & Orders Row -->
+          <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-surface-subtle border border-border/60">
+            <div>
+              <span class="text-3xs uppercase font-bold text-muted-foreground block">Lifetime Spend</span>
+              <span class="text-sm font-black font-mono text-foreground">{{ fmtMoney(c.total_spent) }}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-3xs uppercase font-bold text-muted-foreground block">Purchases</span>
+              <span class="text-xs font-bold font-mono text-foreground">{{ c.total_purchased ?? 0 }} orders</span>
+            </div>
+          </div>
+
+          <!-- Actions Row -->
+          <div class="flex items-center justify-between pt-2 border-t border-border/60">
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs"
+              @click="openCustomerModal(c.id)"
+            >
+              Order History
+            </Button>
+
+            <div class="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-7 px-2 text-xs text-muted-foreground"
+                @click="openEditCustomer(c)"
+              >
+                <Edit2 :size="12" />
+              </Button>
+              <Button
+                variant="cta"
+                size="sm"
+                class="h-7 px-2.5 text-xs font-bold gap-1 shadow-2xs"
+                @click="startPOSSale(c)"
+              >
+                <ShoppingBag :size="12" />
+                <span>Start Sale</span>
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Pagination -->
@@ -573,6 +802,91 @@ onMounted(() => {
             </Button>
           </DialogFooter>
         </template>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Create / Edit Customer Modal Dialog -->
+    <Dialog :open="isCustomerFormOpen" @update:open="(val) => (isCustomerFormOpen = val)">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <div class="flex items-center gap-2">
+            <div class="p-2 rounded-lg bg-primary/10 text-primary">
+              <Users class="w-4 h-4" />
+            </div>
+            <div>
+              <DialogTitle class="font-display">
+                {{ editingCustomerId ? 'Edit Customer Profile' : 'Register New Customer' }}
+              </DialogTitle>
+              <DialogDescription>
+                {{ editingCustomerId ? 'Update CRM contact information and preferences.' : 'Enroll a new customer profile for POS checkout & loyalty points.' }}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <form @submit.prevent="saveCustomerForm" class="space-y-3.5 py-2">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Full Name *</label>
+            <Input
+              v-model="customerForm.name"
+              type="text"
+              placeholder="e.g. Bopha Sok"
+              class="bg-surface h-9 text-xs"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Phone Number *</label>
+            <Input
+              v-model="customerForm.phone"
+              type="text"
+              placeholder="e.g. 012 345 678"
+              class="bg-surface h-9 text-xs font-mono"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Email Address</label>
+            <Input
+              v-model="customerForm.email"
+              type="email"
+              placeholder="e.g. bopha@example.com"
+              class="bg-surface h-9 text-xs"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Delivery / Street Address</label>
+            <Input
+              v-model="customerForm.address"
+              type="text"
+              placeholder="e.g. Street 271, Sangkat Toul Tompoung, Phnom Penh"
+              class="bg-surface h-9 text-xs"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1">Preferred Carrier / Logistics</label>
+            <Input
+              v-model="customerForm.preferred_delivery_company"
+              type="text"
+              placeholder="e.g. J&T Express, Virak Buntham, Capitol"
+              class="bg-surface h-9 text-xs"
+            />
+          </div>
+
+          <DialogFooter class="flex items-center justify-between border-t border-border pt-3 mt-4">
+            <Button type="button" variant="outline" size="sm" @click="isCustomerFormOpen = false">
+              Cancel
+            </Button>
+            <Button type="submit" variant="cta" size="sm" :disabled="formSubmitting" class="gap-1.5">
+              <span v-if="formSubmitting">Saving…</span>
+              <span v-else>{{ editingCustomerId ? 'Save Changes' : 'Register Customer' }}</span>
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   </div>

@@ -17,7 +17,18 @@ class SalesChannelController extends BaseApiController
     {
         $query = SalesChannel::query();
 
-        if (!$request->boolean('include_inactive', false)) {
+        if ($request->has('filter_type')) {
+            $ft = strtoupper(trim($request->query('filter_type')));
+            if ($ft === 'ACTIVE') {
+                $query->where('is_active', true);
+            } elseif ($ft === 'INACTIVE') {
+                $query->where('is_active', false);
+            } elseif ($ft === 'SOCIAL') {
+                $query->whereIn('platform', ['facebook', 'tiktok', 'telegram', 'instagram', 'whatsapp', 'line']);
+            } elseif ($ft === 'POS_ONLINE') {
+                $query->whereIn('platform', ['pos', 'web', 'online', 'shopee', 'lazada', 'wholesale', 'b2b']);
+            }
+        } elseif (!$request->boolean('include_inactive', false)) {
             $query->where('is_active', true);
         }
 
@@ -25,7 +36,8 @@ class SalesChannelController extends BaseApiController
             $term = '%' . $request->query('search') . '%';
             $query->where(function ($q) use ($term) {
                 $q->where('name', 'like', $term)
-                  ->orWhere('code', 'like', $term);
+                  ->orWhere('code', 'like', $term)
+                  ->orWhere('platform', 'like', $term);
             });
         }
 
@@ -39,7 +51,7 @@ class SalesChannelController extends BaseApiController
      */
     public function store(Request $request): JsonResponse
     {
-        $platform = $request->input('platform') ?? $request->input('type') ?? 'pos';
+        $platform = strtolower(trim($request->input('platform') ?? $request->input('type') ?? 'pos'));
 
         $validated = $request->validate([
             'name'       => [
@@ -57,6 +69,8 @@ class SalesChannelController extends BaseApiController
             'isActive'   => ['nullable', 'boolean'],
             'is_default' => ['nullable', 'boolean'],
             'isDefault'  => ['nullable', 'boolean'],
+        ], [
+            'name.unique' => "The sales channel name has already been taken on the " . strtoupper($platform) . " platform.",
         ]);
 
         $isDefault = $request->has('isDefault')
@@ -72,11 +86,14 @@ class SalesChannelController extends BaseApiController
             : ($request->has('is_active') ? $request->boolean('is_active') : true);
 
         $imageUrl = $request->input('imageUrl') ?? $request->input('image_url') ?? null;
+        $code = !empty($validated['code'])
+            ? trim($validated['code'])
+            : $this->generateUniqueCode($validated['name'], $platform);
 
         $channel = SalesChannel::create([
             'name'       => $validated['name'],
             'platform'   => $platform,
-            'code'       => $validated['code'] ?? strtoupper(preg_replace('/[^A-Za-z0-9]/', '-', $validated['name'])),
+            'code'       => $code,
             'type'       => $platform,
             'image_url'  => $imageUrl,
             'is_active'  => $isActive,
@@ -97,7 +114,7 @@ class SalesChannelController extends BaseApiController
             return $this->notFoundResponse('Sales channel not found.');
         }
 
-        $platform = $request->input('platform') ?? $request->input('type') ?? $channel->platform ?? $channel->type ?? 'pos';
+        $platform = strtolower(trim($request->input('platform') ?? $request->input('type') ?? $channel->platform ?? $channel->type ?? 'pos'));
 
         $validated = $request->validate([
             'name'       => [
@@ -116,6 +133,8 @@ class SalesChannelController extends BaseApiController
             'isActive'   => ['nullable', 'boolean'],
             'is_default' => ['nullable', 'boolean'],
             'isDefault'  => ['nullable', 'boolean'],
+        ], [
+            'name.unique' => "The sales channel name has already been taken on the " . strtoupper($platform) . " platform.",
         ]);
 
         $updateData = [];
@@ -125,7 +144,9 @@ class SalesChannelController extends BaseApiController
         $updateData['platform'] = $platform;
         $updateData['type'] = $platform;
         if (array_key_exists('code', $validated)) {
-            $updateData['code'] = $validated['code'];
+            $updateData['code'] = !empty($validated['code'])
+                ? trim($validated['code'])
+                : $this->generateUniqueCode($validated['name'] ?? $channel->name, $platform, $channel->id);
         }
         if ($request->has('imageUrl') || $request->has('image_url')) {
             $updateData['image_url'] = $request->input('imageUrl') ?? $request->input('image_url');
@@ -144,6 +165,44 @@ class SalesChannelController extends BaseApiController
         $channel->update($updateData);
 
         return $this->successResponse($channel, 'Sales channel updated successfully.');
+    }
+
+    /**
+     * Auto-generate a clean, unique channel code with platform prefix
+     */
+    private function generateUniqueCode(string $name, string $platform, ?string $ignoreId = null): string
+    {
+        $prefixMap = [
+            'pos'       => 'POS',
+            'facebook'  => 'FB',
+            'tiktok'    => 'TT',
+            'telegram'  => 'TG',
+            'instagram' => 'IG',
+            'whatsapp'  => 'WA',
+            'line'      => 'LN',
+            'shopee'    => 'SP',
+            'lazada'    => 'LZ',
+            'web'       => 'WEB',
+            'online'    => 'WEB',
+            'wholesale' => 'B2B',
+        ];
+        $prefix = $prefixMap[strtolower($platform)] ?? strtoupper(substr($platform, 0, 3));
+        $nameSlug = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', trim($name)));
+        $nameSlug = trim($nameSlug, '-');
+        $baseCode = $prefix . ($nameSlug ? '-' . $nameSlug : '');
+        if (strlen($baseCode) > 35) {
+            $baseCode = substr($baseCode, 0, 35);
+        }
+
+        $candidate = $baseCode ?: $prefix;
+        $counter = 1;
+        while (SalesChannel::where('code', $candidate)
+            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+            ->exists()) {
+            $candidate = $baseCode . '-' . str_pad((string) $counter, 2, '0', STR_PAD_LEFT);
+            $counter++;
+        }
+        return $candidate;
     }
 
     /**

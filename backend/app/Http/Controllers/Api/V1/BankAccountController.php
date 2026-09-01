@@ -46,6 +46,8 @@ class BankAccountController extends BaseApiController
             'accountName'    => ['nullable', 'string', 'max:150'],
             'account_number' => ['nullable', 'string', 'max:100'],
             'accountNumber'  => ['nullable', 'string', 'max:100'],
+            'account_type'   => ['nullable', 'string', 'max:50'],
+            'accountType'    => ['nullable', 'string', 'max:50'],
             'qr_image_url'   => ['nullable', 'string'],
             'qrImageUrl'     => ['nullable', 'string'],
             'currency'       => ['nullable', 'string', 'in:USD,KHR,Dual,usd,khr,dual'],
@@ -54,8 +56,10 @@ class BankAccountController extends BaseApiController
             'is_active'      => ['nullable', 'boolean'],
             'isActive'       => ['nullable', 'boolean'],
             'color'          => ['nullable', 'string', 'max:50'],
-            'logo_icon'      => ['nullable', 'string', 'max:50'],
-            'logoIcon'       => ['nullable', 'string', 'max:50'],
+            'logo_icon'      => ['nullable', 'string'],
+            'logoIcon'       => ['nullable', 'string'],
+            'logo_url'       => ['nullable', 'string'],
+            'logoUrl'        => ['nullable', 'string'],
         ]);
 
         $bankName = $request->input('bankName') ?? $request->input('bank_name');
@@ -94,12 +98,13 @@ class BankAccountController extends BaseApiController
             'bank_name'      => $bankName,
             'account_name'   => strtoupper(trim($accountName)),
             'account_number' => trim($accountNumber),
+            'account_type'   => $request->input('accountType') ?? $request->input('account_type') ?? 'checking',
             'qr_image_url'   => $request->input('qrImageUrl') ?? $request->input('qr_image_url') ?? null,
             'currency'       => $currency,
             'is_default'     => $isDefault,
             'is_active'      => $isActive,
             'color'          => $validated['color'] ?? '#005F83',
-            'logo_icon'      => $request->input('logoIcon') ?? $request->input('logo_icon') ?? 'qr-code',
+            'logo_icon'      => $request->input('logoIcon') ?? $request->input('logo_icon') ?? $request->input('logoUrl') ?? $request->input('logo_url') ?? null,
         ]);
 
         return $this->createdResponse($account, 'Bank account created successfully.');
@@ -137,6 +142,8 @@ class BankAccountController extends BaseApiController
             'accountName'    => ['nullable', 'string', 'max:150'],
             'account_number' => ['nullable', 'string', 'max:100'],
             'accountNumber'  => ['nullable', 'string', 'max:100'],
+            'account_type'   => ['nullable', 'string', 'max:50'],
+            'accountType'    => ['nullable', 'string', 'max:50'],
             'qr_image_url'   => ['nullable', 'string'],
             'qrImageUrl'     => ['nullable', 'string'],
             'currency'       => ['nullable', 'string', 'in:USD,KHR,Dual,usd,khr,dual'],
@@ -145,8 +152,10 @@ class BankAccountController extends BaseApiController
             'is_active'      => ['nullable', 'boolean'],
             'isActive'       => ['nullable', 'boolean'],
             'color'          => ['nullable', 'string', 'max:50'],
-            'logo_icon'      => ['nullable', 'string', 'max:50'],
-            'logoIcon'       => ['nullable', 'string', 'max:50'],
+            'logo_icon'      => ['nullable', 'string'],
+            'logoIcon'       => ['nullable', 'string'],
+            'logo_url'       => ['nullable', 'string'],
+            'logoUrl'        => ['nullable', 'string'],
         ]);
 
         $updateData = [];
@@ -159,6 +168,9 @@ class BankAccountController extends BaseApiController
         if ($request->has('accountNumber') || $request->has('account_number')) {
             $updateData['account_number'] = trim($request->input('accountNumber') ?? $request->input('account_number'));
         }
+        if ($request->has('accountType') || $request->has('account_type')) {
+            $updateData['account_type'] = $request->input('accountType') ?? $request->input('account_type');
+        }
         if ($request->has('qrImageUrl') || $request->has('qr_image_url')) {
             $updateData['qr_image_url'] = $request->input('qrImageUrl') ?? $request->input('qr_image_url');
         }
@@ -169,8 +181,8 @@ class BankAccountController extends BaseApiController
         if (isset($validated['color'])) {
             $updateData['color'] = $validated['color'];
         }
-        if ($request->has('logoIcon') || $request->has('logo_icon')) {
-            $updateData['logo_icon'] = $request->input('logoIcon') ?? $request->input('logo_icon');
+        if ($request->has('logoIcon') || $request->has('logo_icon') || $request->has('logoUrl') || $request->has('logo_url')) {
+            $updateData['logo_icon'] = $request->input('logoIcon') ?? $request->input('logo_icon') ?? $request->input('logoUrl') ?? $request->input('logo_url');
         }
         if ($request->has('isActive') || $request->has('is_active')) {
             $updateData['is_active'] = $request->has('isActive') ? $request->boolean('isActive') : $request->boolean('is_active');

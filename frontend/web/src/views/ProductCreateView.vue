@@ -4,14 +4,16 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useAttributeStore, type Attribute } from '@/stores/attributeStore'
 import { useProductStore } from '@/stores/productStore'
 import { useCategoryStore } from '@/stores/categoryStore'
+import { useToast } from '@/composables/useToast'
 import {
   ArrowLeft,
-  Check,
   Tag,
   Layers,
-  AlertCircle,
   TrendingUp,
   Upload,
+  Info,
+  ScanBarcode,
+  Sparkles,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -19,16 +21,10 @@ import {
   Input,
   Switch,
   Card,
-  Alert,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
 } from '@/components/ui'
 
 const router = useRouter()
+const toast = useToast()
 const attrStore = useAttributeStore()
 const productStore = useProductStore()
 const categoryStore = useCategoryStore()
@@ -56,9 +52,6 @@ function removeImage() {
   form.value.image_file = null
   imagePreviewUrl.value = ''
 }
-
-// Active Step in Stepper Navigation
-const currentStep = ref<number>(1)
 
 // --- Base product form ---
 const form = ref({
@@ -124,14 +117,135 @@ function isValueActive(attrId: string, valueName: string) {
   return selectedAttrs.value[attrId]?.has(valueName) ?? false
 }
 
-// --- Cartesian Matrix Preview ---
-interface MatrixRow {
+// --- Cartesian Matrix Preview & Per-Variant Barcodes ---
+interface MatrixItem {
+  id: string
+  label: string
+  attributeId: string
+  attributeName: string
+}
+
+export interface MatrixRow {
   sku: string
   combination: string[]
   purchasePrice: number
   sellingPrice: number
   reorderLevel: number
+  rawCombo: MatrixItem[]
 }
+
+const variantBarcodes = ref<Record<string, string>>({})
+
+function getVariantBarcode(sku: string): string {
+  return variantBarcodes.value[sku] || ''
+}
+
+function setVariantBarcode(sku: string, val: string) {
+  variantBarcodes.value[sku] = val
+}
+
+function autoGenerateBarcodes() {
+  const timestamp = Date.now().toString().slice(-6)
+  matrixPreview.value.forEach((row, idx) => {
+    if (!variantBarcodes.value[row.sku]) {
+      const seq = String(idx + 1).padStart(3, '0')
+      variantBarcodes.value[row.sku] = `885${timestamp}${seq}`
+    }
+  })
+}
+
+const activeScanIndex = ref<number | null>(null)
+const barcodeInputRefs = ref<Record<number, HTMLInputElement | null>>({})
+
+function setBarcodeInputRef(el: any, index: number) {
+  if (el) {
+    barcodeInputRefs.value[index] = (el.$el ? el.$el.querySelector('input') || el.$el : el) as HTMLInputElement
+  }
+}
+
+function playScanBeep() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    gain.gain.setValueAtTime(0.08, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.08)
+  } catch {
+    // Audio feedback is optional enhancement
+  }
+}
+
+function focusVariantBarcode(index: number) {
+  activeScanIndex.value = index
+  setTimeout(() => {
+    const input = barcodeInputRefs.value[index] || document.getElementById(`variant-barcode-${index}`) as HTMLInputElement
+    if (input) {
+      input.focus()
+      if (typeof input.select === 'function') input.select()
+    }
+  }, 10)
+}
+
+function handleBarcodeKeyDown(e: KeyboardEvent, index: number) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    e.stopPropagation()
+    playScanBeep()
+
+    if (e.shiftKey) {
+      if (index > 0) {
+        focusVariantBarcode(index - 1)
+      }
+    } else {
+      if (index < matrixPreview.value.length - 1) {
+        focusVariantBarcode(index + 1)
+      } else {
+        activeScanIndex.value = null
+        const btn = document.getElementById('btn-create-product')
+        if (btn) btn.focus()
+      }
+    }
+  } else if (e.key === 'ArrowDown') {
+    if (index < matrixPreview.value.length - 1) {
+      e.preventDefault()
+      focusVariantBarcode(index + 1)
+    }
+  } else if (e.key === 'ArrowUp') {
+    if (index > 0) {
+      e.preventDefault()
+      focusVariantBarcode(index - 1)
+    }
+  }
+}
+
+function clearVariantBarcodes() {
+  variantBarcodes.value = {}
+}
+
+const duplicateBarcodeSkus = computed<Set<string>>(() => {
+  const duplicates = new Set<string>()
+  const seen = new Map<string, string>()
+
+  for (const row of matrixPreview.value) {
+    const code = variantBarcodes.value[row.sku]?.trim()
+    if (!code) continue
+    if (seen.has(code)) {
+      duplicates.add(row.sku)
+      duplicates.add(seen.get(code)!)
+    } else {
+      seen.set(code, row.sku)
+    }
+  }
+  return duplicates
+})
 
 const matrixPreview = computed<MatrixRow[]>(() => {
   const namePart = form.value.name
@@ -144,21 +258,27 @@ const matrixPreview = computed<MatrixRow[]>(() => {
 
   if (activeAttrEntries.length === 0) return []
 
-  const groups: Array<Array<{ id: string; label: string }>> = []
+  const groups: Array<Array<MatrixItem>> = []
   for (const [attrId, valSet] of activeAttrEntries) {
     const attr = attrStore.attributes.find(a => a.id === attrId)
     if (!attr) continue
-    const valItems = [...valSet].map(vStr => ({
-      id: vStr,
-      label: vStr,
-    }))
+    const valItems: MatrixItem[] = [...valSet].map(vStr => {
+      const valObj = (attr.values as any[])?.find((v: any) => (typeof v === 'string' ? v : v?.value_name) === vStr)
+      const valId = typeof valObj === 'object' && valObj?.id ? valObj.id : vStr
+      return {
+        id: valId,
+        label: vStr,
+        attributeId: attr.id,
+        attributeName: attr.name,
+      }
+    })
     groups.push(valItems)
   }
 
   if (groups.length === 0) return []
 
-  const cartesian = (sets: Array<Array<{ id: string; label: string }>>): Array<Array<{ id: string; label: string }>> =>
-    sets.reduce<Array<Array<{ id: string; label: string }>>>(
+  const cartesian = (sets: Array<Array<MatrixItem>>): Array<Array<MatrixItem>> =>
+    sets.reduce<Array<Array<MatrixItem>>>(
       (acc, set) => acc.flatMap(combo => set.map(item => [...combo, item])),
       [[]]
     )
@@ -176,21 +296,15 @@ const matrixPreview = computed<MatrixRow[]>(() => {
       purchasePrice: pPrice,
       sellingPrice: sPrice,
       reorderLevel: reorder,
+      rawCombo: combo,
     }
   })
 })
 
 // --- Submit ---
-const successMessage = ref('')
-const submitError = ref('')
-
 async function submit() {
-  submitError.value = ''
-  successMessage.value = ''
-
   if (!form.value.name.trim()) {
-    submitError.value = 'Product name is required.'
-    currentStep.value = 1
+    toast.error('Product name is required.')
     return
   }
 
@@ -198,13 +312,11 @@ async function submit() {
   const sPrice = parseFloat(form.value.selling_price)
 
   if (isNaN(pPrice) || pPrice < 0) {
-    submitError.value = 'Valid purchase price is required.'
-    currentStep.value = 1
+    toast.error('Valid purchase price is required.')
     return
   }
   if (isNaN(sPrice) || sPrice <= 0) {
-    submitError.value = 'Selling price must be greater than $0.00.'
-    currentStep.value = 1
+    toast.error('Selling price must be greater than $0.00.')
     return
   }
 
@@ -215,57 +327,87 @@ async function submit() {
       value_ids: [...vals],
     }))
 
+  const isVariable = form.value.product_type === 'VARIABLE' && matrixPreview.value.length > 0
+  let variantsPayload: any[] | undefined = undefined
+
+  if (isVariable) {
+    variantsPayload = matrixPreview.value.map(row => ({
+      name: row.combination.join(' / '),
+      sku: row.sku,
+      barcode: variantBarcodes.value[row.sku]?.trim() || null,
+      selling_price: sPrice,
+      cost_price: pPrice,
+      reorder_level: parseInt(form.value.default_reorder_level) || 5,
+      quantity_on_hand: form.value.initial_stock || 0,
+      attribute_values: row.rawCombo.map(item => ({
+        attribute_id: item.attributeId,
+        value_name: item.label,
+        id: item.id,
+      })),
+    }))
+  }
+
   // Use FormData when we have an image file to upload
   if (form.value.image_file) {
     const formData = new FormData()
     formData.append('name', form.value.name.trim())
-    formData.append('barcode', form.value.barcode.trim() || '')
+    if (form.value.barcode.trim()) {
+      formData.append('barcode', form.value.barcode.trim())
+    }
     formData.append('purchase_price', pPrice.toString())
     formData.append('selling_price', sPrice.toString())
     formData.append('default_reorder_level', (parseInt(form.value.default_reorder_level) || 5).toString())
     formData.append('description', form.value.description.trim() || '')
-    formData.append('is_active', form.value.is_active.toString())
+    formData.append('is_active', form.value.is_active ? '1' : '0')
     formData.append('product_type', form.value.product_type)
     formData.append('initial_stock', form.value.initial_stock.toString())
     formData.append('image_file', form.value.image_file)
 
-    // Append attributes as JSON string
-    if (attributes.length > 0) {
+    if (variantsPayload && variantsPayload.length > 0) {
+      formData.append('variants', JSON.stringify(variantsPayload))
+    } else if (attributes.length > 0) {
       formData.append('attributes', JSON.stringify(attributes))
     }
 
     try {
       await productStore.createProduct(formData)
-      successMessage.value = 'Product created successfully! Redirecting to catalog…'
+      toast.success('Product created successfully! Redirecting…')
       setTimeout(() => {
         router.push('/products')
-      }, 1000)
+      }, 500)
     } catch (e: unknown) {
-      submitError.value = e instanceof Error ? e.message : 'Failed to create product.'
+      const msg = productStore.error || (e instanceof Error ? e.message : 'Failed to create product.')
+      toast.error(msg)
     }
   } else {
     // Original JSON payload when no image
-    const payload = {
+    const payload: any = {
       name: form.value.name.trim(),
       barcode: form.value.barcode.trim() || undefined,
       purchase_price: pPrice,
       selling_price: sPrice,
       default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
       description: form.value.description.trim() || undefined,
-      is_active: form.value.is_active,
+      is_active: Boolean(form.value.is_active),
       product_type: form.value.product_type,
       initial_stock: form.value.initial_stock,
-      attributes: attributes.length > 0 ? attributes : undefined,
+    }
+
+    if (variantsPayload && variantsPayload.length > 0) {
+      payload.variants = variantsPayload
+    } else if (attributes.length > 0) {
+      payload.attributes = attributes
     }
 
     try {
       await productStore.createProduct(payload)
-      successMessage.value = 'Product created successfully! Redirecting to catalog…'
+      toast.success('Product created successfully! Redirecting…')
       setTimeout(() => {
         router.push('/products')
-      }, 1000)
+      }, 500)
     } catch (e: unknown) {
-      submitError.value = e instanceof Error ? e.message : 'Failed to create product.'
+      const msg = productStore.error || (e instanceof Error ? e.message : 'Failed to create product.')
+      toast.error(msg)
     }
   }
 }
@@ -273,6 +415,24 @@ async function submit() {
 function fmtMoney(num: number): string {
   return `$${num.toFixed(2)}`
 }
+
+defineExpose({
+  form,
+  attrStore,
+  matrixPreview,
+  variantBarcodes,
+  activeScanIndex,
+  duplicateBarcodeSkus,
+  toggleValue,
+  toggleAttr,
+  getVariantBarcode,
+  setVariantBarcode,
+  autoGenerateBarcodes,
+  clearVariantBarcodes,
+  handleBarcodeKeyDown,
+  focusVariantBarcode,
+  submit,
+})
 </script>
 
 <template>
@@ -300,87 +460,6 @@ function fmtMoney(num: number): string {
         </Badge>
       </div>
     </div>
-
-    <!-- Stepper Navigation Header -->
-    <div class="rounded-xl border border-border bg-card p-4 shadow-xs">
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <button
-          type="button"
-          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
-          :class="currentStep === 1 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
-          @click="currentStep = 1"
-        >
-          <div
-            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
-            :class="form.name && form.selling_price ? 'bg-success text-success-foreground' : currentStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
-          >
-            <Check v-if="form.name && form.selling_price" :size="14" />
-            <span v-else>1</span>
-          </div>
-          <div>
-            <div class="text-xs font-bold text-foreground">Base Details & Pricing</div>
-            <div class="text-[11px] text-muted-foreground">Name, barcodes & margins</div>
-          </div>
-        </button>
-
-        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
-
-        <button
-          type="button"
-          :disabled="form.product_type !== 'VARIABLE'"
-          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
-          :class="form.product_type !== 'VARIABLE' ? 'opacity-50 cursor-not-allowed text-muted-foreground' : (currentStep === 2 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle')"
-          @click="form.product_type === 'VARIABLE' && (currentStep = 2)"
-        >
-          <div
-            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
-            :class="matrixPreview.length > 0 ? 'bg-success text-success-foreground' : currentStep === 2 ? 'bg-primary text-primary-foreground' : (form.product_type !== 'VARIABLE' ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground')"
-          >
-            <Check v-if="matrixPreview.length > 0" :size="14" />
-            <span v-else>2</span>
-          </div>
-          <div>
-            <div class="text-xs font-bold text-foreground">Variant Options</div>
-            <div class="text-[11px] text-muted-foreground">Sizes, colors, attributes</div>
-          </div>
-        </button>
-
-        <div class="hidden sm:block w-8 h-px bg-border flex-shrink-0" />
-
-        <button
-          type="button"
-          class="flex items-center gap-3 p-2 rounded-lg transition-colors flex-1 text-left"
-          :class="currentStep === 3 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-surface-subtle'"
-          @click="currentStep = 3"
-        >
-          <div
-            class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors"
-            :class="currentStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'"
-          >
-            <span>3</span>
-          </div>
-          <div>
-            <div class="text-xs font-bold text-foreground">Cartesian Matrix</div>
-            <div class="text-[11px] text-muted-foreground">Review generated SKUs</div>
-          </div>
-        </button>
-      </div>
-    </div>
-
-    <!-- Alert Notifications -->
-    <Alert v-if="submitError || productStore.error" variant="error">
-      <div class="flex items-center gap-2">
-        <AlertCircle :size="16" class="flex-shrink-0" />
-        <span>{{ submitError || productStore.error }}</span>
-      </div>
-    </Alert>
-
-    <Alert v-if="successMessage" variant="success">
-      <div class="flex items-center gap-2">
-        <Check :size="16" class="flex-shrink-0" />
-        <span>{{ successMessage }}</span>
-      </div>
-    </Alert>
 
     <!-- Step 1 & 2 Grid Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -410,32 +489,48 @@ function fmtMoney(num: number): string {
             </span>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Product Type *</label>
-            <div class="flex items-center gap-2">
-              <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <label class="block text-xs font-semibold text-foreground mb-1.5">Product Type *</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label
+                class="flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none"
+                :class="form.product_type === 'SIMPLE'
+                  ? 'bg-cta-muted border-cta ring-1 ring-cta/30 shadow-2xs'
+                  : 'bg-surface border-border hover:border-border-strong hover:bg-surface-subtle'"
+              >
                 <input
                   type="radio"
                   name="product_type"
-                  :value="'SIMPLE'"
-                  :class="form.product_type === 'SIMPLE' ? 'h-4 w-4 text-primary-600 rounded-full' : 'h-4 w-4 text-muted-foreground rounded-full'"
+                  value="SIMPLE"
+                  :checked="form.product_type === 'SIMPLE'"
                   @change="form.product_type = 'SIMPLE'"
+                  class="mt-0.5"
                 />
-                <span>Simple</span>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-foreground">Simple Product</span>
+                  <span class="text-[11px] text-muted-foreground">Single SKU inventory item</span>
+                </div>
               </label>
-              <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+
+              <label
+                class="flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none"
+                :class="form.product_type === 'VARIABLE'
+                  ? 'bg-cta-muted border-cta ring-1 ring-cta/30 shadow-2xs'
+                  : 'bg-surface border-border hover:border-border-strong hover:bg-surface-subtle'"
+              >
                 <input
                   type="radio"
                   name="product_type"
-                  :value="'VARIABLE'"
-                  :class="form.product_type === 'VARIABLE' ? 'h-4 w-4 text-primary-600 rounded-full' : 'h-4 w-4 text-muted-foreground rounded-full'"
+                  value="VARIABLE"
+                  :checked="form.product_type === 'VARIABLE'"
                   @change="form.product_type = 'VARIABLE'"
+                  class="mt-0.5"
                 />
-                <span>Variable</span>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-foreground">Variable Product</span>
+                  <span class="text-[11px] text-muted-foreground">Multi-variant matrix (size/color)</span>
+                </div>
               </label>
             </div>
-            <span v-if="form.product_type === 'VARIABLE'" class="text-xs text-muted-foreground font-mono mt-1 block">
-              Select attributes to generate variant combinations
-            </span>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -532,12 +627,12 @@ function fmtMoney(num: number): string {
                 />
               </div>
               <div v-if="form.image_file && imagePreviewUrl" class="flex items-center gap-3 mt-2">
-                <img :src="imagePreviewUrl" alt="Product preview" class="w-24 h-20 object-cover rounded border" />
+                <img :src="imagePreviewUrl" alt="Product preview" class="w-24 h-20 object-cover rounded border border-border" />
                 <span class="text-xs text-muted-foreground truncate max-w-[100px]" title="form.image_file.name">{{ form.image_file.name }}</span>
                 <button
                   type="button"
                   @click="removeImage"
-                  class="text-xs text-destructive underline hover:underline"
+                  class="text-xs text-destructive underline hover:underline cursor-pointer"
                 >
                   Remove
                 </button>
@@ -569,68 +664,102 @@ function fmtMoney(num: number): string {
         </div>
       </Card>
 
-      <!-- Right: Variant Attributes Selector (only for VARIABLE products) -->
-      <Card v-if="form.product_type === 'VARIABLE'" class="p-5 flex flex-col gap-4">
-        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+      <!-- Right: Variant Attributes Selector (Visible for all, disabled if SIMPLE) -->
+      <Card
+        class="p-5 flex flex-col gap-4 bg-card border-border shadow-2xs rounded-xl transition-all"
+        :class="form.product_type === 'SIMPLE' ? 'opacity-55 select-none bg-surface-subtle/40' : ''"
+      >
+        <div class="flex items-center justify-between pb-2 border-b border-border">
           <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-md bg-warning text-warning-foreground flex items-center justify-center text-xs font-bold font-mono">2</div>
-            <h2 class="font-display font-bold text-base text-foreground">Variant Attributes</h2>
+            <div
+              class="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold font-mono transition-colors"
+              :class="form.product_type === 'SIMPLE'
+                ? 'bg-muted text-muted-foreground border border-border'
+                : 'bg-cta-muted text-primary border border-border-strong'"
+            >
+              2
+            </div>
+            <h2 class="font-display font-bold text-sm text-foreground">Variant Attributes</h2>
           </div>
-          <Badge variant="info" class="font-mono text-xs">
-            {{ attrStore.attributes.length }} Available
-          </Badge>
+          <span
+            class="px-2 py-0.5 rounded-md font-mono text-3xs font-semibold"
+            :class="form.product_type === 'SIMPLE'
+              ? 'bg-muted text-muted-foreground border border-border'
+              : 'bg-cta-muted text-primary border border-border-strong'"
+          >
+            {{ form.product_type === 'SIMPLE' ? 'Disabled (Simple Product)' : `${attrStore.attributes.length} Available` }}
+          </span>
         </div>
 
-        <p class="text-xs text-muted-foreground leading-relaxed">
+        <div
+          v-if="form.product_type === 'SIMPLE'"
+          class="p-3 rounded-lg bg-surface-subtle border border-border text-xs text-muted-foreground flex items-center gap-2"
+        >
+          <Info :size="15" class="text-primary shrink-0" />
+          <span>This product is configured as <strong>Simple</strong>. Switch <strong>Product Type</strong> to <strong>Variable</strong> to enable variant attributes and SKU matrix generation.</span>
+        </div>
+        <p v-else class="text-xs text-muted-foreground leading-relaxed">
           Select attributes (e.g. Size, Color) and click specific value chips to automatically generate Cartesian variant combinations.
         </p>
 
         <div v-if="attrStore.loading" class="py-6 space-y-2">
-          <div v-for="i in 3" :key="i" class="h-10 rounded-lg bg-muted/50 animate-pulse" />
+          <div v-for="i in 3" :key="i" class="h-10 rounded-lg bg-surface-subtle animate-pulse" />
         </div>
 
         <div v-else-if="attrStore.attributes.length === 0" class="py-8 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
-          <Tag :size="28" class="text-muted-foreground/60 stroke-1" />
+          <Tag :size="28" class="text-muted-foreground/50 stroke-1" />
           <span>No attributes defined in system yet.</span>
         </div>
 
-        <div v-else class="flex flex-col gap-3">
+        <div v-else class="flex flex-col gap-3" :class="form.product_type === 'SIMPLE' ? 'pointer-events-none' : ''">
           <div
             v-for="attr in attrStore.attributes"
             :key="attr.id"
-            class="p-3.5 rounded-lg border transition-all"
-            :class="isAttrActive(attr.id) ? 'border-primary/40 bg-surface-subtle' : 'border-border bg-surface hover:border-border-strong'"
+            class="p-3.5 rounded-xl border transition-all"
+            :class="isAttrActive(attr.id) ? 'border-cta/50 bg-surface-subtle/80' : 'border-border bg-card hover:border-border-strong'"
           >
             <!-- Attribute Header / Toggle -->
             <div class="flex items-center justify-between">
               <button
                 type="button"
                 :id="`attr-toggle-${attr.id}`"
-                class="flex items-center gap-2 text-xs font-semibold rounded-md px-2.5 py-1 transition-colors"
-                :class="isAttrActive(attr.id) ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'"
-                @click="toggleAttr(attr)"
+                :disabled="form.product_type === 'SIMPLE'"
+                class="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1 transition-all"
+                :class="[
+                  form.product_type === 'SIMPLE'
+                    ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed'
+                    : isAttrActive(attr.id)
+                      ? 'bg-cta text-cta-foreground shadow-2xs cursor-pointer'
+                      : 'bg-surface-subtle border border-border text-muted-foreground hover:text-foreground hover:bg-card cursor-pointer'
+                ]"
+                @click="form.product_type === 'VARIABLE' && toggleAttr(attr)"
               >
                 <span>{{ isAttrActive(attr.id) ? '✓' : '+' }}</span>
                 <span>{{ attr.name }}</span>
               </button>
 
-              <span v-if="isAttrActive(attr.id)" class="text-[11px] font-mono font-medium text-primary">
+              <span v-if="isAttrActive(attr.id)" class="text-3xs font-mono font-bold text-primary">
                 {{ selectedAttrs[attr.id]?.size || 0 }} of {{ attr.values.length }} selected
               </span>
             </div>
 
             <!-- Value Chips -->
-            <div v-if="isAttrActive(attr.id)" class="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-dashed border-border/80">
+            <div v-if="isAttrActive(attr.id)" class="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-dashed border-border">
               <button
                 type="button"
                 v-for="val in attr.values"
                 :key="getValName(val)"
                 :id="`val-toggle-${getValName(val)}`"
-                class="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
-                :class="isValueActive(attr.id, getValName(val))
-                  ? 'bg-cta text-cta-foreground font-semibold shadow-xs'
-                  : 'bg-surface border border-border text-foreground hover:border-border-strong'"
-                @click="toggleValue(attr.id, getValName(val))"
+                :disabled="form.product_type === 'SIMPLE'"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+                :class="[
+                  form.product_type === 'SIMPLE'
+                    ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed'
+                    : isValueActive(attr.id, getValName(val))
+                      ? 'bg-cta text-cta-foreground font-bold shadow-2xs cursor-pointer'
+                      : 'bg-card border border-border text-muted-foreground hover:border-cta hover:text-foreground cursor-pointer'
+                ]"
+                @click="form.product_type === 'VARIABLE' && toggleValue(attr.id, getValName(val))"
               >
                 {{ getValName(val) }}
               </button>
@@ -641,72 +770,159 @@ function fmtMoney(num: number): string {
     </div>
 
     <!-- Step 3: Live Cartesian Matrix Preview Table -->
-    <Card class="p-5 flex flex-col gap-4">
-      <div class="flex items-center justify-between pb-2 border-b border-border/60">
+    <Card class="p-5 flex flex-col gap-4 bg-card border-border shadow-2xs rounded-xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-border gap-3">
         <div class="flex items-center gap-2.5">
-          <div class="w-6 h-6 rounded-md bg-success text-success-foreground flex items-center justify-center text-xs font-bold font-mono">3</div>
+          <div class="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center text-xs font-bold font-mono">3</div>
           <div>
-            <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-foreground flex items-center gap-2">
               <span>Live Cartesian Variant Matrix Preview</span>
-              <Badge v-if="matrixPreview.length > 0" variant="info" class="font-mono text-xs">
+              <span v-if="matrixPreview.length > 0" class="px-2 py-0.5 rounded-md bg-cta-muted text-primary border border-border-strong font-mono text-3xs font-semibold">
                 {{ matrixPreview.length }} SKUs
-              </Badge>
+              </span>
             </h2>
-            <p class="text-[11px] text-muted-foreground mt-0.5">
-              Real-time generated SKU variant catalog combinations based on selected attributes.
+            <p class="text-3xs text-muted-foreground mt-0.5">
+              Assign individual barcodes, stock levels, and review SKU combinations before saving.
             </p>
           </div>
+        </div>
+
+        <div v-if="matrixPreview.length > 0 && form.product_type === 'VARIABLE'" class="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            class="h-7.5 px-2.5 text-xs gap-1.5 border-border"
+            @click="autoGenerateBarcodes"
+          >
+            <Sparkles :size="13" class="text-cta" />
+            <span>Auto-fill Barcodes</span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-7.5 px-2 text-xs text-muted-foreground hover:text-destructive"
+            @click="clearVariantBarcodes"
+          >
+            <span>Clear</span>
+          </Button>
         </div>
       </div>
 
       <div v-if="matrixPreview.length === 0" class="py-10 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
         <Layers :size="32" class="text-muted-foreground/50 stroke-1" />
-        <span class="font-medium text-foreground text-sm">No attributes selected</span>
-        <span class="text-muted-foreground">Select one or more attribute values in Step 2 to generate SKU combinations.</span>
+        <span class="font-semibold text-foreground text-sm">
+          {{ form.product_type === 'SIMPLE' ? 'Simple Product Mode' : 'No attributes selected' }}
+        </span>
+        <span class="text-muted-foreground">
+          {{ form.product_type === 'SIMPLE'
+            ? 'A single master SKU will be generated. Switch Product Type to Variable above to generate Cartesian variant combinations.'
+            : 'Select one or more attribute values in Variant Attributes above to generate SKU combinations.'
+          }}
+        </span>
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow class="bg-muted/40">
-              <TableHead>Generated SKU</TableHead>
-              <TableHead>Option Combinations</TableHead>
-              <TableHead class="font-mono">Cost</TableHead>
-              <TableHead class="font-mono">Selling Price</TableHead>
-              <TableHead class="font-mono">Reorder Level</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="row in matrixPreview" :key="row.sku" class="hover:bg-surface-subtle/80 transition-colors">
-              <TableCell class="font-mono text-xs font-semibold text-primary">
-                {{ row.sku }}
-              </TableCell>
-              <TableCell>
-                <div class="flex flex-wrap gap-1">
-                  <Badge v-for="opt in row.combination" :key="opt" variant="neutral" class="text-[10px] px-1.5 py-0">
-                    {{ opt }}
-                  </Badge>
-                </div>
-              </TableCell>
-              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                {{ fmtMoney(row.purchasePrice) }}
-              </TableCell>
-              <TableCell class="font-mono text-xs font-bold text-foreground tabular-nums">
-                {{ fmtMoney(row.sellingPrice) }}
-              </TableCell>
-              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                {{ row.reorderLevel }} units
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+      <div v-else class="flex flex-col gap-3">
+        <!-- Rapid Scanning Equipment Helper Banner -->
+        <div class="flex items-center justify-between p-2.5 px-3 rounded-lg border border-cta/30 bg-cta-muted/60 text-xs text-foreground shadow-2xs">
+          <div class="flex items-center gap-2">
+            <ScanBarcode class="w-4 h-4 text-primary shrink-0" />
+            <span>
+              <strong class="text-primary font-bold">⚡ Rapid Scan Auto-Advance Active:</strong> Scan with hardware scanner or press <kbd class="px-1.5 py-0.5 rounded bg-surface border border-border-strong text-foreground font-mono text-[10px] font-bold shadow-2xs">Enter</kbd> to automatically jump to the next variant row.
+            </span>
+          </div>
+          <span class="text-[11px] text-muted-foreground hidden md:inline font-mono">
+            <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">↑</kbd> <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">↓</kbd> or <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">Shift+Enter</kbd> to navigate
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left min-w-[900px]">
+            <thead class="bg-surface-subtle text-muted-foreground text-xs font-bold border-b border-border">
+              <tr>
+                <th class="px-4 py-3 min-w-[170px]">Generated SKU</th>
+                <th class="px-4 py-3 min-w-[220px]">Option Combinations</th>
+                <th class="px-4 py-3 min-w-[240px]">Variant Barcode *</th>
+                <th class="px-4 py-3 text-right w-28 font-mono">Cost</th>
+                <th class="px-4 py-3 text-right w-32 font-mono">Selling Price</th>
+                <th class="px-4 py-3 text-right w-32 font-mono">Reorder Level</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border/70">
+              <tr
+                v-for="(row, idx) in matrixPreview"
+                :key="row.sku"
+                class="transition-colors duration-150"
+                :class="[
+                  activeScanIndex === idx
+                    ? 'bg-cta-muted ring-1 ring-cta'
+                    : duplicateBarcodeSkus.has(row.sku)
+                      ? 'bg-red-500/15'
+                      : 'hover:bg-surface-subtle/50'
+                ]"
+              >
+                <td class="px-4 py-2.5 font-mono text-xs font-bold text-foreground whitespace-nowrap">
+                  <div class="flex items-center gap-1.5">
+                    <span>{{ row.sku }}</span>
+                    <span v-if="activeScanIndex === idx" class="px-1.5 py-0.2 rounded bg-cta text-cta-foreground text-[9px] font-sans font-bold">
+                      SCANNING
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 min-w-[220px]">
+                  <div class="flex flex-wrap gap-1.5">
+                    <span
+                      v-for="opt in row.combination"
+                      :key="opt"
+                      class="px-2.5 py-0.5 rounded-md bg-surface-subtle border border-border text-xs font-semibold text-foreground"
+                    >
+                      {{ opt }}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-2 min-w-[240px]">
+                  <div class="relative flex flex-col gap-1">
+                    <div class="relative flex items-center">
+                      <Input
+                        :id="`variant-barcode-${idx}`"
+                        :ref="(el) => setBarcodeInputRef(el, idx)"
+                        :model-value="getVariantBarcode(row.sku)"
+                        @update:model-value="(val) => setVariantBarcode(row.sku, String(val))"
+                        @keydown="(e: any) => handleBarcodeKeyDown(e, idx)"
+                        @focus="activeScanIndex = idx"
+                        @blur="activeScanIndex === idx && (activeScanIndex = null)"
+                        placeholder="Scan / type barcode (Enter ↵)"
+                        class="h-8 text-xs font-mono bg-surface pl-2.5 pr-7 w-full border-border/80 focus:border-cta"
+                        :class="duplicateBarcodeSkus.has(row.sku) ? 'border-destructive focus:border-destructive text-destructive font-bold' : (activeScanIndex === idx ? 'border-cta ring-1 ring-cta' : undefined)"
+                      />
+                      <ScanBarcode :size="14" class="text-muted-foreground/60 absolute right-2 pointer-events-none" />
+                    </div>
+                    <span v-if="duplicateBarcodeSkus.has(row.sku)" class="text-[10px] text-destructive font-semibold">
+                      ⚠ Duplicate barcode detected
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground font-medium tabular-nums whitespace-nowrap">
+                  {{ fmtMoney(row.purchasePrice) }}
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-primary tabular-nums whitespace-nowrap">
+                  {{ fmtMoney(row.sellingPrice) }}
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                  {{ row.reorderLevel }} units
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </Card>
 
     <!-- Submit Action Bar -->
     <div class="flex items-center justify-end gap-3 pb-8">
       <RouterLink to="/products">
-        <Button variant="outline" size="sm" class="h-9 px-4 text-xs">
+        <Button variant="outline" size="sm" class="h-8.5 px-4 text-xs font-bold border-border text-foreground hover:bg-surface-subtle">
           Cancel
         </Button>
       </RouterLink>
@@ -715,7 +931,7 @@ function fmtMoney(num: number): string {
         id="btn-create-product"
         variant="primary"
         size="sm"
-        class="h-9 px-5 text-xs gap-1.5"
+        class="h-8.5 px-5 text-xs gap-1.5 font-bold shadow-2xs cursor-pointer text-white"
         :disabled="productStore.mutating"
         @click="submit"
       >

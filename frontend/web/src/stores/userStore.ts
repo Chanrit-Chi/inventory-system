@@ -8,6 +8,7 @@ export interface User {
   email: string
   phone?: string
   role: string
+  department?: string
   status: 'active' | 'inactive'
   avatar_url?: string
   created_at: string
@@ -34,8 +35,18 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
     try {
       const res = await api.get('/users', { params: filters })
-      users.value = res.data.data || []
-      meta.value = res.data.meta
+      const payload = res.data.data
+      // Backend /users returns flat array (no pagination) — handle both shapes
+      if (Array.isArray(payload)) {
+        users.value = payload
+        meta.value = null
+      } else if (payload && Array.isArray(payload.data)) {
+        users.value = payload.data
+        meta.value = payload.meta || null
+      } else {
+        users.value = []
+        meta.value = null
+      }
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch users'
       throw e

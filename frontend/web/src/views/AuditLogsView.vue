@@ -6,7 +6,6 @@ import {
   ShieldAlert,
   Search,
   RefreshCw,
-  User,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -18,14 +17,9 @@ import {
   Badge,
   Input,
   StatCard,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
   EmptyState,
   Skeleton,
+  DatePicker,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -100,6 +94,60 @@ function actionBadge(action: string): { variant: 'success' | 'info' | 'destructi
   return { variant: 'neutral', label: action }
 }
 
+function getTargetObject(log: any): string {
+  if (log.target && log.target.trim()) return log.target
+  if (log.subject_type) {
+    return `${log.subject_type} ${log.subject_id ? '#' + String(log.subject_id).slice(0, 8) : ''}`
+  }
+  if (log.source_type) {
+    return `${log.source_type} ${log.source_id ? '#' + String(log.source_id).slice(0, 8) : ''}`
+  }
+  return '—'
+}
+
+function getIpAddress(log: any): string {
+  if (log.ip && String(log.ip).trim()) return String(log.ip)
+  if (log.ip_address && String(log.ip_address).trim()) return String(log.ip_address)
+  if (log.metadata?.ip) return String(log.metadata.ip)
+  if (log.metadata?.ip_address) return String(log.metadata.ip_address)
+  if (log.details && typeof log.details === 'string' && log.details.includes('IP: ')) {
+    const parts = log.details.split('IP: ')
+    if (parts[1]) return parts[1].split(' ')[0].trim()
+  }
+  return '—'
+}
+
+function getOperatorName(log: any): string {
+  if (log.actor_name && String(log.actor_name).trim()) return String(log.actor_name)
+  if (log.by && String(log.by).trim()) return String(log.by)
+  if (log.user?.name && String(log.user.name).trim()) return String(log.user.name)
+  if (log.user_name && String(log.user_name).trim()) return String(log.user_name)
+  return 'System'
+}
+
+function getLogDescription(log: any): string {
+  if (log.details && String(log.details).trim()) return String(log.details)
+  if (log.description && String(log.description).trim()) return String(log.description)
+  return log.action ? String(log.action).replace(/_/g, ' ') : 'System event logged'
+}
+
+function formatLogDate(dateStr?: string | null): string {
+  if (!dateStr) return '—'
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return String(dateStr)
+    return d.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch {
+    return String(dateStr)
+  }
+}
+
 onMounted(loadLogs)
 </script>
 
@@ -119,7 +167,7 @@ onMounted(loadLogs)
         </p>
       </div>
 
-      <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="store.loading" @click="loadLogs">
+      <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs border-border bg-card hover:bg-surface-subtle" :disabled="store.loading" @click="loadLogs">
         <RefreshCw :size="14" :class="{ 'animate-spin': store.loading }" />
         <span>Refresh</span>
       </Button>
@@ -157,7 +205,7 @@ onMounted(loadLogs)
           <Input
             v-model="filters.search"
             type="text"
-            placeholder="Search description or details…"
+            placeholder="Search description, target, actor…"
             class="bg-surface text-sm"
             @keyup.enter="loadLogs"
           >
@@ -171,16 +219,16 @@ onMounted(loadLogs)
           <Input
             v-model="filters.action"
             type="text"
-            placeholder="Filter action (e.g. create, update)…"
+            placeholder="Filter action (e.g. login, create)…"
             class="bg-surface text-sm font-mono"
             @keyup.enter="loadLogs"
           />
         </div>
 
         <div class="flex items-center gap-2">
-          <Input v-model="filters.from" type="date" class="w-full bg-surface text-sm font-mono" />
+          <DatePicker v-model="filters.from" placeholder="From date" class="w-full bg-surface text-xs" />
           <span class="text-muted-foreground text-xs">to</span>
-          <Input v-model="filters.to" type="date" class="w-full bg-surface text-sm font-mono" />
+          <DatePicker v-model="filters.to" placeholder="To date" class="w-full bg-surface text-xs" />
         </div>
       </div>
 
@@ -212,53 +260,78 @@ onMounted(loadLogs)
       />
 
       <div v-else class="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow class="bg-muted/40">
-              <TableHead class="font-mono">Timestamp</TableHead>
-              <TableHead>Operator</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead class="font-mono">Target Subject</TableHead>
-              <TableHead class="font-mono text-right">IP Address</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="log in logs" :key="log.id" class="hover:bg-surface-subtle/80 transition-colors">
-              <TableCell class="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                {{ new Date(log.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
-              </TableCell>
+        <table class="w-full text-xs text-left min-w-[960px]">
+          <thead class="bg-surface-subtle text-muted-foreground text-xs font-bold border-b border-border">
+            <tr>
+              <th class="px-4 py-3 font-mono w-44 whitespace-nowrap">Timestamp</th>
+              <th class="px-4 py-3 w-40 whitespace-nowrap">Operator</th>
+              <th class="px-4 py-3 w-36 whitespace-nowrap">Action</th>
+              <th class="px-4 py-3 min-w-[220px]">Description</th>
+              <th class="px-4 py-3 min-w-[180px] font-mono">Target Object</th>
+              <th class="px-4 py-3 font-mono text-right w-44 whitespace-nowrap">IP Address</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border/70">
+            <tr v-for="log in logs" :key="log.id" class="hover:bg-surface-subtle/50 transition-colors">
+              <!-- Timestamp -->
+              <td class="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                {{ formatLogDate(log.occurred_at || log.created_at || log.time) }}
+              </td>
 
-              <TableCell class="text-xs font-semibold text-foreground whitespace-nowrap">
+              <!-- Operator / Actor -->
+              <td class="px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap">
                 <div class="flex items-center gap-1.5">
-                  <User :size="13" class="text-muted-foreground flex-shrink-0" />
-                  <span>{{ log.user_name || 'System' }}</span>
+                  <div class="w-5.5 h-5.5 rounded-full bg-cta-muted border border-border-strong text-primary flex items-center justify-center font-bold text-3xs shrink-0">
+                    {{ getOperatorName(log).charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="min-w-0">
+                    <span class="block truncate font-bold text-foreground">{{ getOperatorName(log) }}</span>
+                    <span v-if="log.actor_role" class="block text-3xs text-muted-foreground font-mono uppercase">{{ log.actor_role }}</span>
+                  </div>
                 </div>
-              </TableCell>
+              </td>
 
-              <TableCell>
-                <Badge :variant="actionBadge(log.action).variant" class="text-[10px] px-2 py-0.5 font-mono">
+              <!-- Action Badge -->
+              <td class="px-4 py-3 whitespace-nowrap">
+                <Badge :variant="actionBadge(log.action).variant" class="text-xs px-2.5 py-0.5 font-mono font-semibold">
                   {{ actionBadge(log.action).label }}
                 </Badge>
-              </TableCell>
+              </td>
 
-              <TableCell class="text-xs text-foreground max-w-sm truncate">
-                {{ log.description }}
-              </TableCell>
+              <!-- Description -->
+              <td class="px-4 py-3 text-xs text-foreground">
+                {{ getLogDescription(log) }}
+              </td>
 
-              <TableCell class="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                <span v-if="log.subject_type">
-                  {{ log.subject_type }} {{ log.subject_id ? `#${log.subject_id.slice(0, 8)}` : '' }}
+              <!-- Target Object -->
+              <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                <span
+                  v-if="getTargetObject(log) !== '—'"
+                  class="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-foreground font-semibold"
+                >
+                  {{ getTargetObject(log) }}
                 </span>
-                <span v-else>—</span>
-              </TableCell>
+                <span v-else class="text-muted-foreground">—</span>
+              </td>
 
-              <TableCell class="font-mono text-xs text-muted-foreground text-right">
-                {{ log.ip_address || '—' }}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              <!-- IP Address & Device -->
+              <td class="px-4 py-3 font-mono text-xs text-right whitespace-nowrap">
+                <div class="flex flex-col items-end">
+                  <span
+                    v-if="getIpAddress(log) !== '—'"
+                    class="px-2 py-0.5 rounded-md bg-card border border-border text-foreground font-bold shadow-2xs"
+                  >
+                    {{ getIpAddress(log) }}
+                  </span>
+                  <span v-else class="text-muted-foreground">—</span>
+                  <span v-if="log.device || (log.metadata as any)?.device" class="text-3xs text-muted-foreground truncate max-w-[140px] mt-0.5">
+                    {{ log.device || (log.metadata as any)?.device }}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Pagination -->

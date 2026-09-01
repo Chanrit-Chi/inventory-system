@@ -87,4 +87,32 @@ class ReportAnalyticsTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.period', 'custom');
     }
+
+    public function test_reports_inventory_analytics(): void
+    {
+        $admin = User::whereIn('role', ['ADMIN', 'SUPER_ADMIN'])->first();
+        $token = $admin->createToken('test')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/v1/reports/inventory');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'success',
+                'data' => [
+                    'total_skus',
+                    'total_products',
+                    'total_units',
+                    'cost_value',
+                    'retail_value',
+                    'potential_profit',
+                    'potential_margin_pct',
+                    'healthy_count',
+                    'low_stock_count',
+                    'out_of_stock_count',
+                    'categories_breakdown',
+                    'dead_stock_items',
+                ],
+            ]);
+    }
 }

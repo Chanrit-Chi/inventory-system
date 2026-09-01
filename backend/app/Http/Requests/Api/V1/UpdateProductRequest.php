@@ -16,6 +16,35 @@ class UpdateProductRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('is_active')) {
+            $val = $this->input('is_active');
+            if (is_string($val) || is_numeric($val) || is_bool($val)) {
+                $converted = filter_var($val, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                if ($converted !== null) {
+                    $merge['is_active'] = $converted;
+                }
+            }
+        }
+        if (is_string($this->input('variants'))) {
+            $decoded = json_decode($this->input('variants'), true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $merge['variants'] = $decoded;
+            }
+        }
+        if (is_string($this->input('attributes'))) {
+            $decoded = json_decode($this->input('attributes'), true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $merge['attributes'] = $decoded;
+            }
+        }
+        if ($merge) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [

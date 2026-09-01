@@ -102,43 +102,105 @@ class DashboardController extends BaseApiController
      */
     public function staffPerformance(Request $request): JsonResponse
     {
-        $period = $request->input('period', 'today');
+        $period = $request->input('period', '30d');
+        $dateFrom = $request->input('date_from') ?: $request->input('from');
+        $dateTo = $request->input('date_to') ?: $request->input('to');
 
-        [$startDate, $endDate] = match ($period) {
-            'week'  => [Carbon::now()->startOfWeek(), Carbon::now()->endOfDay()],
-            'month' => [Carbon::now()->startOfMonth(), Carbon::now()->endOfDay()],
-            default => [Carbon::today()->startOfDay(), Carbon::tomorrow()->startOfDay()],
-        };
+        if (!empty($dateFrom)) {
+            $startDate = Carbon::parse($dateFrom)->startOfDay();
+            $endDate = !empty($dateTo) ? Carbon::parse($dateTo)->endOfDay() : Carbon::now()->endOfDay();
+        } else {
+            [$startDate, $endDate] = match ($period) {
+                'today' => [Carbon::today()->startOfDay(), Carbon::tomorrow()->startOfDay()],
+                'week', '7d' => [Carbon::now()->subDays(6)->startOfDay(), Carbon::now()->endOfDay()],
+                'year' => [Carbon::now()->startOfYear(), Carbon::now()->endOfDay()],
+                'month', '30d' => [Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay()],
+                default => [Carbon::now()->subDays(29)->startOfDay(), Carbon::now()->endOfDay()],
+            };
+        }
 
-        $rows = Order::query()
+        // Fetch all active staff users
+        $allUsers = \App\Models\User::whereNull('deleted_at')
+            ->where('is_active', true)
+            ->get();
+
+        // Aggregate orders per staff member in the date range
+        $orderAggregates = Order::query()
+            ->where('created_at', '>=', $startDate)
+            ->where('created_at', '<=', $endDate)
+            ->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'")
             ->select([
-                'user_id',
-                \DB::raw('COUNT(*) as orders_count'),
+                \DB::raw('COALESCE(seller_id, user_id, created_by) as staff_id'),
+                \DB::raw('COUNT(id) as orders_count'),
                 \DB::raw('SUM(total_amount) as total_revenue'),
                 \DB::raw('AVG(total_amount) as avg_basket'),
                 \DB::raw('SUM((SELECT COALESCE(SUM(oi.quantity),0) FROM order_items oi WHERE oi.order_id = orders.id)) as units_sold'),
             ])
-            ->whereNotNull('user_id')
-            ->where('created_at', '>=', $startDate)
-            ->where('created_at', '<', $endDate)
-            ->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'")
-            ->groupBy('user_id')
-            ->with('user:id,name,role')
-            ->orderByDesc('total_revenue')
-            ->get();
+            ->whereRaw('COALESCE(seller_id, user_id, created_by) IS NOT NULL')
+            ->groupBy(\DB::raw('COALESCE(seller_id, user_id, created_by)'))
+            ->get()
+            ->keyBy('staff_id');
 
-        $leaderboard = $rows->map(function ($row, $rank) {
-            return [
-                'rank'          => $rank + 1,
-                'user_id'       => $row->user_id,
-                'staff_name'    => $row->user?->name ?? 'Unknown',
-                'staff_role'    => $row->user?->role ?? '',
-                'orders_count'  => (int) $row->orders_count,
-                'total_revenue' => (float) round($row->total_revenue, 2),
-                'avg_basket'    => (float) round($row->avg_basket, 2),
-                'units_sold'    => (int) ($row->units_sold ?? 0),
+        $leaderboardList = [];
+
+        foreach ($allUsers as $user) {
+            $agg = $orderAggregates->get($user->id);
+            $ordersCount = $agg ? (int) $agg->orders_count : 0;
+            $revenue = $agg ? (float) round($agg->total_revenue, 2) : 0.0;
+            $avgBasket = $agg && $ordersCount > 0 ? (float) round($agg->avg_basket, 2) : 0.0;
+            $unitsSold = $agg ? (int) $agg->units_sold : 0;
+
+            $leaderboardList[] = [
+                'user_id'         => $user->id,
+                'staff_name'      => $user->name,
+                'staff_role'      => $user->role ?? 'Staff',
+                'orders_count'    => $ordersCount,
+                'total_orders'    => $ordersCount,
+                'total_revenue'   => $revenue,
+                'total_sales'     => $revenue,
+                'avg_basket'      => $avgBasket,
+                'avg_order_value' => $avgBasket,
+                'units_sold'      => $unitsSold,
             ];
+        }
+
+        // Also check if there are orders attributed to IDs not in allUsers
+        foreach ($orderAggregates as $staffId => $agg) {
+            if (!$allUsers->contains('id', $staffId)) {
+                $user = \App\Models\User::find($staffId);
+                $ordersCount = (int) $agg->orders_count;
+                $revenue = (float) round($agg->total_revenue, 2);
+                $avgBasket = $ordersCount > 0 ? (float) round($agg->avg_basket, 2) : 0.0;
+                $unitsSold = (int) $agg->units_sold;
+
+                $leaderboardList[] = [
+                    'user_id'         => $staffId,
+                    'staff_name'      => $user?->name ?? 'Staff Member',
+                    'staff_role'      => $user?->role ?? 'Staff',
+                    'orders_count'    => $ordersCount,
+                    'total_orders'    => $ordersCount,
+                    'total_revenue'   => $revenue,
+                    'total_sales'     => $revenue,
+                    'avg_basket'      => $avgBasket,
+                    'avg_order_value' => $avgBasket,
+                    'units_sold'      => $unitsSold,
+                ];
+            }
+        }
+
+        // Sort by total_revenue desc, then orders_count desc
+        usort($leaderboardList, function ($a, $b) {
+            if ($b['total_revenue'] !== $a['total_revenue']) {
+                return $b['total_revenue'] <=> $a['total_revenue'];
+            }
+            return $b['orders_count'] <=> $a['orders_count'];
         });
+
+        // Assign ranks
+        $leaderboard = array_map(function ($item, $idx) {
+            $item['rank'] = $idx + 1;
+            return $item;
+        }, $leaderboardList, array_keys($leaderboardList));
 
         return $this->successResponse([
             'period'      => $period,

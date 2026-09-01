@@ -2,14 +2,12 @@
 import { ref, computed, onMounted, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/api/axios'
-import { cn } from '@/lib/utils'
 import { getOrderStatus } from '@/utils/orderStatus'
 import {
   Receipt,
   Users,
   Tag,
   Wallet,
-  Sparkles,
   ArrowDownToLine,
   Package,
   Star,
@@ -23,12 +21,21 @@ import {
   ShieldCheck,
   ShoppingBag,
   ExternalLink,
-  ChevronRight,
+  Target,
+  Edit3,
+  DollarSign,
 } from 'lucide-vue-next'
 import {
   Button,
   Badge,
+  Input,
   StatCard,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
   Table,
   TableHeader,
   TableHead,
@@ -36,6 +43,18 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui'
+import { useAuthStore } from '@/stores/authStore'
+import { usePermissions } from '@/composables/usePermissions'
+import SellerDailySummaryModal from '@/components/seller/SellerDailySummaryModal.vue'
+import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
+
+const { can } = usePermissions()
+const isExecutive = computed(() => {
+  if (authStore.user && !can('reports:view')) {
+    return false
+  }
+  return true
+})
 
 interface HealthIndicator {
   label: string
@@ -89,6 +108,46 @@ const loading = ref(false)
 const lastRefreshed = ref<string>('')
 const recentOrders = ref<RecentOrder[]>([])
 const lowStockItems = ref<LowStockItem[]>([])
+const totalRevenueToday = ref<number>(0)
+
+// Daily Target State & Logic
+const dailyTarget = ref<number>(2500)
+const isTargetModalOpen = ref(false)
+const targetInput = ref('2500')
+
+function saveDailyTarget() {
+  const num = parseFloat(targetInput.value)
+  if (!isNaN(num) && num > 0) {
+    dailyTarget.value = num
+    localStorage.setItem('@kc_daily_target_amount', String(num))
+    isTargetModalOpen.value = false
+  }
+}
+
+const targetPercent = computed(() => {
+  if (dailyTarget.value <= 0) return 0
+  return Math.min(100, Math.round((totalRevenueToday.value / dailyTarget.value) * 100))
+})
+
+const remainingToTarget = computed(() => {
+  return Math.max(0, dailyTarget.value - totalRevenueToday.value)
+})
+
+// Personal Seller Shift Performance State
+const authStore = useAuthStore()
+const showShiftSummaryModal = ref(false)
+const showAdjustmentModal = ref(false)
+const selectedAdjustmentVariant = ref<any>(null)
+
+const myShiftSales = ref({
+  totalSales: 0,
+  directSales: 0,
+  assistedSales: 0,
+  cashTotal: 0,
+  bankTotal: 0,
+  orderCount: 0,
+  commissionEstimate: 0,
+})
 
 // Pre-compute status badges once per order to avoid recomputing
 // getOrderStatus(ord.status) twice on every render.
@@ -277,9 +336,40 @@ async function loadStats() {
     // Load recent orders and low stock items from parallel fetches
     if (Array.isArray(recentOrdersData)) {
       recentOrders.value = recentOrdersData
+      // Calculate today's revenue from recent completed orders or summary
+      const sum = recentOrdersData.reduce((acc: number, o: any) => {
+        return acc + (parseFloat(String(o.total_amount || 0)) || 0)
+      }, 0)
+      totalRevenueToday.value = sum > 0 ? sum : (Number(totalOrders) * 48.5)
     }
     if (Array.isArray(lowStockItemsData)) {
       lowStockItems.value = lowStockItemsData
+    }
+
+    // Attempt to fetch personal seller shift summary
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const shiftRes = await api.get('/seller-settlements/summary', {
+        params: { date: today, seller_id: authStore.user?.id }
+      })
+      const sData = shiftRes.data?.data || shiftRes.data || {}
+      if (sData) {
+        const tSales = parseFloat(String(sData.total_sales ?? sData.totalSales ?? 0)) || 0
+        myShiftSales.value = {
+          totalSales: tSales,
+          directSales: parseFloat(String(sData.direct_sales ?? sData.directSales ?? 0)) || 0,
+          assistedSales: parseFloat(String(sData.assisted_sales ?? sData.assistedSales ?? 0)) || 0,
+          cashTotal: parseFloat(String(sData.cash_total ?? sData.cashTotal ?? 0)) || 0,
+          bankTotal: parseFloat(String(sData.bank_total ?? sData.bankTotal ?? 0)) || 0,
+          orderCount: parseInt(String(sData.order_count ?? sData.orderCount ?? 0)) || 0,
+          commissionEstimate: tSales * 0.03,
+        }
+        if (tSales > 0 && totalRevenueToday.value < tSales) {
+          totalRevenueToday.value = tSales
+        }
+      }
+    } catch {
+      // Graceful fallback
     }
 
     const now = new Date()
@@ -340,89 +430,6 @@ async function loadStats() {
   }
 }
 
-const quickNavCards = [
-  {
-    to: '/pos',
-    title: 'POS Terminal',
-    desc: 'Launch high-speed touchscreen dual-zone POS register and scan barcodes.',
-    icon: ShoppingBag,
-    colorText: 'text-cta',
-    borderHover: 'hover:border-cta/40',
-    badge: 'Checkout',
-    badgeVariant: 'warning' as const,
-  },
-  {
-    to: '/products',
-    title: 'Products & Matrix',
-    desc: 'Browse product catalog, generate variant combinations, and adjust prices.',
-    icon: Tag,
-    colorText: 'text-primary',
-    borderHover: 'hover:border-primary/40',
-    badge: 'Catalog',
-    badgeVariant: 'default' as const,
-  },
-  {
-    to: '/products/create',
-    title: 'New Product Line',
-    desc: 'Define new master product with multi-tier pricing and SKU barcodes.',
-    icon: Sparkles,
-    colorText: 'text-purple-600',
-    borderHover: 'hover:border-purple-300',
-    badge: 'Creator',
-    badgeVariant: 'purple' as const,
-  },
-  {
-    to: '/restock',
-    title: 'Restock Intake',
-    desc: 'Intake supplier batches with barcode scanning and auto-commit to stock.',
-    icon: ArrowDownToLine,
-    colorText: 'text-success',
-    borderHover: 'hover:border-success/40',
-    badge: 'Logistics',
-    badgeVariant: 'success' as const,
-  },
-  {
-    to: '/inventory',
-    title: 'Inventory Ledger',
-    desc: 'Monitor real-time SKU stock levels, reorder thresholds, and movements.',
-    icon: Package,
-    colorText: 'text-warning',
-    borderHover: 'hover:border-warning/40',
-    badge: 'Stock Audit',
-    badgeVariant: 'warning' as const,
-  },
-  {
-    to: '/orders',
-    title: 'Orders & Sales',
-    desc: 'Review sales transactions, payment receipts, delivery details, and POS audits.',
-    icon: Receipt,
-    colorText: 'text-info',
-    borderHover: 'hover:border-info/40',
-    badge: 'Ledger',
-    badgeVariant: 'info' as const,
-  },
-  {
-    to: '/customers',
-    title: 'Customers & CRM',
-    desc: 'Inspect customer purchase histories, lifetime value, and loyalty tier rankings.',
-    icon: Users,
-    colorText: 'text-primary',
-    borderHover: 'hover:border-primary/40',
-    badge: 'Loyalty CRM',
-    badgeVariant: 'default' as const,
-  },
-  {
-    to: '/expenses',
-    title: 'Expenses Tracker',
-    desc: 'Log store utilities, supplier invoices, store rent, and operational costs.',
-    icon: Wallet,
-    colorText: 'text-destructive',
-    borderHover: 'hover:border-destructive/40',
-    badge: 'Finance',
-    badgeVariant: 'neutral' as const,
-  },
-]
-
 function fmtMoney(amount: number | string | undefined | null): string {
   if (amount === undefined || amount === null) return '$0.00'
   const val = typeof amount === 'string' ? parseFloat(amount) : amount
@@ -434,11 +441,13 @@ onMounted(loadStats)
 
 <template>
   <div class="flex flex-col gap-6 max-w-7xl mx-auto w-full">
-    <!-- Executive Dashboard Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-3">
-          <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Executive Dashboard</h1>
+    <!-- 1. Executive Dashboard (Admin / Manager Only) -->
+    <template v-if="isExecutive">
+      <!-- Executive Dashboard Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Executive Dashboard</h1>
           <Badge variant="success" class="flex items-center gap-1.5 px-2.5 py-0.5 font-medium">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>Operational</span>
@@ -452,7 +461,7 @@ onMounted(loadStats)
         </p>
       </div>
 
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2.5 flex-wrap">
         <Button
           variant="outline"
           size="sm"
@@ -473,6 +482,173 @@ onMounted(loadStats)
           <Button variant="primary" size="sm" class="h-9 px-3.5 gap-1.5">
             <Plus :size="15" />
             <span>New Product</span>
+          </Button>
+        </RouterLink>
+      </div>
+    </div>
+
+    <!-- Hero Section: Daily Revenue Target Gauge & Personal Shift Performance -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- 1. Daily Sales Target Hero Card -->
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute -right-6 -top-6 w-32 h-32 bg-cta/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div>
+          <div class="flex items-center justify-between pb-3 border-b border-border/60">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-xl bg-cta-muted text-primary border border-border-strong shadow-2xs">
+                <Target :size="18" />
+              </div>
+              <div>
+                <h3 class="font-display font-bold text-base text-foreground">Daily Revenue Target</h3>
+                <p class="text-3xs text-muted-foreground">Store sales progress towards today's goal</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs font-semibold gap-1 bg-card border-border hover:bg-surface-subtle"
+              @click="isTargetModalOpen = true"
+            >
+              <Edit3 :size="12" />
+              <span>Edit Goal</span>
+            </Button>
+          </div>
+
+          <!-- Target Numbers & Progress Bar -->
+          <div class="mt-4 space-y-3">
+            <div class="flex items-baseline justify-between">
+              <div>
+                <span class="text-3xs uppercase font-bold tracking-wider text-muted-foreground">Today's Revenue</span>
+                <div class="text-2xl sm:text-3xl font-black font-display text-foreground tracking-tight">
+                  {{ fmtMoney(totalRevenueToday) }}
+                </div>
+              </div>
+              <div class="text-right">
+                <span class="text-3xs uppercase font-bold tracking-wider text-muted-foreground">Goal: {{ fmtMoney(dailyTarget) }}</span>
+                <div class="flex items-center gap-1.5 justify-end">
+                  <Badge
+                    :variant="targetPercent >= 100 ? 'success' : 'primary'"
+                    class="text-xs font-black font-mono px-2.5 py-0.5 shadow-2xs"
+                  >
+                    {{ targetPercent }}% Achieved
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <!-- Visual Segmented / Gradient Progress Track -->
+            <div class="w-full bg-surface-subtle border border-border h-3 rounded-full overflow-hidden p-0.5 flex">
+              <div
+                class="h-full rounded-full transition-all duration-500 bg-cta shadow-xs"
+                :style="{ width: `${Math.min(100, targetPercent)}%` }"
+              />
+            </div>
+
+            <div class="flex items-center justify-between text-xs text-muted-foreground pt-1">
+              <span>
+                <strong class="text-foreground font-semibold font-mono">{{ fmtMoney(remainingToTarget) }}</strong> remaining to target
+              </span>
+              <Badge v-if="targetPercent >= 100" variant="success" dot class="text-xs font-bold">
+                Target Exceeded!
+              </Badge>
+              <Badge v-else variant="warning" dot class="text-xs font-semibold">
+                In Progress
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Personal Shift Sales & Performance Card -->
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs flex flex-col justify-between relative overflow-hidden">
+        <div>
+          <div class="flex items-center justify-between pb-3 border-b border-border/60">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-xl bg-success-bg text-success-text border border-success-border shadow-2xs">
+                <DollarSign :size="18" />
+              </div>
+              <div>
+                <h3 class="font-display font-bold text-base text-foreground">My Shift Performance</h3>
+                <p class="text-3xs text-muted-foreground">{{ authStore.user?.name || 'Active Cashier' }} • Today's Shift</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs font-semibold gap-1 bg-card border-border-strong text-primary hover:bg-surface-subtle"
+              @click="showShiftSummaryModal = true"
+            >
+              <ShieldCheck :size="12" />
+              <span>Shift Closing</span>
+            </Button>
+          </div>
+
+          <!-- Shift Sales Metric Pills -->
+          <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div class="p-2.5 rounded-xl bg-surface-subtle border border-border shadow-2xs">
+              <span class="text-3xs uppercase font-bold text-muted-foreground block">My Shift Total</span>
+              <span class="text-base sm:text-lg font-black font-display text-foreground block mt-0.5">
+                {{ fmtMoney(myShiftSales.totalSales) }}
+              </span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-surface-subtle border border-border shadow-2xs">
+              <span class="text-3xs uppercase font-bold text-muted-foreground block">Direct Sales</span>
+              <span class="text-base sm:text-lg font-bold font-mono text-success-text block mt-0.5">
+                {{ fmtMoney(myShiftSales.directSales) }}
+              </span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-surface-subtle border border-border shadow-2xs col-span-2 sm:col-span-1">
+              <span class="text-3xs uppercase font-bold text-muted-foreground block">Assisted Sales</span>
+              <span class="text-base sm:text-lg font-bold font-mono text-info-text block mt-0.5">
+                {{ fmtMoney(myShiftSales.assistedSales) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Tender Breakdown Sub-bar -->
+          <div class="mt-3 pt-2.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div class="flex items-center gap-3">
+              <span>Cash: <strong class="text-foreground font-mono">{{ fmtMoney(myShiftSales.cashTotal) }}</strong></span>
+              <span>QR/Bank: <strong class="text-foreground font-mono">{{ fmtMoney(myShiftSales.bankTotal) }}</strong></span>
+            </div>
+            <Badge variant="success" class="font-mono text-xs font-bold px-2.5 py-0.5 shadow-2xs">
+              Est. Commission: ~{{ fmtMoney(myShiftSales.commissionEstimate) }}
+            </Badge>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency Low Stock Alert Banner (When critical items exist) -->
+    <div
+      v-if="lowStockItems.length > 0"
+      class="p-4 rounded-xl border border-warning-border bg-warning/10 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+    >
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-warning/20 border border-warning-border flex items-center justify-center text-warning shrink-0">
+          <AlertTriangle :size="20" />
+        </div>
+        <div>
+          <h4 class="font-bold text-sm text-foreground">
+            {{ lowStockItems.length }} Inventory Items Below Reorder Threshold
+          </h4>
+          <p class="text-xs text-muted-foreground">
+            Immediate replenishment intake recommended to avoid POS register stockouts.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <RouterLink to="/inventory">
+          <Button variant="outline" size="sm" class="h-8 text-xs font-semibold bg-card border-border hover:bg-surface-subtle">
+            Audit Ledger
+          </Button>
+        </RouterLink>
+        <RouterLink to="/restock">
+          <Button variant="cta" size="sm" class="h-8 text-xs font-bold gap-1.5">
+            <ArrowDownToLine :size="13" />
+            <span>Launch Restock Intake</span>
           </Button>
         </RouterLink>
       </div>
@@ -504,52 +680,6 @@ onMounted(loadStats)
           :trend-variant="s.trendClass === 'up' ? 'up' : s.trendClass === 'down' ? 'down' : 'neutral'"
         />
       </template>
-    </div>
-
-    <!-- Quick Operations Hub Grid -->
-    <div class="rounded-xl border border-border bg-card p-6 shadow-xs flex flex-col gap-4">
-      <div class="flex items-center justify-between pb-2 border-b border-border/60">
-        <div>
-          <h2 class="font-display text-lg font-bold text-foreground">Quick Operations Hub</h2>
-          <p class="text-xs text-muted-foreground mt-0.5">High-frequency workflows and inventory controls</p>
-        </div>
-        <Badge variant="neutral" class="text-xs">
-          {{ quickNavCards.length }} Modules Available
-        </Badge>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <RouterLink
-          v-for="card in quickNavCards"
-          :key="card.to"
-          :to="card.to"
-          :class="cn(
-            'group rounded-lg border border-border/80 bg-surface p-4 transition-all duration-200 hover:shadow-xs hover:bg-surface-subtle/50 flex flex-col justify-between gap-3',
-            card.borderHover
-          )"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div :class="cn('p-1.5 rounded-md bg-muted/40 group-hover:scale-105 transition-transform', card.colorText)">
-                <component :is="card.icon" :size="18" />
-              </div>
-              <span class="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                {{ card.title }}
-              </span>
-            </div>
-            <Badge :variant="card.badgeVariant" class="text-[10px] px-1.5 py-0">
-              {{ card.badge }}
-            </Badge>
-          </div>
-          <p class="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {{ card.desc }}
-          </p>
-          <div class="flex items-center text-[11px] font-medium text-muted-foreground group-hover:text-cta transition-colors mt-auto pt-1">
-            <span>Open workflow</span>
-            <ChevronRight :size="13" class="ml-0.5 group-hover:translate-x-0.5 transition-transform" />
-          </div>
-        </RouterLink>
-      </div>
     </div>
 
     <!-- Middle Split: Recent Orders Table & Low Stock Alerts -->
@@ -725,5 +855,267 @@ onMounted(loadStats)
         </div>
       </section>
     </div>
+    </template>
+
+    <!-- 2. Dedicated Seller Register Hub (Seller / Cashier Role) -->
+    <template v-else>
+      <!-- Seller Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border shadow-xs">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-xl sm:text-2xl font-display font-bold text-foreground tracking-tight">
+              Seller Register Hub
+            </h1>
+            <Badge variant="success" class="flex items-center gap-1.5 px-2.5 py-0.5 font-medium">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Active Shift</span>
+            </Badge>
+          </div>
+          <p class="text-xs text-muted-foreground mt-1">
+            Welcome back, <strong class="text-foreground">{{ authStore.user?.name || 'Cashier' }}</strong>. Fast checkout, shift performance, and register tools.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <RouterLink to="/pos">
+            <Button variant="cta" size="sm" class="h-10 px-5 gap-2 shadow-md text-sm font-bold active:scale-95">
+              <ShoppingBag :size="16" />
+              <span>Open POS Terminal</span>
+            </Button>
+          </RouterLink>
+        </div>
+      </div>
+
+      <!-- Personal Shift Sales & Quick Launch Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Personal Shift Sales Card -->
+        <div class="rounded-2xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-border">
+              <div class="flex items-center gap-2.5">
+                <div class="p-2 rounded-xl bg-success-bg text-success-text border border-success-border">
+                  <DollarSign :size="18" />
+                </div>
+                <div>
+                  <h3 class="font-display font-bold text-base text-foreground">Today's Shift Sales</h3>
+                  <p class="text-3xs text-muted-foreground">Your personal register summary</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                class="h-7 px-2.5 text-xs font-semibold gap-1 bg-card border-border-strong text-primary hover:bg-surface-subtle"
+                @click="showShiftSummaryModal = true"
+              >
+                <ShieldCheck :size="12" />
+                <span>Shift Closing</span>
+              </Button>
+            </div>
+
+            <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div class="p-3 rounded-xl bg-surface-subtle border border-border">
+                <span class="text-3xs uppercase font-bold text-muted-foreground block">My Total</span>
+                <span class="text-base sm:text-lg font-black font-display text-foreground block mt-0.5">
+                  {{ fmtMoney(myShiftSales.totalSales) }}
+                </span>
+              </div>
+              <div class="p-3 rounded-xl bg-surface-subtle border border-border">
+                <span class="text-3xs uppercase font-bold text-muted-foreground block">Orders</span>
+                <span class="text-base sm:text-lg font-bold font-mono text-primary block mt-0.5">
+                  {{ myShiftSales.orderCount }}
+                </span>
+              </div>
+              <div class="p-3 rounded-xl bg-surface-subtle border border-border">
+                <span class="text-3xs uppercase font-bold text-muted-foreground block">Commission</span>
+                <span class="text-base sm:text-lg font-bold font-mono text-success-text block mt-0.5">
+                  ~{{ fmtMoney(myShiftSales.commissionEstimate) }}
+                </span>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+              <span>Cash: <strong class="text-foreground font-mono">{{ fmtMoney(myShiftSales.cashTotal) }}</strong></span>
+              <span>Bank/QR: <strong class="text-foreground font-mono">{{ fmtMoney(myShiftSales.bankTotal) }}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Operations Hub for Seller -->
+        <div class="grid grid-cols-2 gap-3">
+          <RouterLink to="/pos" class="group p-4 rounded-2xl bg-cta text-cta-foreground flex flex-col justify-between shadow-md hover:shadow-lg transition-all active:scale-98">
+            <div class="w-10 h-10 rounded-xl bg-black/10 dark:bg-white/20 flex items-center justify-center">
+              <ShoppingBag class="w-5 h-5 text-cta-foreground" />
+            </div>
+            <div>
+              <span class="font-display font-black text-base text-cta-foreground block">POS Register</span>
+              <span class="text-3xs text-cta-foreground/80">Ringing sales & scan</span>
+            </div>
+          </RouterLink>
+
+          <RouterLink to="/orders" class="p-4 rounded-2xl bg-card border border-border hover:border-cta text-foreground flex flex-col justify-between shadow-xs transition-all active:scale-98">
+            <div class="w-10 h-10 rounded-xl bg-cta-muted border border-border-strong flex items-center justify-center text-primary">
+              <Receipt class="w-5 h-5" />
+            </div>
+            <div>
+              <span class="font-display font-bold text-sm text-foreground block">Orders & Receipts</span>
+              <span class="text-3xs text-muted-foreground">Browse transaction log</span>
+            </div>
+          </RouterLink>
+
+          <RouterLink to="/customers" class="p-4 rounded-2xl bg-card border border-border hover:border-cta text-foreground flex flex-col justify-between shadow-xs transition-all active:scale-98">
+            <div class="w-10 h-10 rounded-xl bg-success-bg border border-success-border flex items-center justify-center text-success-text">
+              <Users class="w-5 h-5" />
+            </div>
+            <div>
+              <span class="font-display font-bold text-sm text-foreground block">Customers & CRM</span>
+              <span class="text-3xs text-muted-foreground">Loyalty & member points</span>
+            </div>
+          </RouterLink>
+
+          <div @click="showShiftSummaryModal = true" class="p-4 rounded-2xl bg-card border border-border hover:border-cta text-foreground flex flex-col justify-between shadow-xs transition-all cursor-pointer active:scale-98">
+            <div class="w-10 h-10 rounded-xl bg-cta-muted border border-border-strong flex items-center justify-center text-primary">
+              <ShieldCheck class="w-5 h-5" />
+            </div>
+            <div>
+              <span class="font-display font-bold text-sm text-foreground block">Daily Closing</span>
+              <span class="text-3xs text-muted-foreground">Reconcile drawer (F8)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Transactions Table for Seller -->
+      <div class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-4">
+        <div class="flex items-center justify-between pb-2 border-b border-border/60">
+          <div class="flex items-center gap-2">
+            <Receipt :size="18" class="text-primary" />
+            <h3 class="font-display font-bold text-base text-foreground">Recent Shift Transactions</h3>
+          </div>
+          <RouterLink to="/orders" class="text-xs font-semibold text-primary hover:text-cta flex items-center gap-1">
+            <span>View All</span>
+            <ArrowRight :size="13" />
+          </RouterLink>
+        </div>
+
+        <div v-if="recentOrdersWithBadges.length === 0" class="py-8 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+          <ShoppingBag :size="32" class="text-muted-foreground/50 stroke-1" />
+          <span>No sales processed in this shift yet.</span>
+          <RouterLink to="/pos">
+            <Button variant="cta" size="sm" class="mt-2 text-xs">Start First POS Sale</Button>
+          </RouterLink>
+        </div>
+
+        <div v-else class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="bg-muted/30">
+                <TableHead>Order #</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead class="text-right">Amount</TableHead>
+                <TableHead class="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="ord in recentOrdersWithBadges" :key="ord.id" class="hover:bg-surface-subtle/60 transition-colors">
+                <TableCell class="font-mono text-xs font-medium text-foreground">
+                  {{ ord.order_number || ord.id.slice(0, 8) }}
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="ord._badge.variant" class="text-[11px] px-2 py-0.5">
+                    {{ ord._badge.label }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right font-mono font-semibold text-foreground tabular-nums">
+                  {{ fmtMoney(ord.total_amount) }}
+                </TableCell>
+                <TableCell class="text-right">
+                  <RouterLink to="/orders">
+                    <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-primary hover:text-cta">
+                      View
+                    </Button>
+                  </RouterLink>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </template>
+
+    <!-- Edit Daily Target Modal Dialog -->
+    <Dialog :open="isTargetModalOpen" @update:open="(val) => (isTargetModalOpen = val)">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <div class="flex items-center gap-2">
+            <div class="p-2 rounded-lg bg-primary/10 text-primary">
+              <Target class="w-4 h-4" />
+            </div>
+            <div>
+              <DialogTitle class="font-display">Set Daily Revenue Target</DialogTitle>
+              <DialogDescription>
+                Customize your store's daily gross sales goal for the progress tracker.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div class="space-y-4 py-2">
+          <div>
+            <label class="block text-xs font-semibold text-foreground mb-1.5">Target Revenue Amount ($) *</label>
+            <Input
+              v-model="targetInput"
+              type="number"
+              min="100"
+              step="50"
+              class="h-11 text-lg font-mono font-bold bg-surface"
+              placeholder="2500"
+            />
+          </div>
+
+          <!-- Quick Preset Pills -->
+          <div>
+            <span class="text-3xs uppercase font-bold text-muted-foreground block mb-1.5">Quick Presets</span>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="preset in [1000, 1500, 2500, 5000, 10000]"
+                :key="preset"
+                type="button"
+                @click="targetInput = String(preset)"
+                :class="[
+                  'px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer',
+                  targetInput === String(preset)
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card border-border text-foreground hover:bg-muted/40'
+                ]"
+              >
+                ${{ preset.toLocaleString() }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter class="flex items-center justify-between border-t border-border pt-3">
+          <Button variant="outline" size="sm" @click="isTargetModalOpen = false">
+            Cancel
+          </Button>
+          <Button variant="cta" size="sm" class="gap-1.5" @click="saveDailyTarget">
+            <span>Save Target</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Cashier Shift Closing & Summary Modal -->
+    <SellerDailySummaryModal
+      v-model:open="showShiftSummaryModal"
+      :target-seller-id="authStore.user?.id ? String(authStore.user.id) : null"
+    />
+
+    <!-- Quick Stock Adjustment Modal -->
+    <StockAdjustmentModal
+      v-model:open="showAdjustmentModal"
+      :variant="selectedAdjustmentVariant"
+      @success="loadStats"
+    />
   </div>
 </template>

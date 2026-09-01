@@ -57,25 +57,31 @@ export const SellerDailySummaryModal: React.FC<SellerDailySummaryModalProps> = (
   const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'assisted'>('all')
 
   // Printer State
-  const [printerPickerOpen, setPrinterPickerOpen] = useState(false)
-  const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([])
-  const [printing, setPrinting] = useState(false)
+  const isManager = useMemo(() => {
+    if (!currentUser?.role) return false
+    const r = currentUser.role.toUpperCase().trim()
+    return r === 'SUPER_ADMIN' || r === 'SUPERADMIN' || r === 'ADMIN' || r === 'MANAGER'
+  }, [currentUser?.role])
 
-  const seller = viewingSeller || targetSeller || currentUser
+  const seller = isManager ? (viewingSeller || targetSeller || currentUser) : currentUser
 
   useEffect(() => {
     if (visible) {
       getPrinterDevices().then(setPrinterDevices).catch(() => null)
-      fetchStaffMembers().then((res) => {
-        if (Array.isArray(res)) setStaffUsers(res)
-      }).catch(() => null)
-      if (targetSeller) {
-        setViewingSeller(targetSeller)
-      } else if (currentUser && !viewingSeller) {
+      if (isManager) {
+        fetchStaffMembers().then((res) => {
+          if (Array.isArray(res)) setStaffUsers(res)
+        }).catch(() => null)
+        if (targetSeller) {
+          setViewingSeller(targetSeller)
+        } else if (currentUser && !viewingSeller) {
+          setViewingSeller(currentUser)
+        }
+      } else {
         setViewingSeller(currentUser)
       }
     }
-  }, [visible, targetSeller, currentUser])
+  }, [visible, isManager, targetSeller, currentUser])
 
   const loadSummary = useCallback(async (isPullRefresh = false) => {
     if (!seller?.id) return
@@ -208,12 +214,6 @@ export const SellerDailySummaryModal: React.FC<SellerDailySummaryModalProps> = (
     if (activeTab === 'assisted') return summaryData.assisted_orders || []
     return [...(summaryData.direct_orders || []), ...(summaryData.assisted_orders || [])]
   }, [summaryData, activeTab])
-
-  const isManager = useMemo(() => {
-    if (!currentUser?.role) return false
-    const r = currentUser.role.toUpperCase().trim()
-    return r === 'SUPER_ADMIN' || r === 'SUPERADMIN' || r === 'ADMIN' || r === 'MANAGER'
-  }, [currentUser?.role])
 
   if (!visible) return null
 

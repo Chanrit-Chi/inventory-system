@@ -111,7 +111,8 @@ const handleSearch = (query: string) => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,29 +122,33 @@ const handleSearch = (query: string) => {
 
 .modal-container {
   width: 100%;
-  max-width: 480px;
+  max-width: 440px;
   max-height: 80vh;
-  background: var(--color-card);
-  border-radius: var(--radius-xl);
+  background: var(--color-card, #FFFFFF);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border, #E8E2D9);
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 14px 18px;
+  background: var(--color-surface-subtle, #FAF7F2);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
 }
 
 .modal-title {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--color-foreground);
+  color: var(--color-foreground, #1A1C1C);
   margin: 0;
+  font-family: var(--font-display, inherit);
 }
 
 .close-btn {
@@ -153,101 +158,109 @@ const handleSearch = (query: string) => {
   width: 28px;
   height: 28px;
   background: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-foreground);
+  border: 1px solid var(--color-border, #E8E2D9);
+  border-radius: 8px;
+  color: var(--color-muted-foreground, #6B6358);
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .close-btn:hover {
-  background: var(--color-muted);
+  background: var(--color-surface-subtle, #F0EAE1);
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .modal-search {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-card, #FFFFFF);
 }
 
 .search-input {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-muted);
-  font-size: 14px;
-  color: var(--color-foreground);
+  padding: 7px 12px;
+  border: 1px solid var(--color-input, #E8E2D9);
+  border-radius: 8px;
+  background: var(--color-surface-subtle, #FAF7F2);
+  font-size: 12px;
+  color: var(--color-foreground, #1A1C1C);
+  transition: all 0.15s ease;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: var(--color-cta);
-  background: var(--color-card);
+  border-color: var(--color-cta, #FF8800);
+  background: var(--color-card, #FFFFFF);
 }
 
 .modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  background: var(--color-background, transparent);
 }
 
 .list-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
+  margin-bottom: 4px;
 }
 
 .list-item:hover {
-  background: var(--color-muted);
+  background: var(--color-surface-subtle, #FAF7F2);
 }
 
 .list-item.selected {
-  background: var(--color-cta);
-  color: var(--color-cta-foreground);
+  background: var(--color-cta-muted, #FFF3E0);
+  border: 1px solid var(--color-border-strong, #FFDCC4);
+  color: var(--color-primary, #924C00);
 }
 
 .item-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .item-icon {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .item-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .item-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-foreground);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .list-item.selected .item-name {
-  color: var(--color-cta-foreground);
+  color: var(--color-primary, #924C00);
 }
 
 .item-description {
-  font-size: 12px;
-  color: var(--color-muted-foreground);
+  font-size: 11px;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 .check-icon {
-  color: var(--color-cta-foreground);
+  color: var(--color-cta, #924C00);
 }
 
 .empty-state {
   text-align: center;
-  padding: 32px 16px;
-  color: var(--color-muted-foreground);
+  padding: 24px 16px;
+  font-size: 12px;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 .modal-enter-active,

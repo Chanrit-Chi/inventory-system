@@ -16,10 +16,7 @@ import {
   UserCheck,
   Phone,
   Key,
-  Copy,
   Check,
-  Eye,
-  EyeOff,
   Calculator,
   Briefcase,
   DollarSign,
@@ -49,6 +46,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DatePicker,
+  SelectField,
 } from '@/components/ui'
 
 const router = useRouter()
@@ -237,7 +236,23 @@ const AUDIT_CATEGORIES: AuditCategory[] = [
   'System',
 ]
 
+const auditCategoryOptions = computed(() => AUDIT_CATEGORIES.map(c => ({
+  label: c === 'ALL' ? 'All Categories' : c,
+  value: c,
+})))
+
+const auditDatePresetOptions = [
+  { label: 'All Time', value: 'all' },
+  { label: 'Today', value: 'today' },
+  { label: 'Last 7 Days', value: '7d' },
+  { label: 'Last 30 Days', value: '30d' },
+  { label: 'This Month', value: 'month' },
+  { label: 'Custom Range', value: 'custom' },
+]
+
 const ROLE_OPTIONS: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER']
+const roleSelectOptions = computed(() => ROLE_OPTIONS.map(r => ({ label: r, value: r })))
+
 const DEPARTMENT_OPTIONS = [
   'Main Counter',
   'Inventory & Warehouse',
@@ -248,6 +263,11 @@ const DEPARTMENT_OPTIONS = [
   'Delivery & Logistics',
   'Marketing',
 ]
+
+const departmentSelectOptions = computed(() => [
+  { label: '— Select Department —', value: '' },
+  ...DEPARTMENT_OPTIONS.map(d => ({ label: d, value: d })),
+])
 
 // --- Permission Group Definitions ---
 const PERMISSION_GROUPS: PermissionGroup[] = [
@@ -946,7 +966,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <Button
           id="btn-refresh-admin-users"
           variant="outline"
@@ -963,7 +983,7 @@ onMounted(() => {
           id="btn-open-create-user"
           variant="primary"
           size="sm"
-          class="h-9 px-3.5 gap-1.5 font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
+          class="h-9 px-3.5 gap-1.5 font-bold"
           @click="openCreateModal"
         >
           <Plus :size="15" />
@@ -1005,11 +1025,11 @@ onMounted(() => {
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="flex border-b border-border gap-2">
+    <div class="flex border-b border-border gap-2 overflow-x-auto no-scrollbar">
       <button
         id="tab-staff"
         class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
-        :class="activeTab === 'staff' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        :class="activeTab === 'staff' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'staff'"
       >
         <Users :size="14" />
@@ -1019,7 +1039,7 @@ onMounted(() => {
       <button
         id="tab-permissions"
         class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
-        :class="activeTab === 'permissions' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        :class="activeTab === 'permissions' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'permissions'"
       >
         <Shield :size="14" />
@@ -1029,7 +1049,7 @@ onMounted(() => {
       <button
         id="tab-audit"
         class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer"
-        :class="activeTab === 'audit' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        :class="activeTab === 'audit' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="activeTab = 'audit'; if (!auditLogs.length) loadAuditLogs(true)"
       >
         <ShieldAlert :size="14" />
@@ -1087,7 +1107,7 @@ onMounted(() => {
           :description="userSearch.trim() ? 'No staff match your search query.' : 'Add your first staff member to start managing your team.'"
         >
           <template #action>
-            <Button v-if="!userSearch.trim()" variant="primary" size="sm" class="gap-1.5 font-bold text-white bg-[#FF8800]" @click="openCreateModal">
+            <Button v-if="!userSearch.trim()" variant="primary" size="sm" class="gap-1.5 font-bold" @click="openCreateModal">
               <Plus :size="15" />
               <span>Add Staff Member</span>
             </Button>
@@ -1112,7 +1132,7 @@ onMounted(() => {
               <TableRow v-for="u in filteredUsers" :key="u.id" class="hover:bg-surface-subtle/80 transition-colors">
                 <TableCell>
                   <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-[#FFF3E0] text-[#924C00] border border-[#FFDCC4] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    <div class="w-8 h-8 rounded-full bg-cta-muted text-primary border border-border-strong flex items-center justify-center font-bold text-xs flex-shrink-0">
                       {{ getInitials(u.name) }}
                     </div>
                     <div>
@@ -1157,13 +1177,13 @@ onMounted(() => {
                 </TableCell>
                 <TableCell class="text-center">
                   <div class="inline-flex items-center justify-center gap-2">
-                    <span
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
-                      :class="isUserActive(u) ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' : 'bg-muted text-muted-foreground border border-border'"
+                    <Badge
+                      :variant="isUserActive(u) ? 'success' : 'neutral'"
+                      dot
+                      class="text-[10px] font-bold font-mono px-2 py-0.5"
                     >
-                      <span class="w-1.5 h-1.5 rounded-full" :class="isUserActive(u) ? 'bg-emerald-500' : 'bg-muted-foreground'"></span>
-                      <span>{{ isUserActive(u) ? 'ACTIVE' : 'INACTIVE' }}</span>
-                    </span>
+                      {{ isUserActive(u) ? 'ACTIVE' : 'INACTIVE' }}
+                    </Badge>
                     <Switch
                       :checked="isUserActive(u)"
                       :disabled="toggleLoadingId === u.id || u.role === 'SUPER_ADMIN'"
@@ -1176,7 +1196,7 @@ onMounted(() => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      class="h-8 px-2 text-xs gap-1 text-[#924C00] hover:bg-[#FFF3E0]"
+                      class="h-8 px-2 text-xs gap-1 text-primary hover:bg-surface-subtle hover:text-cta"
                       title="View Performance & Salary Raises"
                       @click="openDetailModal(u)"
                     >
@@ -1230,7 +1250,7 @@ onMounted(() => {
             <Button
               variant="primary"
               size="sm"
-              class="h-8 px-3 gap-1.5 text-xs font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
+              class="h-8 px-3 gap-1.5 text-xs font-bold"
               @click="router.push('/roles')"
             >
               <Key :size="13" />
@@ -1289,53 +1309,46 @@ onMounted(() => {
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Category</label>
-            <select
+            <SelectField
               id="audit-category-filter"
               v-model="auditCategory"
-              class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+              :options="auditCategoryOptions"
+              placeholder="All Categories"
+              class="w-full h-8 bg-surface text-xs"
               @change="onCategoryChange"
-            >
-              <option v-for="c in AUDIT_CATEGORIES" :key="c" :value="c">
-                {{ c === 'ALL' ? 'All Categories' : c }}
-              </option>
-            </select>
+            />
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Quick Date Range</label>
-            <select
+            <SelectField
               id="audit-date-preset"
               v-model="auditDatePreset"
-              class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+              :options="auditDatePresetOptions"
+              placeholder="All Time"
+              class="w-full h-8 bg-surface text-xs"
               @change="applyDatePreset(auditDatePreset)"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="month">This Month</option>
-              <option value="custom">Custom Range</option>
-            </select>
+            />
           </div>
         </div>
 
         <div v-if="auditDatePreset === 'custom'" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-2 border-t border-border/50">
           <div>
             <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Date From</label>
-            <Input
+            <DatePicker
               id="audit-date-from"
               v-model="auditDateFrom"
-              type="date"
-              class="h-8 bg-surface text-xs font-mono"
+              placeholder="From date"
+              class="h-8 w-full bg-surface text-xs"
               @change="onCustomDateChange"
             />
           </div>
           <div>
             <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Date To</label>
-            <Input
+            <DatePicker
               id="audit-date-to"
               v-model="auditDateTo"
-              type="date"
-              class="h-8 bg-surface text-xs font-mono"
+              placeholder="To date"
+              class="h-8 w-full bg-surface text-xs"
               @change="onCustomDateChange"
             />
           </div>
@@ -1469,26 +1482,27 @@ onMounted(() => {
     <Dialog :open="isFormModalOpen" @update:open="(val) => { if (!val) closeFormModal(); }">
       <DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle class="font-display flex items-center gap-2">
-            <Users class="w-5 h-5 text-[#FF8800]" />
-            <span>{{ editingUser ? `Edit Staff Member — ${editingUser.name}` : 'Add New Staff Member' }}</span>
-          </DialogTitle>
-          <DialogDescription>
-            Configure user credentials, store department, role security level, and compensation structure.
-          </DialogDescription>
+          <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-cta-muted border border-border-strong flex items-center justify-center text-primary shadow-2xs">
+              <Users class="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle class="font-display text-lg">
+                {{ editingUser ? 'Edit Staff Profile' : 'Add New Staff Member' }}
+              </DialogTitle>
+              <DialogDescription class="text-xs">
+                {{ editingUser ? 'Update employment details, security credentials, and payroll terms.' : 'Create a staff login, assign security role permissions, and configure starting compensation.' }}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <!-- Form Error Alert -->
-        <Alert v-if="formError" variant="error" class="mb-2">
-          {{ formError }}
-        </Alert>
-
-        <form @submit.prevent="submitUserForm" class="flex flex-col gap-4 py-1">
-          <!-- SECTION 1: IDENTITY & CREDENTIALS -->
+        <form @submit.prevent="submitUserForm" class="space-y-4 py-2">
+          <!-- SECTION 1: ACCOUNT CREDENTIALS & PROFILE -->
           <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
-            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#924C00] border-b border-border/60 pb-2">
-              <UserCheck :size="15" class="text-[#FF8800]" />
-              <span>1. User Identity & Credentials</span>
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border/60 pb-2">
+              <UserCheck :size="15" class="text-primary" />
+              <span>1. Account Credentials & Contact</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1498,142 +1512,127 @@ onMounted(() => {
                   id="form-user-name"
                   v-model="userForm.name"
                   type="text"
-                  placeholder="e.g. Alex Mercer"
+                  placeholder="e.g. Sophy Chen"
                   class="h-9 bg-surface text-xs"
                 />
                 <span v-if="fieldErrors.name" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.name }}</span>
               </div>
               <div>
-                <label class="block text-xs font-semibold text-foreground mb-1">Email Address *</label>
+                <label class="block text-xs font-semibold text-foreground mb-1">Email Address (Login ID) *</label>
                 <Input
                   id="form-user-email"
                   v-model="userForm.email"
                   type="email"
-                  placeholder="e.g. alex@store.com"
-                  class="h-9 bg-surface text-xs font-mono"
+                  placeholder="e.g. sophy@company.com"
+                  class="h-9 bg-surface text-xs"
                 />
                 <span v-if="fieldErrors.email" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.email }}</span>
               </div>
             </div>
 
-            <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Contact Phone</label>
-              <Input
-                id="form-user-phone"
-                v-model="userForm.phone"
-                type="tel"
-                placeholder="e.g. +855 12 345 678"
-                class="h-9 bg-surface text-xs font-mono"
-              >
-                <template #prefix>
-                  <Phone :size="13" class="text-muted-foreground" />
-                </template>
-              </Input>
-            </div>
-
-            <!-- Temporary Password Block for New User / Password input for edit -->
-            <div class="rounded-lg border border-border/80 bg-surface-subtle/70 p-3 flex flex-col gap-2">
-              <div class="flex items-center justify-between">
-                <label class="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Lock :size="13" class="text-[#FF8800]" />
-                  <span>{{ editingUser ? 'Change Password (leave blank to keep current)' : 'Auto-Generated Temporary Password *' }}</span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">Contact Phone</label>
+                <Input
+                  id="form-user-phone"
+                  v-model="userForm.phone"
+                  type="tel"
+                  placeholder="e.g. +855 12 345 678"
+                  class="h-9 bg-surface text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1">
+                  {{ editingUser ? 'Reset Password (optional)' : 'Password *' }}
                 </label>
-                <div v-if="!editingUser" class="flex items-center gap-1">
+                <div class="relative">
+                  <Input
+                    id="form-user-password"
+                    v-model="userForm.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    :placeholder="editingUser ? 'Leave blank to keep unchanged' : 'Min 6 characters'"
+                    class="h-9 bg-surface text-xs pr-8 font-mono"
+                  />
                   <button
                     type="button"
-                    class="h-6 px-2 rounded text-3xs font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Generate new temporary password"
-                    @click="handleRegeneratePassword"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    @click="showPassword = !showPassword"
                   >
-                    <RefreshCw :size="11" />
-                    <span>Regenerate</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="h-6 px-2 rounded text-3xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Copy password to clipboard"
-                    @click="handleCopyPassword"
-                  >
-                    <Check v-if="copiedPassword" :size="11" class="text-success" />
-                    <Copy v-else :size="11" />
-                    <span>{{ copiedPassword ? 'Copied!' : 'Copy' }}</span>
+                    <Lock :size="13" class="text-primary" />
                   </button>
                 </div>
+                <span v-if="fieldErrors.password" class="text-[11px] text-destructive mt-0.5 block">{{ fieldErrors.password }}</span>
               </div>
+            </div>
 
-              <div class="relative">
-                <Input
-                  id="form-user-password"
-                  v-model="userForm.password"
-                  :type="showPassword ? 'text' : 'password'"
-                  :placeholder="editingUser ? 'Leave blank to preserve password' : 'Auto-generated password'"
-                  class="h-9 bg-surface text-xs font-mono pr-9"
-                />
+            <!-- Fast Generated Password Banner -->
+            <div v-if="!editingUser" class="flex items-center justify-between p-2 rounded-lg bg-surface border border-border/80 text-xs">
+              <span class="text-muted-foreground text-[11px]">Quick random password generator:</span>
+              <div class="flex items-center gap-2">
                 <button
                   type="button"
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  @click="showPassword = !showPassword"
+                  class="text-xs text-primary font-bold hover:underline cursor-pointer"
+                  @click="handleRegeneratePassword"
                 >
-                  <EyeOff v-if="showPassword" :size="14" />
-                  <Eye v-else :size="14" />
+                  ⚡ Regenerate
+                </button>
+                <span class="text-border text-xs">|</span>
+                <button
+                  type="button"
+                  class="text-xs text-muted-foreground hover:text-foreground font-medium cursor-pointer"
+                  @click="handleCopyPassword"
+                >
+                  {{ copiedPassword ? '✓ Copied!' : '📋 Copy' }}
                 </button>
               </div>
-              <span v-if="fieldErrors.password" class="text-[11px] text-destructive block">{{ fieldErrors.password }}</span>
             </div>
 
-            <!-- Active Status Switch -->
-            <div
-              v-if="!editingUser || editingUser.role !== 'SUPER_ADMIN'"
-              class="flex items-center justify-between p-3 rounded-lg border border-border bg-surface"
-            >
+            <div class="flex items-center justify-between pt-2 border-t border-border/50">
               <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-xs text-foreground block">Account Status:</span>
-                  <span
-                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
-                    :class="userForm.is_active ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/30' : 'bg-muted text-muted-foreground border border-border'"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full" :class="userForm.is_active ? 'bg-emerald-500' : 'bg-muted-foreground'"></span>
-                    <span>{{ userForm.is_active ? 'ACTIVE' : 'INACTIVE' }}</span>
-                  </span>
-                </div>
-                <span class="text-[11px] text-muted-foreground mt-0.5 block">
-                  {{ userForm.is_active ? 'Staff can authenticate, sign in, and perform operations in POS and Web.' : 'Account disabled — all login and POS sessions are blocked.' }}
-                </span>
+                <span class="text-xs font-semibold text-foreground block">Account Active Status</span>
+                <span class="text-[11px] text-muted-foreground">Inactive staff cannot log into POS registers or admin console</span>
               </div>
-              <Switch
-                :checked="userForm.is_active"
-                @update:checked="(val) => userForm.is_active = val"
-              />
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
+                  :class="userForm.is_active ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'bg-muted text-muted-foreground border border-border'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="userForm.is_active ? 'bg-emerald-500' : 'bg-muted-foreground'"></span>
+                  <span>{{ userForm.is_active ? 'ACTIVE' : 'INACTIVE' }}</span>
+                </span>
+                <Switch
+                  :checked="userForm.is_active"
+                  @update:checked="(val) => userForm.is_active = val"
+                />
+              </div>
             </div>
           </div>
 
           <!-- SECTION 2: EMPLOYMENT & STORE ASSIGNMENT -->
           <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
-            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#924C00] border-b border-border/60 pb-2">
-              <Briefcase :size="15" class="text-[#FF8800]" />
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border/60 pb-2">
+              <Briefcase :size="15" class="text-primary" />
               <span>2. Employment & Store Assignment</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-foreground mb-1">Department / Branch</label>
-                <select
+                <SelectField
                   id="form-user-department"
                   v-model="userForm.department"
-                  class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-                >
-                  <option value="">— Select Department —</option>
-                  <option v-for="d in DEPARTMENT_OPTIONS" :key="d" :value="d">{{ d }}</option>
-                </select>
+                  :options="departmentSelectOptions"
+                  placeholder="— Select Department —"
+                  class="w-full h-9 bg-surface text-xs"
+                />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-foreground mb-1">Hire Date</label>
-                <Input
+                <DatePicker
                   id="form-user-hire-date"
                   v-model="userForm.hire_date"
-                  type="date"
-                  class="h-9 bg-surface text-xs font-mono"
+                  placeholder="Select hire date"
+                  class="h-9 w-full bg-surface text-xs"
                 />
               </div>
             </div>
@@ -1642,13 +1641,13 @@ onMounted(() => {
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-xs font-semibold text-foreground">Assigned Security Access Role *</label>
-                <select
+                <SelectField
                   id="form-user-role"
                   v-model="userForm.role"
-                  class="text-xs h-7 px-2 py-0 bg-surface border border-border rounded text-foreground focus:outline-none"
-                >
-                  <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
-                </select>
+                  :options="roleSelectOptions"
+                  placeholder="Select role"
+                  class="text-xs h-7 w-36 bg-surface"
+                />
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
@@ -1658,14 +1657,14 @@ onMounted(() => {
                   class="p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer select-none"
                   :class="[
                     userForm.role === r
-                      ? 'bg-[#FFF3E0] border-[#FF8800] ring-1 ring-[#FF8800]/30 text-[#924C00]'
+                      ? 'bg-cta-muted border-cta ring-1 ring-cta/30 text-primary'
                       : 'bg-surface border-border text-muted-foreground hover:bg-surface-subtle hover:text-foreground'
                   ]"
                   @click="userForm.role = r"
                 >
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-xs">{{ r }}</span>
-                    <Check v-if="userForm.role === r" :size="12" class="text-[#FF8800]" />
+                    <Check v-if="userForm.role === r" :size="12" class="text-cta" />
                   </div>
                   <span class="text-[10px] text-muted-foreground line-clamp-1 leading-tight">
                     {{ r === 'SUPER_ADMIN' ? 'Root access' : (r === 'ADMIN' ? 'Full admin' : (r === 'MANAGER' ? 'Store operations' : 'Cashier/POS')) }}
@@ -1688,8 +1687,8 @@ onMounted(() => {
 
           <!-- SECTION 3: COMPENSATION & SALARY SETUP -->
           <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-3 shadow-2xs">
-            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-800 border-b border-border/60 pb-2">
-              <DollarSign :size="15" class="text-emerald-600" />
+            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 border-b border-border/60 pb-2">
+              <DollarSign :size="15" class="text-emerald-600 dark:text-emerald-400" />
               <span>3. Compensation & Base Salary Setup</span>
             </div>
 
@@ -1724,8 +1723,8 @@ onMounted(() => {
 
             <!-- Live Compensation Accruals Card -->
             <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex flex-col gap-2">
-              <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
-                <Calculator :size="13" class="text-emerald-700" />
+              <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                <Calculator :size="13" class="text-emerald-600 dark:text-emerald-400" />
                 <span>Live Compensation Accruals</span>
               </div>
               <div class="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-emerald-500/10">
@@ -1735,7 +1734,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <span class="text-[10px] text-muted-foreground font-semibold uppercase block">13th Month Monthly Reserve</span>
-                  <span class="font-mono font-bold text-emerald-700 text-xs">+${{ formThirteenthMonthAccrual }} / mo</span>
+                  <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">+${{ formThirteenthMonthAccrual }} / mo</span>
                 </div>
               </div>
             </div>
@@ -1755,7 +1754,7 @@ onMounted(() => {
               type="submit"
               id="btn-save-user"
               variant="primary"
-              class="font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]"
+              class="font-bold"
               :disabled="formSaving"
             >
               <span v-if="formSaving" class="animate-spin mr-1">⏳</span>
@@ -1771,7 +1770,7 @@ onMounted(() => {
       <DialogContent class="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader v-if="detailUser">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-[#FFF3E0] text-[#924C00] border border-[#FFDCC4] flex items-center justify-center font-bold text-sm">
+            <div class="w-10 h-10 rounded-full bg-cta-muted text-primary border border-border-strong flex items-center justify-center font-bold text-sm">
               {{ getInitials(detailUser.name) }}
             </div>
             <div>
@@ -1791,7 +1790,7 @@ onMounted(() => {
           <button
             type="button"
             class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'overview' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :class="detailTab === 'overview' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
             @click="detailTab = 'overview'"
           >
             Overview & Stats
@@ -1799,7 +1798,7 @@ onMounted(() => {
           <button
             type="button"
             class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'performance' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :class="detailTab === 'performance' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
             @click="detailTab = 'performance'; loadPerformanceData();"
           >
             Sales Analytics
@@ -1807,7 +1806,7 @@ onMounted(() => {
           <button
             type="button"
             class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'salary' ? 'border-[#FF8800] text-[#924C00] font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
+            :class="detailTab === 'salary' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
             @click="detailTab = 'salary'"
           >
             Compensation & Raises
@@ -1828,7 +1827,7 @@ onMounted(() => {
               </div>
               <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
                 <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base Salary</span>
-                <span class="text-base font-bold font-mono text-emerald-700">{{ fmtMoney(detailUser.base_salary) }}</span>
+                <span class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{{ fmtMoney(detailUser.base_salary) }}</span>
               </div>
             </div>
 
@@ -1864,7 +1863,7 @@ onMounted(() => {
                   :key="p"
                   type="button"
                   class="px-2 py-0.5 rounded text-3xs transition-all cursor-pointer uppercase font-mono"
-                  :class="perfPeriod === p ? 'bg-white shadow-2xs text-[#924C00] font-bold' : 'text-muted-foreground hover:text-foreground'"
+                  :class="perfPeriod === p ? 'bg-card shadow-2xs text-primary font-bold' : 'text-muted-foreground hover:text-foreground'"
                   @click="perfPeriod = p"
                 >
                   {{ p }}
@@ -1879,7 +1878,7 @@ onMounted(() => {
             <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="p-3 rounded-lg border border-border bg-card">
                 <span class="text-3xs text-muted-foreground uppercase font-bold">Revenue Generated</span>
-                <div class="text-base font-bold font-mono text-[#924C00] mt-0.5">
+                <div class="text-base font-bold font-mono text-primary mt-0.5">
                   ${{ (perfData?.total_revenue ?? perfData?.total_sales ?? 0).toFixed(2) }}
                 </div>
               </div>
@@ -1905,7 +1904,7 @@ onMounted(() => {
                 <h4 class="text-xs font-bold text-foreground">Compensation Package</h4>
                 <p class="text-[11px] text-muted-foreground">Current base salary & benefit accruals.</p>
               </div>
-              <Button variant="primary" size="sm" class="h-7 px-3 text-xs font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]" @click="openRaiseModal">
+              <Button variant="primary" size="sm" class="h-7 px-3 text-xs font-bold" @click="openRaiseModal">
                 <TrendingUp :size="12" class="mr-1" />
                 <span>Give Salary Raise</span>
               </Button>
@@ -1914,7 +1913,7 @@ onMounted(() => {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="p-3 rounded-lg border border-border bg-card">
                 <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base</span>
-                <div class="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                <div class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
                   {{ fmtMoney(detailUser.base_salary) }}
                 </div>
               </div>
@@ -1926,7 +1925,7 @@ onMounted(() => {
               </div>
               <div class="p-3 rounded-lg border border-border bg-card">
                 <span class="text-3xs text-muted-foreground uppercase font-bold">13th Mo. Reserve</span>
-                <div class="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                <div class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
                   +${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 12).toFixed(2) }}/mo
                 </div>
               </div>
@@ -1991,16 +1990,16 @@ onMounted(() => {
 
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Effective Date</label>
-            <Input
+            <DatePicker
               v-model="raiseEffectiveDate"
-              type="date"
-              class="h-9 bg-surface text-xs font-mono"
+              placeholder="Select effective date"
+              class="h-9 w-full bg-surface text-xs"
             />
           </div>
 
           <DialogFooter class="gap-2 sm:gap-0 mt-3">
             <Button variant="outline" type="button" :disabled="raiseSaving" @click="isRaiseModalOpen = false">Cancel</Button>
-            <Button variant="primary" type="submit" class="font-bold text-white bg-[#FF8800] hover:bg-[#E67A00]" :disabled="raiseSaving">
+            <Button variant="primary" type="submit" class="font-bold" :disabled="raiseSaving">
               <span v-if="raiseSaving" class="animate-spin mr-1">⏳</span>
               <span>{{ raiseSaving ? 'Saving…' : 'Record Raise' }}</span>
             </Button>

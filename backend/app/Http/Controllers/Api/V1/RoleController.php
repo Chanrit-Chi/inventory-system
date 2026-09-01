@@ -40,15 +40,33 @@ class RoleController extends BaseApiController
     }
 
     /**
+     * Helper to find role by id or slug case-insensitively.
+     */
+    private function findRoleOrFail(string $id): Role
+    {
+        $upper = strtoupper(trim($id));
+        $role = Role::with('permissions')
+            ->where('id', $id)
+            ->orWhere('slug', $id)
+            ->orWhere('slug', $upper)
+            ->orWhere('name', $id)
+            ->orWhereRaw('UPPER(slug) = ?', [$upper])
+            ->first();
+
+        if (! $role) {
+            abort(404, "Role '{$id}' not found.");
+        }
+
+        return $role;
+    }
+
+    /**
      * GET /api/v1/roles/{id}
      * Retrieve single role with its permissions and metadata.
      */
     public function show(string $id): JsonResponse
     {
-        $role = Role::with('permissions')
-            ->where('id', $id)
-            ->orWhere('slug', $id)
-            ->firstOrFail();
+        $role = $this->findRoleOrFail($id);
 
         $count = \App\Models\User::where('role_id', $role->id)
             ->orWhere('role', $role->slug)
@@ -76,7 +94,7 @@ class RoleController extends BaseApiController
             'permissions.*' => ['string'],
         ]);
 
-        $role = Role::where('id', $id)->orWhere('slug', $id)->firstOrFail();
+        $role = $this->findRoleOrFail($id);
 
         $permissionInputs = $data['permissions'] ?? [];
         $permissionIds = [];

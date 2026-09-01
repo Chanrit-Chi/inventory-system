@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
-import { restockInventory, scanBarcode, getProducts } from '../api/endpoints'
-import type { RestockPayload, Product, ProductVariant, ScannedVariant, PurchaseOrder, ScannedAttributeValue } from '../types'
+import { restockInventory, scanBarcode, getProducts, fetchSuppliers } from '../api/endpoints'
+import type { RestockPayload, Product, ProductVariant, ScannedVariant, PurchaseOrder, ScannedAttributeValue, Supplier } from '../types'
 import { CameraScannerModal } from './CameraScannerModal'
 import { ProductPickerModal, SelectedProductItem } from './ProductPickerModal'
 import { ProductGroupHeader } from './ProductGroupHeader'
@@ -76,6 +76,7 @@ export const StockInModal: React.FC<StockInModalProps> = ({
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [catalogSearch, setCatalogSearch] = useState('')
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
 
   // Internal Scanner & Toast State
   const globalToast = useToast()
@@ -219,10 +220,22 @@ export const StockInModal: React.FC<StockInModalProps> = ({
     }
   }, [])
 
+  const loadSuppliers = useCallback(async () => {
+    try {
+      const res = await fetchSuppliers()
+      if (Array.isArray(res)) {
+        setSuppliers(res)
+      }
+    } catch {
+      // Gracefully handle offline
+    }
+  }, [])
+
   // Reset or initialize state when modal opens
   useEffect(() => {
     if (visible) {
       loadCatalogProducts()
+      loadSuppliers()
       const isRealVariant = variant && typeof variant === 'object' && typeof variant.id === 'string' && variant.id.length > 0 && !('nativeEvent' in variant)
       const isRealProduct = product && typeof product === 'object' && typeof product.id === 'string' && typeof product.name === 'string' && product.name.length > 0 && !('nativeEvent' in product)
 
@@ -835,6 +848,40 @@ export const StockInModal: React.FC<StockInModalProps> = ({
             {/* Optional Delivery Metadata Inputs Card (Omitted by default unless PO is linked or manually opened) */}
             {Boolean(showManualNotes || selectedPoId || poNumber || supplierName) && (
               <View style={styles.metaCard}>
+                {suppliers.length > 0 && !selectedPoId && (
+                  <View style={{ marginBottom: tokens.spacing.sm }}>
+                    <Text style={styles.noteLabel}>QUICK SELECT REGISTERED SUPPLIER</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingTop: 4 }}>
+                      {suppliers.map((s) => (
+                        <TouchableOpacity
+                          key={s.id}
+                          style={[
+                            {
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                              borderRadius: tokens.borderRadius.xs,
+                              borderWidth: 1,
+                              borderColor: supplierName === s.name ? tokens.colors.primary : tokens.colors.borderSubtle,
+                              backgroundColor: supplierName === s.name ? tokens.colors.primaryFixed : tokens.colors.surfaceContainerLowest,
+                            },
+                          ]}
+                          onPress={() => setSupplierName(supplierName === s.name ? '' : s.name)}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: supplierName === s.name ? '700' : '500',
+                              color: supplierName === s.name ? tokens.colors.primary : tokens.colors.textPrimary,
+                            }}
+                          >
+                            {s.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 <View style={styles.metaRow}>
                   <View style={styles.metaCol}>
                     <Text style={styles.noteLabel}>PO / INTAKE REFERENCE (OPTIONAL)</Text>
@@ -965,7 +1012,14 @@ export const StockInModal: React.FC<StockInModalProps> = ({
                               )}
                               {item.current_stock !== undefined && (
                                 <Text style={styles.expectedText}>
-                                  On Hand: <Text style={styles.boldText}>{item.current_stock}</Text>
+                                  Stock: <Text style={styles.boldText}>{item.current_stock}</Text>
+                                  {' → '}
+                                  <Text style={[styles.boldText, { color: tokens.colors.statusSuccess }]}>
+                                    {(item.current_stock ?? 0) + item.received_qty}
+                                  </Text>
+                                  <Text style={{ color: tokens.colors.primary, fontWeight: '700' }}>
+                                    {' '}(+{item.received_qty})
+                                  </Text>
                                 </Text>
                               )}
                             </View>

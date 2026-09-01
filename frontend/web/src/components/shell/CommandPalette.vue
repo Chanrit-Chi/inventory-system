@@ -32,8 +32,13 @@ import {
   LayoutDashboard,
   Boxes,
   FileSpreadsheet,
-  AlertTriangle
+  AlertTriangle,
+  Sun,
+  Moon,
+  Laptop,
 } from 'lucide-vue-next'
+import { usePermissions } from '@/composables/usePermissions'
+import { useThemeStore } from '@/stores/themeStore'
 
 const props = withDefaults(
   defineProps<{
@@ -54,6 +59,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const themeStore = useThemeStore()
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchQuery = ref('')
 const selectedIndex = ref(0)
@@ -83,6 +89,46 @@ const isOpen = computed({
 // Comprehensive Command Registry across all 26 application domains + operational quick actions
 const allCommandItems: CommandItem[] = [
   // --- Quick Actions ---
+  {
+    id: 'act-toggle-theme',
+    title: 'Toggle Dark / Light Mode',
+    desc: 'Switch between warm cream light mode and warm obsidian dark mode',
+    category: 'Quick Actions',
+    icon: Moon,
+    action: () => themeStore.toggleTheme(),
+    badge: 'Appearance',
+    keywords: ['theme', 'dark', 'light', 'mode', 'color', 'night', 'appearance'],
+  },
+  {
+    id: 'act-theme-dark',
+    title: 'Switch to Dark Mode',
+    desc: 'Enable high-contrast warm obsidian dark mode palette',
+    category: 'Quick Actions',
+    icon: Moon,
+    action: () => themeStore.setTheme('dark'),
+    badge: 'Appearance',
+    keywords: ['dark mode', 'night', 'black', 'dark theme'],
+  },
+  {
+    id: 'act-theme-light',
+    title: 'Switch to Light Mode',
+    desc: 'Enable warm cream and amber retail light mode palette',
+    category: 'Quick Actions',
+    icon: Sun,
+    action: () => themeStore.setTheme('light'),
+    badge: 'Appearance',
+    keywords: ['light mode', 'day', 'white', 'cream', 'light theme'],
+  },
+  {
+    id: 'act-theme-system',
+    title: 'Use System Theme',
+    desc: 'Automatically sync color theme with operating system preference',
+    category: 'Quick Actions',
+    icon: Laptop,
+    action: () => themeStore.setTheme('system'),
+    badge: 'Appearance',
+    keywords: ['system theme', 'auto theme', 'os theme', 'automatic'],
+  },
   {
     id: 'act-pos',
     title: 'Launch POS Terminal',
@@ -381,12 +427,36 @@ const allCommandItems: CommandItem[] = [
   },
 ]
 
+const { can } = usePermissions()
+
+// Filter commands based on current user permissions
+const availableCommands = computed(() => {
+  return allCommandItems.filter(item => {
+    if (item.to === '/dashboard') return can('reports:view')
+    if (item.to === '/reports') return can('reports:view')
+    if (item.to === '/daily-settlements') return can('reports:view')
+    if (item.to === '/payroll') return can('payroll:view')
+    if (item.to === '/users' || item.to === '/roles' || item.to === '/permissions') return can('roles:manage') || can('users:view')
+    if (item.to === '/audit-logs') return can('audit:view')
+    if (item.to === '/settings') return can('settings:*')
+    if (item.to === '/expenses') return can('expenses:*')
+    if (item.to === '/suppliers') return can('suppliers:view')
+    if (item.to === '/delivery-settings') return can('delivery:view')
+    if (item.to === '/bank-accounts') return can('payment-methods:view')
+    if (item.to === '/categories' || item.to === '/attributes') return can('categories:manage')
+    if (item.to === '/purchase-orders') return can('purchase-orders:create')
+    if (item.to === '/restock') return can('inventory:restock')
+    if (item.to === '/import') return can('products:create')
+    return true
+  })
+})
+
 // Filtered commands based on active search query
 const filteredCommands = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return allCommandItems
+  if (!q) return availableCommands.value
 
-  return allCommandItems.filter(item => {
+  return availableCommands.value.filter(item => {
     if (item.title.toLowerCase().includes(q)) return true
     if (item.desc.toLowerCase().includes(q)) return true
     if (item.category.toLowerCase().includes(q)) return true
@@ -649,7 +719,7 @@ onUnmounted(() => {
 .command-palette-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(26, 28, 24, 0.45);
+  background-color: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;
@@ -663,10 +733,10 @@ onUnmounted(() => {
   width: 100%;
   max-width: 640px;
   max-height: min(80vh, 580px);
-  background-color: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background-color: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(26, 28, 24, 0.18), 0 4px 16px rgba(146, 76, 0, 0.08);
+  box-shadow: var(--shadow-xl, 0 24px 64px rgba(0, 0, 0, 0.25));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -689,12 +759,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid #E8E2D9;
-  background: linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: linear-gradient(180deg, var(--color-card, #FFFFFF) 0%, var(--color-surface-subtle, #FAF7F2) 100%);
 }
 
 .command-palette-search-icon {
-  color: #924C00;
+  color: var(--color-primary, #924C00);
   flex-shrink: 0;
 }
 
@@ -704,13 +774,13 @@ onUnmounted(() => {
   border: none;
   outline: none;
   font-size: 15px;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   font-family: var(--font-sans, system-ui);
   padding: 0;
 }
 
 .command-palette-input::placeholder {
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   opacity: 0.85;
 }
 
@@ -721,16 +791,16 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 1px solid #E8E2D9;
-  background: #F0EAE1;
-  color: #6B6358;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-muted, #F0EAE1);
+  color: var(--color-muted-foreground, #6B6358);
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .command-palette-clear-btn:hover {
-  background: #E5DDD1;
-  color: #1A1C1C;
+  background: var(--color-surface-subtle, #E5DDD1);
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .command-palette-esc-badge {
@@ -739,17 +809,17 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 6px;
-  background: #F0EAE1;
-  color: #6B6358;
-  border: 1px solid #E8E2D9;
+  background: var(--color-muted, #F0EAE1);
+  color: var(--color-muted-foreground, #6B6358);
+  border: 1px solid var(--color-border, #E8E2D9);
   cursor: pointer;
   user-select: none;
   transition: all 150ms ease;
 }
 
 .command-palette-esc-badge:hover {
-  background: #E5DDD1;
-  color: #1A1C1C;
+  background: var(--color-surface-subtle, #E5DDD1);
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .command-palette-body {
@@ -777,15 +847,15 @@ onUnmounted(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
 }
 
 .command-palette-group-count {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 9999px;
-  background: #F0EAE1;
-  color: #6B6358;
+  background: var(--color-muted, #F0EAE1);
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 .command-palette-item {
@@ -801,8 +871,8 @@ onUnmounted(() => {
 
 .command-palette-item:hover,
 .command-palette-item--selected {
-  background-color: #FFF3E0;
-  border-color: #FFDCC4;
+  background-color: var(--color-cta-muted, #FFF3E0);
+  border-color: var(--color-border, #FFDCC4);
 }
 
 .command-palette-item-icon-wrap {
@@ -812,17 +882,17 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #FAF7F2;
-  border: 1px solid #E8E2D9;
-  color: #924C00;
+  background: var(--color-surface-subtle, #FAF7F2);
+  border: 1px solid var(--color-border, #E8E2D9);
+  color: var(--color-primary, #924C00);
   flex-shrink: 0;
   transition: all 150ms ease;
 }
 
 .command-palette-item--selected .command-palette-item-icon-wrap {
-  background: #924C00;
-  color: #FFFFFF;
-  border-color: #924C00;
+  background: var(--color-primary, #924C00);
+  color: var(--color-primary-foreground, #FFFFFF);
+  border-color: var(--color-primary, #924C00);
 }
 
 .command-palette-item-content {
@@ -842,14 +912,14 @@ onUnmounted(() => {
 .command-palette-item-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .command-palette-item--selected .command-palette-item-title {
-  color: #924C00;
+  color: var(--color-primary, #924C00);
 }
 
 .command-palette-item-badge {
@@ -857,14 +927,14 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 9999px;
-  background: #FFE4CC;
-  color: #924C00;
-  border: 1px solid #FFDCC4;
+  background: var(--color-cta-muted, #FFE4CC);
+  color: var(--color-primary, #924C00);
+  border: 1px solid var(--color-border, #FFDCC4);
 }
 
 .command-palette-item-desc {
   font-size: 11.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -883,15 +953,15 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
-  background: #F0EAE1;
-  color: #6B6358;
-  border: 1px solid #E8E2D9;
+  background: var(--color-muted, #F0EAE1);
+  color: var(--color-muted-foreground, #6B6358);
+  border: 1px solid var(--color-border, #E8E2D9);
 }
 
 .command-palette-route-path {
   font-family: var(--font-mono, monospace);
   font-size: 10.5px;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
 }
 
 .command-palette-enter-indicator {
@@ -901,8 +971,8 @@ onUnmounted(() => {
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  background: #924C00;
-  color: #FFFFFF;
+  background: var(--color-cta, #924C00);
+  color: var(--color-cta-foreground, #FFFFFF);
 }
 
 .command-palette-empty {
@@ -922,21 +992,21 @@ onUnmounted(() => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #FAF7F2;
-  border: 1px solid #E8E2D9;
-  color: #8C8275;
+  background: var(--color-surface-subtle, #FAF7F2);
+  border: 1px solid var(--color-border, #E8E2D9);
+  color: var(--color-muted-foreground, #8C8275);
   margin-bottom: 4px;
 }
 
 .command-palette-empty-title {
   font-size: 14px;
   font-weight: 700;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .command-palette-empty-desc {
   font-size: 12.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   max-width: 360px;
   line-height: 1.4;
 }
@@ -946,10 +1016,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 18px;
-  border-top: 1px solid #E8E2D9;
-  background-color: #FAF7F2;
+  border-top: 1px solid var(--color-border, #E8E2D9);
+  background-color: var(--color-surface-subtle, #FAF7F2);
   font-size: 11.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 .command-palette-footer-left {
@@ -970,9 +1040,9 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 4px;
-  background: #FFFFFF;
-  color: #1A1C1C;
-  border: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  color: var(--color-foreground, #1A1C1C);
+  border: 1px solid var(--color-border, #E8E2D9);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -980,7 +1050,7 @@ onUnmounted(() => {
 
 .command-palette-footer-right {
   font-weight: 500;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
 }
 
 /* Transitions */

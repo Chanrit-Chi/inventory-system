@@ -54,83 +54,83 @@ function close() {
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div v-if="open" class="fixed inset-0 z-100 flex items-center justify-center p-4">
     <!-- Backdrop -->
     <div
-      class="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+      class="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       @click="close"
     />
 
     <!-- Dialog -->
     <div
-      class="relative w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-[#E8E2D9] overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150"
+      class="relative w-full max-w-xl rounded-2xl bg-card shadow-2xl border border-border overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150 text-foreground"
     >
       <!-- Header -->
-      <div class="px-6 py-4 bg-[#FAF7F2] border-b border-[#E8E2D9] flex items-center justify-between">
+      <div class="px-5 py-3.5 bg-surface-subtle border-b border-border flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-[#FFF3E0] border border-[#FFDCC4] flex items-center justify-center text-[#924C00]">
-            <Clock class="w-5 h-5" />
+          <div class="w-8 h-8 rounded-lg bg-cta-muted border border-border-strong flex items-center justify-center text-primary shadow-2xs">
+            <Clock class="w-4 h-4" />
           </div>
           <div>
-            <h3 class="text-base font-bold text-[#1A1C1C] font-display">Parked / Held Orders</h3>
-            <p class="text-2xs text-[#6B6358]">Resume or manage open transactions on hold</p>
+            <h3 class="text-sm font-bold text-foreground font-display">Parked / Held Orders</h3>
+            <p class="text-3xs text-muted-foreground">Resume or manage open transactions on hold</p>
           </div>
         </div>
 
         <button
           type="button"
           @click="close"
-          class="p-1.5 rounded-xl text-[#6B6358] hover:text-[#1A1C1C] hover:bg-[#F0EAE1] transition-colors"
+          class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-subtle transition-colors cursor-pointer"
         >
-          <X class="w-5 h-5" />
+          <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Orders List -->
-      <div class="p-6 overflow-y-auto space-y-3 flex-1">
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 bg-background">
         <div
           v-if="heldOrders.length === 0"
-          class="py-12 text-center text-[#6B6358] space-y-2"
+          class="py-10 text-center text-muted-foreground space-y-1.5"
         >
-          <ShoppingBag class="w-10 h-10 mx-auto text-[#924C00]/30" />
-          <p class="text-sm font-semibold text-[#1A1C1C]">No orders currently on hold</p>
-          <p class="text-xs">You can hold an active cart anytime using the Hold button or F3 key.</p>
+          <ShoppingBag class="w-8 h-8 mx-auto text-primary/30" />
+          <p class="text-xs font-bold text-foreground">No orders currently on hold</p>
+          <p class="text-3xs">You can hold an active cart anytime using the Hold button or F3 key.</p>
         </div>
 
         <div
           v-for="order in heldOrders"
           :key="order.id"
-          class="p-4 rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] hover:border-[#FF8800] transition-all flex items-center justify-between gap-4 group"
+          class="p-3 rounded-xl border border-border bg-card hover:border-cta transition-all flex items-center justify-between gap-3 group"
         >
           <!-- Order Details -->
-          <div class="space-y-1 flex-1 min-w-0">
+          <div class="space-y-0.5 flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-sm font-bold text-[#1A1C1C] truncate">
+              <span class="text-xs font-bold text-foreground truncate">
                 {{ order.name }}
               </span>
-              <span class="px-2 py-0.5 text-2xs font-semibold rounded-md bg-white border border-[#E8E2D9] text-[#6B6358] font-mono shrink-0">
+              <span class="px-1.5 py-0.2 text-3xs font-semibold rounded-md bg-surface-subtle border border-border text-muted-foreground font-mono shrink-0">
                 {{ formatTime(order.timestamp) }}
               </span>
             </div>
 
-            <div class="flex items-center gap-3 text-xs text-[#6B6358]">
+            <div class="flex items-center gap-2.5 text-3xs text-muted-foreground">
               <span>{{ getItemCount(order) }} items</span>
-              <span v-if="order.customer?.name" class="flex items-center gap-1 text-[#924C00] font-medium">
+              <span v-if="order.customer?.name" class="flex items-center gap-1 text-primary font-medium">
                 <User class="w-3 h-3" />
                 {{ order.customer.name }}
               </span>
             </div>
 
             <!-- Items snippet -->
-            <p class="text-2xs text-[#8C827A] truncate">
+            <p class="text-3xs text-muted-foreground font-mono truncate">
               {{ order.items.map(i => `${i.quantity}x ${i.name}`).join(', ') }}
             </p>
           </div>
 
           <!-- Total & Actions -->
-          <div class="flex items-center gap-3 shrink-0">
+          <div class="flex items-center gap-2.5 shrink-0">
             <div class="text-right">
-              <div class="text-base font-bold font-display text-[#1A1C1C]">
+              <div class="text-sm font-bold font-mono text-foreground">
                 {{ formatMoney(getOrderTotal(order)) }}
               </div>
             </div>
@@ -138,31 +138,31 @@ function close() {
             <button
               type="button"
               @click="() => { emit('resume', order.id); close(); }"
-              class="px-3.5 py-2 rounded-xl bg-[#FF8800] text-[#1A1C1C] text-xs font-bold hover:bg-[#E67A00] transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+              class="h-7.5 px-3 rounded-lg bg-cta text-cta-foreground text-xs font-bold hover:brightness-110 transition-all shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
             >
-              <Play class="w-3.5 h-3.5 fill-current" />
+              <Play class="w-3 h-3 fill-current" />
               <span>Resume</span>
             </button>
 
             <button
               type="button"
               @click="emit('delete', order.id)"
-              class="p-2 rounded-xl text-[#6B6358] hover:text-red-600 hover:bg-red-50 transition-colors"
+              class="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
               title="Delete held order"
             >
-              <Trash2 class="w-4 h-4" />
+              <Trash2 class="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-3 bg-[#FAF7F2] border-t border-[#E8E2D9] flex items-center justify-between text-xs text-[#6B6358]">
-        <span>Total {{ heldOrders.length }} held order(s)</span>
+      <div class="px-5 py-2.5 bg-surface-subtle border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+        <span class="text-3xs">Total {{ heldOrders.length }} held order(s)</span>
         <button
           type="button"
           @click="close"
-          class="font-semibold hover:text-[#1A1C1C] transition-colors"
+          class="font-semibold hover:text-foreground transition-colors cursor-pointer text-xs"
         >
           Close
         </button>

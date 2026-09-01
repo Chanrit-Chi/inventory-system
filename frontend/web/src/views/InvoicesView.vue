@@ -33,6 +33,7 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  SelectField,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -42,6 +43,23 @@ const showDetailModal = ref(false)
 const showPaymentModal = ref(false)
 const selectedInvoice = ref<Invoice | null>(null)
 const paymentData = ref({ amount: 0, method: 'cash', reference: '' })
+
+const statusOptions = [
+  { label: 'All Statuses', value: '' },
+  { label: 'Draft', value: 'draft' },
+  { label: 'Sent', value: 'sent' },
+  { label: 'Paid', value: 'paid' },
+  { label: 'Partial', value: 'partial' },
+  { label: 'Overdue', value: 'overdue' },
+]
+
+const paymentMethodOptions = [
+  { label: 'Cash Tender', value: 'cash' },
+  { label: 'ABA PayWay / KHQR', value: 'aba_payway' },
+  { label: 'Credit / Debit Card', value: 'card' },
+  { label: 'Bank Transfer', value: 'bank_transfer' },
+  { label: 'GCash / Digital Wallet', value: 'gcash' },
+]
 
 const isDeleteDialogOpen = ref(false)
 const deletingInvoiceId = ref<string | null>(null)
@@ -230,18 +248,13 @@ onMounted(loadInvoices)
       </div>
 
       <div class="flex items-center gap-2.5 flex-wrap">
-        <select
+        <SelectField
           v-model="filters.status"
-          class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
+          :options="statusOptions"
+          placeholder="All Statuses"
+          class="h-9 w-36 bg-surface text-xs"
           @change="loadInvoices"
-        >
-          <option value="">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="paid">Paid</option>
-          <option value="partial">Partial</option>
-          <option value="overdue">Overdue</option>
-        </select>
+        />
 
         <Button variant="outline" size="sm" class="h-9 px-3.5 text-xs gap-1.5" @click="loadInvoices">
           Search
@@ -437,16 +450,12 @@ onMounted(loadInvoices)
 
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Payment Tender Method</label>
-            <select
+            <SelectField
               v-model="paymentData.method"
-              class="w-full h-9 px-3 text-sm bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-            >
-              <option value="cash">Cash Tender</option>
-              <option value="aba_payway">ABA PayWay / KHQR</option>
-              <option value="card">Credit / Debit Card</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="gcash">GCash / Digital Wallet</option>
-            </select>
+              :options="paymentMethodOptions"
+              placeholder="Select payment method"
+              class="w-full h-9 bg-surface text-xs"
+            />
           </div>
 
           <div>

@@ -30,6 +30,7 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  SelectField,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -39,6 +40,13 @@ const showEditModal = ref(false)
 const editing = ref<Partial<Attribute> | null>(null)
 const valuesText = ref('')
 const search = ref('')
+
+const displayTypeOptions = [
+  { label: 'Text / Label', value: 'text' },
+  { label: 'Size', value: 'size' },
+  { label: 'Color', value: 'color' },
+  { label: 'Number', value: 'number' },
+]
 
 const isDeleteDialogOpen = ref(false)
 const deletingAttribute = ref<Attribute | null>(null)
@@ -307,15 +315,12 @@ onMounted(load)
 
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Display Type</label>
-              <select
+              <SelectField
                 v-model="editing.type"
-                class="w-full h-9 px-3 text-sm bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-              >
-                <option value="text">Text / Label</option>
-                <option value="size">Size</option>
-                <option value="color">Color</option>
-                <option value="number">Number</option>
-              </select>
+                :options="displayTypeOptions"
+                placeholder="Select display type"
+                class="w-full h-9 bg-surface text-xs"
+              />
             </div>
           </div>
 

@@ -276,7 +276,7 @@ const formatMoney = (amount: number): string => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-muted);
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-sans, 'Poppins', sans-serif);
   font-size: 14px;
   color: var(--color-foreground);
 }
@@ -418,21 +418,23 @@ const formatMoney = (amount: number): string => {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  background: var(--color-cta-foreground);
-  color: var(--color-cta);
+  background: var(--color-surface);
+  color: var(--color-primary);
   border-radius: var(--radius-full);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .seller-btn {
-  border-color: var(--color-success);
-  color: var(--color-success);
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
 }
 
 .seller-btn:hover {
   background: var(--color-success);
-  color: var(--color-success-foreground);
+  color: #FFFFFF;
 }
 
 .seller-name {

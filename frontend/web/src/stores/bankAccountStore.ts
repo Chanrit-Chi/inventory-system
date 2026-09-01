@@ -7,10 +7,14 @@ export interface BankAccount {
   bank_name: string
   account_name: string
   account_number: string
-  account_type: 'checking' | 'savings' | 'business'
+  account_type: 'checking' | 'savings' | 'business' | string
   currency: string
   is_default: boolean
+  is_active?: boolean
+  color?: string
   balance?: number
+  logo_icon?: string
+  qr_image_url?: string
   created_at: string
   updated_at: string
 }

@@ -29,9 +29,9 @@ const props = withDefaults(defineProps<Props>(), {
 const variantClass = computed(() => {
   switch (props.variant) {
     case 'primary':
-      return 'bg-cta-muted text-primary border-[#FFE4CC]'
+      return 'bg-cta-muted text-primary border-cta/30 dark:border-cta/40'
     case 'amber':
-      return 'bg-accent text-primary border-[#FFDCC4]'
+      return 'bg-accent text-primary border-border-strong'
     case 'success':
       return 'bg-success-bg text-success-text border-success-border'
     case 'warning':
@@ -69,7 +69,7 @@ const dotColorClass = computed(() => {
 <template>
   <span
     :class="cn(
-      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors',
+      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors shadow-2xs',
       variantClass,
       $attrs.class as string,
     )"

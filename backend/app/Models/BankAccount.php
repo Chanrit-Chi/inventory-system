@@ -17,6 +17,7 @@ class BankAccount extends Model
         'bank_name',
         'account_name',
         'account_number',
+        'account_type',
         'qr_image_url',
         'currency',
         'is_default',
@@ -29,6 +30,7 @@ class BankAccount extends Model
         'bankName',
         'accountName',
         'accountNumber',
+        'accountType',
         'qrImageUrl',
         'isDefault',
         'isActive',
@@ -56,6 +58,11 @@ class BankAccount extends Model
     public function getAccountNumberAttribute(): string
     {
         return $this->attributes['account_number'] ?? '';
+    }
+
+    public function getAccountTypeAttribute(): string
+    {
+        return $this->attributes['account_type'] ?? 'checking';
     }
 
     public function getQrImageUrlAttribute(): ?string

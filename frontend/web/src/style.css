@@ -1,7 +1,7 @@
 /* ==========================================================================
    OmniPOS — Master Design System & Tailwind v4 Stylesheet
    Brand Specification: Warm Cream (#FAF7F2/#F8F5F0) | Deep Amber (#924C00) | Vibrant Orange (#FF8800)
-   Typography: Space Grotesk (Headings/Display) | Inter (UI/Body) | Fira Code (Mono/Numeric)
+   Typography: Poppins (Headings/Display & UI/Body) | Fira Code (Mono/Numeric)
    ========================================================================== */
 
 @import "tailwindcss";
@@ -18,7 +18,7 @@
   --color-cta:                        #FF8800; /* Vibrant retail orange CTA */
   --color-cta-hover:                  #E67A00;
   --color-cta-active:                 #C66800;
-  --color-cta-foreground:             #1A1C1C;
+  --color-cta-foreground:             #FFFFFF;
   --color-cta-muted:                  #FFF3E0;
 
   --color-brand-primary:              #924C00;
@@ -83,11 +83,11 @@
   --color-warning-border:             #FDE68A;
   --color-warning-text:               #92400E;
 
-  --color-error:                      #BA1A1A;
-  --color-error-foreground:           #93000A;
-  --color-error-bg:                   #FFDAD6;
-  --color-error-border:               #FFDAD6;
-  --color-error-text:                 #93000A;
+  --color-error:                      #DC2626;
+  --color-error-foreground:           #991B1B;
+  --color-error-bg:                   #FEF2F2;
+  --color-error-border:               #FECACA;
+  --color-error-text:                 #991B1B;
 
   --color-info:                       #005F83;
   --color-info-foreground:            #0369A1;
@@ -115,12 +115,17 @@
   --radius:                           0.5rem;
 
   /* ========================================================================
-     FONTS
+     FONTS & TYPOGRAPHY SCALES
      ======================================================================== */
-  --font-sans:                        'Inter', system-ui, -apple-system, sans-serif;
-  --font-display:                     'Space Grotesk', system-ui, -apple-system, sans-serif;
-  --font-body:                        'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans:                        'Poppins', system-ui, -apple-system, sans-serif;
+  --font-display:                     'Poppins', system-ui, -apple-system, sans-serif;
+  --font-body:                        'Poppins', system-ui, -apple-system, sans-serif;
   --font-mono:                        'Fira Code', monospace;
+
+  --text-2xs:                         0.6875rem; /* 11px */
+  --text-2xs--line-height:            0.875rem;  /* 14px */
+  --text-3xs:                         0.625rem;  /* 10px */
+  --text-3xs--line-height:            0.75rem;   /* 12px */
 
   /* ========================================================================
      LAYOUT SIZES
@@ -212,6 +217,168 @@
 }
 
 /* ==========================================================================
+   DARK THEME PALETTE & SYSTEM OVERRIDES (.dark)
+   Warm Obsidian Canvas (#14120E) | Dark Espresso (#1E1B17) | Radiant Amber (#FF941A)
+   ========================================================================== */
+
+.dark {
+  /* Surfaces & Backgrounds */
+  --color-background:                 #14120E;
+  --color-foreground:                 #EDE6DD;
+  --color-surface:                    #1E1B17;
+  --color-surface-base:               #14120E;
+  --color-surface-subtle:             #191613;
+  --color-surface-card:               #1E1B17;
+  --color-surface-muted:              #29241F;
+  --color-surface-inset:              #0F0D0B;
+  --color-surface-inverse:            #FAF7F2;
+  --color-card:                       #1E1B17;
+  --color-card-foreground:            #EDE6DD;
+  --color-popover:                    #24201B;
+  --color-popover-foreground:         #EDE6DD;
+
+  /* Borders & Outlines */
+  --color-border:                     #332C25;
+  --color-border-subtle:              #2A241E;
+  --color-border-strong:              #473E34;
+  --color-border-focus:               #FF941A;
+  --color-input:                      #332C25;
+  --color-ring:                       #FF941A;
+
+  /* Typography & Muted */
+  --color-muted:                      #29241F;
+  --color-muted-foreground:           #A19688;
+  --color-secondary:                  #29241F;
+  --color-secondary-foreground:       #D4C9BC;
+  --color-accent:                     #2E241A;
+  --color-accent-foreground:          #FFB781;
+
+  /* Brand Action & Primary (Elevated for Dark Contrast) */
+  --color-primary:                    #FFB781;
+  --color-primary-hover:              #FFA866;
+  --color-primary-active:             #FF994D;
+  --color-primary-foreground:         #381E00;
+
+  --color-cta:                        #FF941A;
+  --color-cta-hover:                  #FFAA3B;
+  --color-cta-active:                 #E67E00;
+  --color-cta-foreground:             #14120E;
+  --color-cta-muted:                  #382414;
+
+  --color-brand-primary:              #FFB781;
+  --color-brand-primary-hover:        #FFA866;
+  --color-brand-cta:                  #FF941A;
+  --color-brand-cta-hover:            #FFAA3B;
+  --color-brand-peach:                #3D2818;
+  --color-brand-peach-dim:            #543922;
+
+  /* Status & Feedback in Dark Mode */
+  --color-destructive:                #F87171;
+  --color-destructive-foreground:     #450A0A;
+
+  --color-success:                    #34D399;
+  --color-success-foreground:         #A7F3D0;
+  --color-success-bg:                 #064E3B;
+  --color-success-border:             #065F46;
+  --color-success-text:               #6EE7B7;
+
+  --color-warning:                    #FBBF24;
+  --color-warning-foreground:         #FDE68A;
+  --color-warning-bg:                 #451A03;
+  --color-warning-border:             #78350F;
+  --color-warning-text:               #FCD34D;
+
+  --color-error:                      #F87171;
+  --color-error-foreground:           #FECACA;
+  --color-error-bg:                   #450A0A;
+  --color-error-border:               #7F1D1D;
+  --color-error-text:                 #FCA5A5;
+
+  --color-info:                       #38BDF8;
+  --color-info-foreground:            #BAE6FD;
+  --color-info-bg:                    #082F49;
+  --color-info-border:                #075985;
+  --color-info-text:                  #7DD3FC;
+
+  --color-purple:                     #C084FC;
+  --color-purple-foreground:          #DDD6FE;
+  --color-purple-bg:                  #3B0764;
+  --color-purple-border:              #581C87;
+  --color-purple-text:                #D8B4FE;
+
+  /* Legacy & View Component Compatibility Aliases */
+  --background:                       var(--color-background);
+  --foreground:                       var(--color-foreground);
+  --card:                             var(--color-card);
+  --card-foreground:                  var(--color-card-foreground);
+  --popover:                          var(--color-popover);
+  --popover-foreground:               var(--color-popover-foreground);
+  --primary:                          var(--color-cta);
+  --primary-foreground:               var(--color-cta-foreground);
+  --secondary:                        var(--color-muted);
+  --secondary-foreground:             var(--color-secondary-foreground);
+  --muted:                            var(--color-muted);
+  --muted-foreground:                 var(--color-muted-foreground);
+  --accent:                           var(--color-accent);
+  --accent-foreground:                var(--color-accent-foreground);
+  --destructive:                      var(--color-destructive);
+  --destructive-foreground:           var(--color-destructive-foreground);
+  --border:                           var(--color-border);
+  --input:                            var(--color-input);
+  --ring:                             var(--color-ring);
+
+  --surface-alt:                      var(--color-card);
+  --surface-base:                     var(--color-background);
+  --surface-hover:                    var(--color-muted);
+  --border-color:                     var(--color-border);
+  --border-color-strong:              var(--color-border-strong);
+  --border-subtle:                    var(--color-border-subtle);
+  --border-strong:                    var(--color-border-strong);
+  --border-focus:                     var(--color-border-focus);
+
+  --text-primary:                     var(--color-foreground);
+  --text-secondary:                   var(--color-secondary-foreground);
+  --text-muted:                       var(--color-muted-foreground);
+  --text-disabled:                    #635A4F;
+  --text-inverse:                     #14120E;
+
+  --action-primary:                   var(--color-cta);
+  --action-primary-hover:             var(--color-cta-hover);
+  --action-primary-active:            var(--color-cta-active);
+  --action-primary-bg:                var(--color-cta-muted);
+  --action-primary-border:            #543922;
+
+  --action-secondary:                 var(--color-primary);
+  --action-secondary-hover:           var(--color-primary-hover);
+  --action-secondary-active:          var(--color-primary-active);
+  --action-secondary-bg:              var(--color-accent);
+  --action-secondary-border:          #4D351D;
+
+  --status-purple:                    var(--color-purple);
+  --status-orange:                    var(--color-cta);
+  --status-green:                     var(--color-success);
+  --status-red:                       var(--color-error);
+  --status-yellow:                    var(--color-warning);
+  --status-info:                      var(--color-info);
+  --status-success:                   var(--color-success);
+  --status-warning:                   var(--color-warning);
+  --status-error:                     var(--color-error);
+
+  --status-purple-text:               var(--color-purple-text);
+  --status-warning-text:              var(--color-warning-text);
+  --status-success-text:              var(--color-success-text);
+  --status-error-text:                var(--color-error-text);
+  --status-info-text:                 var(--color-info-text);
+
+  --shadow-xs:                        0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm:                        0 2px 6px rgba(0, 0, 0, 0.5);
+  --shadow-md:                        0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg:                        0 16px 40px rgba(0, 0, 0, 0.7);
+  --shadow-xl:                        0 32px 64px rgba(0, 0, 0, 0.8);
+  --shadow-glow:                      0 0 0 3px rgba(255, 148, 26, 0.25);
+}
+
+/* ==========================================================================
    UTILITY OVERRIDES & CONTRAST FIXES
    ========================================================================== */
 
@@ -241,9 +408,19 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
   }
+  html {
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
+  }
   html, body, #app {
     height: 100%;
     min-height: 100%;
+  }
+
+  body[data-scroll-locked],
+  body[style*="overflow: hidden"] {
+    padding-right: 0px !important;
+    margin-right: 0px !important;
   }
 
   /* Base Element Defaults — Encapsulated so Tailwind utilities can override cleanly */
@@ -363,7 +540,7 @@
   padding: 0 18px;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--color-border);
-  background: linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%);
+  background: linear-gradient(180deg, var(--color-card) 0%, var(--color-surface-subtle) 100%);
 }
 
 .brand-main-link {
@@ -507,7 +684,7 @@
 }
 
 .nav-link--active:hover {
-  background: #FFE4CC;
+  background: var(--color-accent);
   color: var(--color-primary-hover);
 }
 
@@ -540,7 +717,7 @@
   border-radius: var(--radius-full);
   background-color: var(--color-cta-muted);
   color: var(--color-primary);
-  border: 1px solid #FFE4CC;
+  border: 1px solid var(--color-border);
 }
 
 .user-profile-widget {
@@ -576,7 +753,7 @@
   height: 9px;
   border-radius: 50%;
   background-color: var(--color-success);
-  border: 1.5px solid #FFFFFF;
+  border: 1.5px solid var(--color-card);
 }
 
 .user-info {
@@ -666,14 +843,14 @@
 
 .search-box:hover {
   border-color: var(--color-border-strong);
-  background-color: #FFFFFF;
+  background-color: var(--color-card);
 }
 
 .search-kbd {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  background-color: #FFFFFF;
+  background-color: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   padding: 1px 6px;
@@ -708,7 +885,7 @@
   height: 8px;
   border-radius: 50%;
   background-color: var(--color-cta);
-  border: 1.5px solid #FFFFFF;
+  border: 1.5px solid var(--color-card);
 }
 
 .notification-popover {
@@ -773,7 +950,7 @@
 }
 
 .notification-item--unread {
-  background-color: #FFFDF8;
+  background-color: var(--color-surface-subtle);
 }
 
 .notification-item-icon {
@@ -1147,7 +1324,7 @@
 }
 
 .form-control {
-  background-color: #FFFFFF;
+  background-color: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-foreground);
@@ -1195,7 +1372,7 @@
 /* Primary — vibrant orange CTA */
 .btn--primary, .btn-primary {
   background-color: var(--color-cta);
-  color: var(--color-cta-foreground);
+  color: #FFFFFF;
   border-color: transparent;
   box-shadow: 0 1px 2px rgba(255, 136, 0, 0.2);
 }
@@ -1261,7 +1438,7 @@
 }
 
 .btn--subtle:hover {
-  background-color: #E6E0D6;
+  background-color: var(--color-border);
 }
 
 .btn--sm, .btn-sm {
@@ -1322,11 +1499,12 @@
 }
 
 .row-warning {
-  background-color: #FFFDF5;
+  background-color: var(--color-warning-bg);
 }
 
 .row-warning:hover {
-  background-color: #FEF9E7;
+  background-color: var(--color-warning-bg);
+  opacity: 0.9;
 }
 
 /* ==========================================================================
@@ -1347,19 +1525,19 @@
 
 .badge--green, .badge--success {
   background-color: var(--color-success-bg);
-  color: var(--color-success-foreground);
+  color: var(--color-success-text);
   border: 1px solid var(--color-success-border);
 }
 
 .badge--yellow, .badge--warning {
   background-color: var(--color-warning-bg);
-  color: var(--color-warning-foreground);
+  color: var(--color-warning-text);
   border: 1px solid var(--color-warning-border);
 }
 
 .badge--red, .badge--error, .badge--danger {
   background-color: var(--color-error-bg);
-  color: var(--color-error-foreground);
+  color: var(--color-error-text);
   border: 1px solid var(--color-error-border);
 }
 
@@ -1384,13 +1562,13 @@
 .badge--primary, .badge--orange {
   background-color: var(--color-cta-muted);
   color: var(--color-primary);
-  border: 1px solid #FFE4CC;
+  border: 1px solid rgba(255, 136, 0, 0.3);
 }
 
 .badge--admin {
   background-color: var(--color-accent);
   color: var(--color-primary);
-  border: 1px solid #FFDCC4;
+  border: 1px solid rgba(146, 76, 0, 0.25);
 }
 
 .badge--manager {
@@ -1405,29 +1583,29 @@
   border: 1px solid var(--color-success-border);
 }
 
-/* Loyalty Tier Badges */
+/* Loyalty Tier Badges (Synced with Customer Loyalty column variants) */
 .badge-tier-bronze {
-  background-color: #FEF3C7;
-  color: #92400E;
-  border: 1px solid #FDE68A;
+  background-color: var(--color-muted);
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
 }
 
 .badge-tier-silver {
-  background-color: #F3F4F6;
-  color: #4B5563;
-  border: 1px solid #D1D5DB;
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-border);
 }
 
 .badge-tier-gold {
-  background-color: #FEF9C3;
-  color: #B45309;
-  border: 1px solid #FDE047;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
 }
 
 .badge-tier-platinum {
-  background-color: #EDE9FE;
-  color: #5B21B6;
-  border: 1px solid #DDD6FE;
+  background-color: var(--color-purple-bg);
+  color: var(--color-purple-text);
+  border: 1px solid var(--color-purple-border);
 }
 
 /* Tag Selectors */
@@ -1476,6 +1654,59 @@
 }
 
 /* ==========================================================================
+   BRANDED RADIO BUTTONS
+   ========================================================================== */
+input[type="radio"]:not(.sr-only) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 9999px;
+  border: 1.5px solid var(--color-border-strong);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: all 150ms ease-out;
+  outline: none;
+  vertical-align: middle;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+input[type="radio"]:not(.sr-only)::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  background-color: var(--color-card);
+}
+
+input[type="radio"]:not(.sr-only):checked {
+  border-color: var(--color-cta);
+  background-color: var(--color-cta);
+  box-shadow: 0 0 0 3px rgba(255, 136, 0, 0.15);
+}
+
+input[type="radio"]:not(.sr-only):checked::before {
+  transform: scale(1);
+}
+
+input[type="radio"]:not(.sr-only):focus-visible {
+  outline: 2px solid var(--color-cta);
+  outline-offset: 2px;
+}
+
+input[type="radio"]:not(.sr-only):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--color-border);
+  background-color: var(--color-muted);
+}
+
+/* ==========================================================================
    TOGGLE SWITCH
    ========================================================================== */
 
@@ -1509,7 +1740,7 @@
   width: 16px;
   left: 2px;
   bottom: 2px;
-  background-color: #FFFFFF;
+  background-color: var(--color-card);
   transition: var(--transition);
   border-radius: 50%;
   box-shadow: 0 1px 2px rgba(0,0,0,0.2);
@@ -1588,7 +1819,7 @@
 
 .skeleton-row {
   height: var(--row-height);
-  background: linear-gradient(90deg, var(--color-muted) 25%, #E6DFD4 50%, var(--color-muted) 75%);
+  background: linear-gradient(90deg, var(--color-muted) 25%, var(--color-border) 50%, var(--color-muted) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-sm);
@@ -1596,7 +1827,7 @@
 }
 
 .skeleton-box {
-  background: linear-gradient(90deg, var(--color-muted) 25%, #E6DFD4 50%, var(--color-muted) 75%);
+  background: linear-gradient(90deg, var(--color-muted) 25%, var(--color-border) 50%, var(--color-muted) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-md);

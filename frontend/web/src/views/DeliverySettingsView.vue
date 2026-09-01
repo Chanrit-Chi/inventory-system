@@ -31,6 +31,7 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  SelectField,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -49,6 +50,10 @@ const isDeleting = ref(false)
 
 const companies = computed(() => store.companies)
 const zones = computed(() => store.zones)
+const companyOptions = computed(() => companies.value.map(c => ({
+  label: c.name,
+  value: c.id,
+})))
 
 const totalCouriers = computed(() => companies.value.length)
 const activeZonesCount = computed(() => zones.value.filter(z => z.is_active).length)
@@ -237,7 +242,7 @@ onMounted(loadAll)
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="flex border-b border-border gap-2">
+    <div class="flex border-b border-border gap-2 overflow-x-auto no-scrollbar">
       <button
         class="px-4 py-2 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5"
         :class="activeTab === 'companies' ? 'border-cta text-cta' : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -469,12 +474,12 @@ onMounted(loadAll)
         <div v-if="editingZone" class="flex flex-col gap-3 py-2">
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Courier Partner *</label>
-            <select
+            <SelectField
               v-model="editingZone.company_id"
-              class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-            >
-              <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+              :options="companyOptions"
+              placeholder="Select courier"
+              class="w-full h-9 bg-surface text-xs"
+            />
           </div>
 
           <div>

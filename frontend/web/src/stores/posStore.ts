@@ -46,7 +46,7 @@ export interface HoldCart {
   delivery_zone_id?: string | null
   channel_id?: string | null
   seller?: {
-    id: number
+    id: number | string
     name: string
     email?: string
     role?: string
@@ -73,12 +73,12 @@ export interface CartTab {
 }
 
 export interface StaffMember {
-  id: number
+  id: number | string
   name: string
-  email: string
-  role: string
+  email?: string
+  role?: string
   department?: string | null
-  is_active: boolean
+  is_active?: boolean
 }
 
 const STORAGE_KEY = 'omnipos_pos_cart'
@@ -116,7 +116,8 @@ export const usePosStore = defineStore('pos', () => {
   const heldOrders = ref<HeldOrder[]>([])
 
   // Tender / Payment State (per transaction)
-  const paymentMethod = ref<'CASH' | 'CARD' | 'QR' | 'SPLIT'>('CASH')
+  const paymentMethod = ref<string>('Cash')
+  const selectedBankAccountId = ref<string | null>(null)
   const tenderedAmount = ref<number>(0)
 
   // Scanner state
@@ -197,8 +198,14 @@ export const usePosStore = defineStore('pos', () => {
     return activeTab.value.items.reduce((sum, item) => sum + item.quantity, 0)
   })
 
+  function isCashPayment(method?: string | null): boolean {
+    if (!method) return false
+    const m = method.toLowerCase()
+    return m.includes('cash') || m === 'cash register' || m === 'cash drawer'
+  }
+
   const changeAmount = computed(() => {
-    if (paymentMethod.value === 'CASH' && tenderedAmount.value > 0) {
+    if (isCashPayment(paymentMethod.value) && tenderedAmount.value > 0) {
       return Math.max(0, tenderedAmount.value - total.value)
     }
     return 0
@@ -218,7 +225,6 @@ export const usePosStore = defineStore('pos', () => {
         heldOrders: heldOrders.value,
         activeChannelId: activeChannelId.value,
         activeChannelName: activeChannelName.value,
-        activeSeller: activeSeller.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } catch (e) {
@@ -246,11 +252,24 @@ export const usePosStore = defineStore('pos', () => {
       if (parsed.activeChannelName) {
         activeChannelName.value = parsed.activeChannelName
       }
-      if (parsed.activeSeller) {
-        activeSeller.value = parsed.activeSeller
-      }
     } catch (e) {
       console.warn('Failed to parse POS cart state from localStorage', e)
+    }
+  }
+
+  function resetPosState() {
+    tabs.value = [createDefaultTab()]
+    activeTabId.value = 'cart-1'
+    heldOrders.value = []
+    activeSeller.value = null
+    paymentMethod.value = 'Cash'
+    selectedBankAccountId.value = null
+    tenderedAmount.value = 0
+    scannerBuffer.value = ''
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Ignore
     }
   }
 
@@ -258,12 +277,22 @@ export const usePosStore = defineStore('pos', () => {
   // Tab Actions
   // ==========================================================================
 
+  function renumberDefaultTabs() {
+    let counter = 1
+    for (const tab of tabs.value) {
+      if (/^Cart \d+$/i.test(tab.name)) {
+        tab.name = `Cart ${counter}`
+        counter++
+      }
+    }
+  }
+
   function createTab(name?: string): string {
-    const newIndex = tabs.value.length + 1
     const newId = `cart-${Date.now()}`
-    const tabName = name || `Cart ${newIndex}`
+    const tabName = name || `Cart ${tabs.value.length + 1}`
     tabs.value.push(createDefaultTab(newId, tabName))
     activeTabId.value = newId
+    renumberDefaultTabs()
     saveToLocalStorage()
     return newId
   }
@@ -287,6 +316,7 @@ export const usePosStore = defineStore('pos', () => {
       if (activeTabId.value === tabId) {
         activeTabId.value = tabs.value[Math.max(0, idx - 1)].id
       }
+      renumberDefaultTabs()
       saveToLocalStorage()
     }
   }
@@ -335,7 +365,9 @@ export const usePosStore = defineStore('pos', () => {
 
     const maxStock = variant?.quantity_on_hand !== undefined
       ? variant.quantity_on_hand
-      : undefined
+      : product.variants?.[0]?.quantity_on_hand !== undefined
+        ? product.variants[0].quantity_on_hand
+        : undefined
 
     // Build variant display name if attributes exist
     let variantName = ''
@@ -353,9 +385,25 @@ export const usePosStore = defineStore('pos', () => {
 
     if (existingIndex !== -1) {
       const existing = tab.items[existingIndex]
-      existing.quantity += quantity
+      const targetQty = existing.quantity + quantity
+      if (maxStock !== undefined && maxStock !== null) {
+        if (targetQty > maxStock) {
+          existing.quantity = Math.max(existing.quantity, maxStock)
+        } else {
+          existing.quantity = targetQty
+        }
+      } else {
+        existing.quantity = targetQty
+      }
+      if (maxStock !== undefined) {
+        existing.max_stock = maxStock
+      }
       resultingItem = existing
     } else {
+      let finalQty = quantity
+      if (maxStock !== undefined && maxStock !== null && finalQty > maxStock) {
+        finalQty = Math.max(0, maxStock)
+      }
       resultingItem = {
         id: `${product.id}-${variantId || 'base'}-${Date.now()}`,
         product_id: product.id,
@@ -366,7 +414,7 @@ export const usePosStore = defineStore('pos', () => {
         barcode,
         price,
         cost_price: costPrice,
-        quantity,
+        quantity: finalQty,
         discount: 0,
         discount_type: 'none',
         image_url: product.image_url,
@@ -379,17 +427,27 @@ export const usePosStore = defineStore('pos', () => {
     return resultingItem
   }
 
-  function updateQuantity(itemId: string, quantity: number) {
+  function updateQuantity(itemId: string, quantity: number): boolean {
     const tab = activeTab.value
     const idx = tab.items.findIndex((i) => i.id === itemId)
-    if (idx === -1) return
+    if (idx === -1) return false
 
+    const item = tab.items[idx]
     if (quantity <= 0) {
       tab.items.splice(idx, 1)
-    } else {
-      tab.items[idx].quantity = quantity
+      saveToLocalStorage()
+      return true
     }
+
+    if (item.max_stock !== undefined && item.max_stock !== null && quantity > item.max_stock) {
+      item.quantity = item.max_stock
+      saveToLocalStorage()
+      return false
+    }
+
+    item.quantity = quantity
     saveToLocalStorage()
+    return true
   }
 
   function applyLineDiscount(itemId: string, type: 'none' | 'percentage' | 'flat', value: number) {
@@ -500,8 +558,9 @@ export const usePosStore = defineStore('pos', () => {
     saveToLocalStorage()
   }
 
-  function setPaymentMethod(method: 'CASH' | 'CARD' | 'QR' | 'SPLIT') {
-    paymentMethod.value = method
+  function setPaymentMethod(method: string, bankId?: string | null) {
+    paymentMethod.value = method || 'Cash'
+    selectedBankAccountId.value = bankId || null
   }
 
   function setTenderedAmount(amount: number) {
@@ -594,7 +653,8 @@ export const usePosStore = defineStore('pos', () => {
 
   function resetTransaction() {
     clearCart()
-    paymentMethod.value = 'CASH'
+    paymentMethod.value = 'Cash'
+    selectedBankAccountId.value = null
     tenderedAmount.value = 0
     saveToLocalStorage()
   }
@@ -624,6 +684,7 @@ export const usePosStore = defineStore('pos', () => {
     activeSeller,
     heldOrders,
     paymentMethod,
+    selectedBankAccountId,
     tenderedAmount,
     scannerBuffer,
     isScannerActive,
@@ -639,11 +700,13 @@ export const usePosStore = defineStore('pos', () => {
     changeAmount,
     isCartEmpty,
     getLineTotal,
+    isCashPayment,
 
     // Tab Actions
     createTab,
     switchTab,
     closeTab,
+    renumberDefaultTabs,
 
     // Cart Actions
     addToCart,
@@ -671,6 +734,7 @@ export const usePosStore = defineStore('pos', () => {
     deleteHeldOrder,
 
     // Lifecycle / Storage
+    resetPosState,
     resetTransaction,
     saveToLocalStorage,
     loadFromLocalStorage,

@@ -19,7 +19,7 @@ withDefaults(defineProps<Props>(), {
   <div
     :class="cn(
       'rounded-xl border border-border bg-card text-card-foreground shadow-xs transition-all duration-150',
-      padded && 'p-6',
+      padded && 'p-4 sm:p-6',
       elevated && 'shadow-sm',
       interactive && 'cursor-pointer hover:shadow-md hover:border-border-strong hover:-translate-y-0.5',
       $attrs.class as string,

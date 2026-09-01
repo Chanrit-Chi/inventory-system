@@ -24,7 +24,11 @@ class MediaController extends BaseApiController
         $file = $request->file('image');
         $folder = $request->input('folder', 'products');
 
-        // Check if Cloudflare R2 credentials are configured
+        // Check if Supabase or Cloudflare R2 credentials are configured
+        $useSupabase = !empty(config('filesystems.disks.supabase.key'))
+            && !empty(config('filesystems.disks.supabase.secret'))
+            && !empty(config('filesystems.disks.supabase.bucket'));
+
         $useR2 = !empty(config('filesystems.disks.r2.key'))
             && !empty(config('filesystems.disks.r2.secret'))
             && !empty(config('filesystems.disks.r2.bucket'));
@@ -32,7 +36,19 @@ class MediaController extends BaseApiController
         $extension = $file->getClientOriginalExtension() ?: 'jpg';
         $filename = Str::uuid() . '.' . strtolower($extension);
 
-        if ($useR2) {
+        if ($useSupabase) {
+            try {
+                $path = $file->storeAs($folder, $filename, 'supabase');
+                $baseUrl = config('filesystems.disks.supabase.url');
+                $url = $baseUrl ? rtrim($baseUrl, '/') . '/' . ltrim($path, '/') : Storage::disk('supabase')->url($path);
+                $disk = 'supabase';
+            } catch (\Throwable $e) {
+                // Fallback to local public disk if connection to cloud fails
+                $path = $file->storeAs($folder, $filename, 'public');
+                $url = Storage::disk('public')->url($path);
+                $disk = 'public';
+            }
+        } elseif ($useR2) {
             try {
                 $path = $file->storeAs($folder, $filename, 'r2');
                 $baseUrl = config('filesystems.disks.r2.url');

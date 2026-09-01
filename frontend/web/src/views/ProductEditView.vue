@@ -2,15 +2,16 @@
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useProductStore } from '@/stores/productStore'
+import { useToast } from '@/composables/useToast'
 import {
   ArrowLeft,
-  Check,
   Package,
   Layers,
   DollarSign,
-  AlertCircle,
   TrendingUp,
   Save,
+  ScanBarcode,
+  Sparkles,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -19,16 +20,10 @@ import {
   Switch,
   StatCard,
   Card,
-  Alert,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
 } from '@/components/ui'
 
 const route = useRoute()
+const toast = useToast()
 const productStore = useProductStore()
 
 const productId = route.params.id as string
@@ -44,13 +39,128 @@ const form = ref({
   is_active: true,
 })
 
-const successMessage = ref('')
-const submitError = ref('')
-
 const grossProfit = computed(() => {
   const p = parseFloat(form.value.purchase_price) || 0
   const s = parseFloat(form.value.selling_price) || 0
   return s - p
+})
+
+export interface EditVariantRow {
+  id: string
+  sku: string
+  name: string
+  barcode: string
+  cost_price: number | string
+  selling_price: number | string
+  quantity_on_hand: number
+  reorder_level: number
+  is_active: boolean
+  attributeValues?: any[]
+}
+
+const variantRows = ref<EditVariantRow[]>([])
+
+const activeScanIndex = ref<number | null>(null)
+const barcodeInputRefs = ref<Record<number, HTMLInputElement | null>>({})
+
+function setBarcodeInputRef(el: any, index: number) {
+  if (el) {
+    barcodeInputRefs.value[index] = (el.$el ? el.$el.querySelector('input') || el.$el : el) as HTMLInputElement
+  }
+}
+
+function playScanBeep() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    gain.gain.setValueAtTime(0.08, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.08)
+  } catch {}
+}
+
+function focusVariantBarcode(index: number) {
+  activeScanIndex.value = index
+  setTimeout(() => {
+    const input = barcodeInputRefs.value[index] || document.getElementById(`edit-variant-barcode-${index}`) as HTMLInputElement
+    if (input) {
+      input.focus()
+      if (typeof input.select === 'function') input.select()
+    }
+  }, 10)
+}
+
+function handleBarcodeKeyDown(e: KeyboardEvent, index: number) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    e.stopPropagation()
+    playScanBeep()
+
+    if (e.shiftKey) {
+      if (index > 0) {
+        focusVariantBarcode(index - 1)
+      }
+    } else {
+      if (index < displayVariants.value.length - 1) {
+        focusVariantBarcode(index + 1)
+      } else {
+        activeScanIndex.value = null
+        const btn = document.getElementById('btn-save-product')
+        if (btn) btn.focus()
+      }
+    }
+  } else if (e.key === 'ArrowDown') {
+    if (index < displayVariants.value.length - 1) {
+      e.preventDefault()
+      focusVariantBarcode(index + 1)
+    }
+  } else if (e.key === 'ArrowUp') {
+    if (index > 0) {
+      e.preventDefault()
+      focusVariantBarcode(index - 1)
+    }
+  }
+}
+
+function autoGenerateVariantBarcodes() {
+  const timestamp = Date.now().toString().slice(-6)
+  variantRows.value.forEach((v, idx) => {
+    if (!v.barcode) {
+      const seq = String(idx + 1).padStart(3, '0')
+      v.barcode = `885${timestamp}${seq}`
+    }
+  })
+}
+
+function clearVariantBarcodes() {
+  variantRows.value.forEach(v => {
+    v.barcode = ''
+  })
+}
+
+const duplicateBarcodeVariantIds = computed<Set<string>>(() => {
+  const duplicates = new Set<string>()
+  const seen = new Map<string, string>()
+
+  for (const v of displayVariants.value) {
+    const code = v.barcode?.trim()
+    if (!code) continue
+    if (seen.has(code)) {
+      duplicates.add(v.id)
+      duplicates.add(seen.get(code)!)
+    } else {
+      seen.set(code, v.id)
+    }
+  }
+  return duplicates
 })
 
 const grossMarginPercent = computed(() => {
@@ -60,16 +170,42 @@ const grossMarginPercent = computed(() => {
 })
 
 const totalStockOnHand = computed(() => {
+  if (variantRows.value.length > 0) {
+    return variantRows.value.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
+  }
   if (!productStore.selectedProduct?.variants) return 0
   return productStore.selectedProduct.variants.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
 })
 
 const totalStockValue = computed(() => {
+  if (variantRows.value.length > 0) {
+    return variantRows.value.reduce(
+      (sum, v) => sum + (v.quantity_on_hand || 0) * (parseFloat(String(v.selling_price)) || 0),
+      0
+    )
+  }
   if (!productStore.selectedProduct?.variants) return 0
   return productStore.selectedProduct.variants.reduce(
     (sum, v) => sum + (v.quantity_on_hand || 0) * (parseFloat(String(v.selling_price)) || 0),
     0
   )
+})
+
+const displayVariants = computed<EditVariantRow[]>(() => {
+  if (variantRows.value.length > 0) return variantRows.value
+  if (!productStore.selectedProduct?.variants) return []
+  return productStore.selectedProduct.variants.map(v => ({
+    id: v.id,
+    sku: v.sku || '',
+    name: (v as any).name || '',
+    barcode: v.barcode || '',
+    cost_price: v.cost_price,
+    selling_price: v.selling_price,
+    quantity_on_hand: v.quantity_on_hand,
+    reorder_level: v.reorder_level,
+    is_active: v.is_active ?? true,
+    attributeValues: v.attributeValues || v.attribute_values,
+  }))
 })
 
 async function loadProduct() {
@@ -86,6 +222,21 @@ async function loadProduct() {
         description: prod.description || '',
         is_active: prod.is_active ?? true,
       }
+
+      if (prod.variants && Array.isArray(prod.variants)) {
+        variantRows.value = prod.variants.map(v => ({
+          id: v.id,
+          sku: v.sku || '',
+          name: (v as any).name || '',
+          barcode: v.barcode || '',
+          cost_price: v.cost_price,
+          selling_price: v.selling_price,
+          quantity_on_hand: v.quantity_on_hand,
+          reorder_level: v.reorder_level,
+          is_active: v.is_active ?? true,
+          attributeValues: v.attributeValues || v.attribute_values,
+        }))
+      }
     }
   } catch {
     // Handled in store
@@ -93,11 +244,8 @@ async function loadProduct() {
 }
 
 async function save() {
-  submitError.value = ''
-  successMessage.value = ''
-
   if (!form.value.name.trim()) {
-    submitError.value = 'Product name cannot be empty.'
+    toast.error('Product name cannot be empty.')
     return
   }
 
@@ -105,15 +253,15 @@ async function save() {
   const sPrice = parseFloat(form.value.selling_price)
 
   if (isNaN(pPrice) || pPrice < 0) {
-    submitError.value = 'Valid purchase price is required.'
+    toast.error('Valid purchase price is required.')
     return
   }
   if (isNaN(sPrice) || sPrice <= 0) {
-    submitError.value = 'Selling price must be greater than $0.00.'
+    toast.error('Selling price must be greater than $0.00.')
     return
   }
 
-  const payload = {
+  const payload: any = {
     name: form.value.name.trim(),
     barcode: form.value.barcode.trim() || null,
     purchase_price: pPrice,
@@ -124,14 +272,25 @@ async function save() {
     is_active: form.value.is_active,
   }
 
+  if (variantRows.value.length > 0) {
+    payload.variants = variantRows.value.map(v => ({
+      id: v.id,
+      sku: v.sku,
+      name: v.name,
+      barcode: v.barcode ? v.barcode.trim() : null,
+      selling_price: parseFloat(String(v.selling_price)) || undefined,
+      cost_price: parseFloat(String(v.cost_price)) || undefined,
+      reorder_level: parseInt(String(v.reorder_level)) || 0,
+      is_active: v.is_active,
+    }))
+  }
+
   try {
     await productStore.updateProduct(productId, payload)
-    successMessage.value = 'Product updated successfully!'
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
+    toast.success('Product & variants updated successfully!')
   } catch (e: unknown) {
-    submitError.value = e instanceof Error ? e.message : 'Failed to update product.'
+    const msg = productStore.error || (e instanceof Error ? e.message : 'Failed to update product.')
+    toast.error(msg)
   }
 }
 
@@ -155,6 +314,20 @@ function stockLabel(qty: number, reorder: number) {
 
 onMounted(() => {
   loadProduct()
+})
+
+defineExpose({
+  form,
+  variantRows,
+  displayVariants,
+  activeScanIndex,
+  duplicateBarcodeVariantIds,
+  loadProduct,
+  save,
+  handleBarcodeKeyDown,
+  focusVariantBarcode,
+  autoGenerateVariantBarcodes,
+  clearVariantBarcodes,
 })
 </script>
 
@@ -183,21 +356,6 @@ onMounted(() => {
         </Badge>
       </div>
     </div>
-
-    <!-- Alert Notifications -->
-    <Alert v-if="submitError || productStore.error" variant="error">
-      <div class="flex items-center gap-2">
-        <AlertCircle :size="16" class="flex-shrink-0" />
-        <span>{{ submitError || productStore.error }}</span>
-      </div>
-    </Alert>
-
-    <Alert v-if="successMessage" variant="success">
-      <div class="flex items-center gap-2">
-        <Check :size="16" class="flex-shrink-0" />
-        <span>{{ successMessage }}</span>
-      </div>
-    </Alert>
 
     <div v-if="productStore.loading" class="rounded-xl border border-border bg-card p-6 shadow-xs space-y-3">
       <div v-for="i in 4" :key="i" class="h-12 rounded-md bg-muted/50 animate-pulse" />
@@ -377,69 +535,148 @@ onMounted(() => {
       </Card>
 
       <!-- Variants & Live Stock Table -->
-      <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-        <div class="p-4 border-b border-border bg-surface-subtle/40 flex items-center justify-between">
+      <div class="rounded-xl border border-border bg-card shadow-2xs overflow-hidden">
+        <div class="p-4 border-b border-border bg-surface-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 class="font-display font-bold text-base text-foreground flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-foreground flex items-center gap-2">
               <span>Variant Inventory Matrix</span>
-              <Badge variant="info" class="font-mono text-xs">
-                {{ productStore.selectedProduct.variants?.length || 0 }} SKUs
-              </Badge>
+              <span class="px-2 py-0.5 rounded-md bg-cta-muted text-primary border border-border-strong font-mono text-3xs font-semibold">
+                {{ variantRows.length || productStore.selectedProduct.variants?.length || 0 }} SKUs
+              </span>
             </h2>
-            <p class="text-[11px] text-muted-foreground mt-0.5">
-              Individual barcodes, stock-on-hand, and reorder levels for each variation.
+            <p class="text-3xs text-muted-foreground mt-0.5">
+              Edit individual barcodes, prices, stock-on-hand, and reorder levels for each variation.
             </p>
+          </div>
+
+          <div v-if="variantRows.length > 0" class="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-7.5 px-2.5 text-xs gap-1.5 border-border"
+              @click="autoGenerateVariantBarcodes"
+            >
+              <Sparkles :size="13" class="text-cta" />
+              <span>Auto-fill Missing Barcodes</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-7.5 px-2 text-xs text-muted-foreground hover:text-destructive"
+              @click="clearVariantBarcodes"
+            >
+              <span>Clear</span>
+            </Button>
           </div>
         </div>
 
-        <div v-if="!productStore.selectedProduct.variants || productStore.selectedProduct.variants.length === 0" class="p-8 text-center text-muted-foreground text-xs">
+        <div v-if="(!variantRows || variantRows.length === 0) && (!productStore.selectedProduct.variants || productStore.selectedProduct.variants.length === 0)" class="p-8 text-center text-muted-foreground text-xs">
           No variants associated with this product.
         </div>
 
-        <div v-else class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="bg-muted/40">
-                <TableHead>Variant SKU</TableHead>
-                <TableHead>Barcode</TableHead>
-                <TableHead>Cost</TableHead>
-                <TableHead>Selling Price</TableHead>
-                <TableHead>Stock on Hand</TableHead>
-                <TableHead>Reorder Level</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="v in productStore.selectedProduct.variants" :key="v.id" class="hover:bg-surface-subtle/80 transition-colors">
-                <TableCell class="font-mono text-xs font-semibold text-primary">
-                  {{ v.sku }}
-                </TableCell>
-                <TableCell class="font-mono text-xs">
-                  <span v-if="v.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
-                    {{ v.barcode }}
-                  </span>
-                  <span v-else class="text-muted-foreground">—</span>
-                </TableCell>
-                <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                  {{ fmtMoney(v.cost_price) }}
-                </TableCell>
-                <TableCell class="font-mono text-xs font-bold text-foreground tabular-nums">
-                  {{ fmtMoney(v.selling_price) }}
-                </TableCell>
-                <TableCell class="font-mono text-sm font-bold text-foreground tabular-nums">
-                  {{ v.quantity_on_hand }}
-                </TableCell>
-                <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
-                  {{ v.reorder_level }} units
-                </TableCell>
-                <TableCell>
-                  <Badge :variant="stockBadge(v.quantity_on_hand, v.reorder_level)" class="text-[11px] px-2 py-0.5">
-                    {{ stockLabel(v.quantity_on_hand, v.reorder_level) }}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+        <div v-else class="flex flex-col gap-3 p-4">
+          <!-- Rapid Scanning Equipment Helper Banner -->
+          <div class="flex items-center justify-between p-2.5 px-3 rounded-lg border border-cta/30 bg-cta-muted/60 text-xs text-foreground shadow-2xs">
+            <div class="flex items-center gap-2">
+              <ScanBarcode class="w-4 h-4 text-primary shrink-0" />
+              <span>
+                <strong class="text-primary font-bold">⚡ Rapid Scan Auto-Advance Active:</strong> Scan with hardware scanner or press <kbd class="px-1.5 py-0.5 rounded bg-surface border border-border-strong text-foreground font-mono text-[10px] font-bold shadow-2xs">Enter</kbd> to automatically jump to the next variant row.
+              </span>
+            </div>
+            <span class="text-[11px] text-muted-foreground hidden md:inline font-mono">
+              <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">↑</kbd> <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">↓</kbd> or <kbd class="px-1 py-0.5 bg-surface rounded border border-border-strong text-foreground text-[10px] font-bold">Shift+Enter</kbd> to navigate
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left min-w-[900px]">
+              <thead class="bg-surface-subtle text-muted-foreground text-xs font-bold border-b border-border">
+                <tr>
+                  <th class="px-4 py-3 min-w-[180px]">Variant SKU</th>
+                  <th class="px-4 py-3 min-w-[240px]">Barcode (Editable) *</th>
+                  <th class="px-4 py-3 text-right w-28 font-mono">Cost</th>
+                  <th class="px-4 py-3 text-right w-32 font-mono">Selling Price</th>
+                  <th class="px-4 py-3 text-right w-36 font-mono">Stock on Hand</th>
+                  <th class="px-4 py-3 text-right w-32 font-mono">Reorder Level</th>
+                  <th class="px-4 py-3 text-center w-28">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/70">
+                <tr
+                  v-for="(v, idx) in displayVariants"
+                  :key="v.id"
+                  class="transition-colors duration-150"
+                  :class="[
+                    activeScanIndex === idx
+                      ? 'bg-cta-muted ring-1 ring-cta'
+                      : duplicateBarcodeVariantIds.has(v.id)
+                        ? 'bg-red-500/15'
+                        : 'hover:bg-surface-subtle/50'
+                  ]"
+                >
+                  <td class="px-4 py-2.5 font-mono text-xs font-bold text-foreground whitespace-nowrap">
+                    <div class="flex items-center gap-1.5">
+                      <span>{{ v.sku }}</span>
+                      <span v-if="activeScanIndex === idx" class="px-1.5 py-0.2 rounded bg-cta text-cta-foreground text-[9px] font-sans font-bold">
+                        SCANNING
+                      </span>
+                    </div>
+                    <div v-if="v.attributeValues && v.attributeValues.length > 0" class="flex flex-wrap gap-1 mt-1 font-sans font-normal">
+                      <span
+                        v-for="av in v.attributeValues"
+                        :key="av.id || av.value_name"
+                        class="px-1.5 py-0.2 rounded bg-surface-subtle border border-border text-[10px] text-muted-foreground"
+                      >
+                        {{ av.value_name || av.value || av.name }}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 min-w-[240px]">
+                    <div class="relative flex flex-col gap-1">
+                      <div class="relative flex items-center">
+                        <Input
+                          :id="`edit-variant-barcode-${idx}`"
+                          :ref="(el) => setBarcodeInputRef(el, idx)"
+                          :model-value="v.barcode ?? ''"
+                          @update:model-value="(val) => v.barcode = String(val)"
+                          @keydown="(e: any) => handleBarcodeKeyDown(e, idx)"
+                          @focus="activeScanIndex = idx"
+                          @blur="activeScanIndex === idx && (activeScanIndex = null)"
+                          type="text"
+                          placeholder="Scan / type barcode (Enter ↵)"
+                          class="h-8 text-xs font-mono bg-surface pl-2.5 pr-7 w-full border-border/80 focus:border-cta"
+                          :class="duplicateBarcodeVariantIds.has(v.id) ? 'border-destructive focus:border-destructive text-destructive font-bold' : (activeScanIndex === idx ? 'border-cta ring-1 ring-cta' : undefined)"
+                        />
+                        <ScanBarcode :size="14" class="text-muted-foreground/60 absolute right-2 pointer-events-none" />
+                      </div>
+                      <span v-if="duplicateBarcodeVariantIds.has(v.id)" class="text-[10px] text-destructive font-semibold">
+                        ⚠ Duplicate barcode detected
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground font-medium tabular-nums whitespace-nowrap">
+                    {{ fmtMoney(v.cost_price) }}
+                  </td>
+                  <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-primary tabular-nums whitespace-nowrap">
+                    {{ fmtMoney(v.selling_price) }}
+                  </td>
+                  <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-foreground tabular-nums whitespace-nowrap">
+                    {{ v.quantity_on_hand }}
+                  </td>
+                  <td class="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                    {{ v.reorder_level }} units
+                  </td>
+                  <td class="px-4 py-2.5 text-center whitespace-nowrap">
+                    <Badge :variant="stockBadge(v.quantity_on_hand, v.reorder_level)" class="text-xs px-2.5 py-0.5 font-semibold">
+                      {{ stockLabel(v.quantity_on_hand, v.reorder_level) }}
+                    </Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </template>

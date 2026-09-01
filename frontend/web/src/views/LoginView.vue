@@ -12,23 +12,29 @@ import {
   Alert,
 } from '@/components/ui'
 
+import { usePermissions } from '@/composables/usePermissions'
+
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const { can } = usePermissions()
 
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const isLoading = computed(() => authStore.isLoading)
 
-// Get redirect path from query parameter, fallback to dashboard
+// Get redirect path from query parameter, fallback to role-appropriate home
 const redirectPath = computed(() => {
   const target = route.query.redirect as string | undefined
   if (target && target.startsWith('/') && !target.startsWith('//')) {
+    if (target === '/dashboard' && !can('reports:view')) {
+      return can('pos:checkout') ? '/pos' : '/products'
+    }
     return target
   }
-  return '/dashboard'
+  return can('reports:view') ? '/dashboard' : can('pos:checkout') ? '/pos' : '/products'
 })
 
 onMounted(() => {

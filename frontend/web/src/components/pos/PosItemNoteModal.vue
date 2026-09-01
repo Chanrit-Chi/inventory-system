@@ -50,22 +50,22 @@ function close() {
 </script>
 
 <template>
-  <div v-if="open && item" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div v-if="open && item" class="fixed inset-0 z-100 flex items-center justify-center p-4">
     <!-- Backdrop -->
     <div
-      class="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+      class="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
       @click="close"
     />
 
     <!-- Dialog -->
     <div
-      class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-[#E8E2D9] overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150"
+      class="relative w-full max-w-md rounded-2xl bg-card shadow-2xl border border-border overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150 text-foreground"
     >
       <!-- Header -->
-      <div class="px-6 py-4 bg-[#FAF7F2] border-b border-[#E8E2D9] flex items-center justify-between">
+      <div class="px-5 py-3.5 bg-surface-subtle border-b border-border flex items-center justify-between">
         <div>
-          <h3 class="text-base font-bold text-[#1A1C1C] font-display">Item Options & Discount</h3>
-          <p class="text-2xs text-[#6B6358] truncate max-w-[280px]">
+          <h3 class="text-sm font-bold text-foreground font-display">Item Options & Discount</h3>
+          <p class="text-3xs text-muted-foreground truncate max-w-[280px]">
             {{ item.name }} {{ item.variant_name ? `(${item.variant_name})` : '' }}
           </p>
         </div>
@@ -73,31 +73,31 @@ function close() {
         <button
           type="button"
           @click="close"
-          class="p-1.5 rounded-xl text-[#6B6358] hover:text-[#1A1C1C] hover:bg-[#F0EAE1] transition-colors"
+          class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-subtle transition-colors cursor-pointer"
         >
-          <X class="w-5 h-5" />
+          <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Body -->
-      <div class="p-6 space-y-4">
+      <div class="p-4 sm:p-5 space-y-3.5">
         <!-- Line Discount Section -->
         <div>
-          <label class="flex items-center gap-1.5 text-xs font-bold text-[#1A1C1C] mb-2">
-            <Tag class="w-3.5 h-3.5 text-[#924C00]" />
+          <label class="flex items-center gap-1.5 text-xs font-bold text-foreground mb-1.5">
+            <Tag class="w-3.5 h-3.5 text-primary" />
             <span>Line Discount</span>
           </label>
 
           <!-- Type Switcher -->
-          <div class="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#FAF7F2] border border-[#E8E2D9] mb-3">
+          <div class="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-surface-subtle border border-border mb-2.5">
             <button
               type="button"
               @click="discountType = 'none'"
               :class="[
-                'py-1.5 text-xs font-bold rounded-lg transition-all',
+                'py-1 text-xs font-bold rounded transition-all cursor-pointer',
                 discountType === 'none'
-                  ? 'bg-white text-[#1A1C1C] shadow-2xs'
-                  : 'text-[#6B6358] hover:text-[#1A1C1C]'
+                  ? 'bg-card text-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
               ]"
             >
               No Discount
@@ -106,10 +106,10 @@ function close() {
               type="button"
               @click="discountType = 'percentage'"
               :class="[
-                'py-1.5 text-xs font-bold rounded-lg transition-all',
+                'py-1 text-xs font-bold rounded transition-all cursor-pointer',
                 discountType === 'percentage'
-                  ? 'bg-white text-[#924C00] shadow-2xs'
-                  : 'text-[#6B6358] hover:text-[#1A1C1C]'
+                  ? 'bg-card text-primary shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
               ]"
             >
               Percent (%)
@@ -118,10 +118,10 @@ function close() {
               type="button"
               @click="discountType = 'flat'"
               :class="[
-                'py-1.5 text-xs font-bold rounded-lg transition-all',
+                'py-1 text-xs font-bold rounded transition-all cursor-pointer',
                 discountType === 'flat'
-                  ? 'bg-white text-[#924C00] shadow-2xs'
-                  : 'text-[#6B6358] hover:text-[#1A1C1C]'
+                  ? 'bg-card text-primary shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
               ]"
             >
               Flat Amount ($)
@@ -129,7 +129,7 @@ function close() {
           </div>
 
           <!-- Value Input and Quick Presets -->
-          <div v-if="discountType !== 'none'" class="space-y-2.5">
+          <div v-if="discountType !== 'none'" class="space-y-2">
             <div class="relative">
               <input
                 v-model.number="discountValue"
@@ -138,24 +138,24 @@ function close() {
                 :max="discountType === 'percentage' ? 100 : item.price * item.quantity"
                 step="any"
                 placeholder="Discount amount..."
-                class="w-full px-3.5 py-2 rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] text-sm text-[#1A1C1C] font-mono focus:bg-white focus:border-[#FF8800] focus:ring-2 focus:ring-[#FF8800]/20 outline-hidden transition-all"
+                class="w-full px-3 py-1.5 rounded-lg border border-input bg-surface-subtle text-xs text-foreground font-mono focus:bg-card focus:border-cta focus:ring-2 focus:ring-cta/20 outline-hidden transition-all"
               />
-              <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6B6358]">
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
                 {{ discountType === 'percentage' ? '%' : '$' }}
               </span>
             </div>
 
-            <div v-if="discountType === 'percentage'" class="flex gap-1.5">
+            <div v-if="discountType === 'percentage'" class="flex gap-1">
               <button
                 v-for="p in PRESET_DISCOUNTS"
                 :key="p"
                 type="button"
                 @click="setPreset(p)"
                 :class="[
-                  'flex-1 py-1 text-2xs font-bold rounded-lg border transition-all',
+                  'flex-1 py-1 text-3xs font-bold rounded-md border transition-all cursor-pointer',
                   discountValue === p
-                    ? 'bg-[#FFF3E0] text-[#924C00] border-[#FFDCC4]'
-                    : 'bg-white text-[#6B6358] border-[#E8E2D9] hover:bg-[#FAF7F2]'
+                    ? 'bg-cta-muted text-primary border-border-strong'
+                    : 'bg-card text-muted-foreground border-border hover:bg-surface-subtle'
                 ]"
               >
                 {{ p }}%
@@ -166,34 +166,34 @@ function close() {
 
         <!-- Line Notes Section -->
         <div>
-          <label class="flex items-center gap-1.5 text-xs font-bold text-[#1A1C1C] mb-1.5">
-            <FileText class="w-3.5 h-3.5 text-[#924C00]" />
+          <label class="flex items-center gap-1.5 text-xs font-bold text-foreground mb-1">
+            <FileText class="w-3.5 h-3.5 text-primary" />
             <span>Line Item Note</span>
           </label>
           <textarea
             v-model="notes"
             rows="2"
             placeholder="e.g. Gift wrap, damaged box, specific flavor..."
-            class="w-full px-3.5 py-2 rounded-xl border border-[#E8E2D9] bg-[#FAF7F2] text-xs text-[#1A1C1C] focus:bg-white focus:border-[#FF8800] focus:ring-2 focus:ring-[#FF8800]/20 outline-hidden transition-all resize-none"
+            class="w-full px-3 py-1.5 rounded-lg border border-input bg-surface-subtle text-xs text-foreground focus:bg-card focus:border-cta focus:ring-2 focus:ring-cta/20 outline-hidden transition-all resize-none"
           />
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-3 bg-[#FAF7F2] border-t border-[#E8E2D9] flex items-center justify-end gap-2">
+      <div class="px-5 py-2.5 bg-surface-subtle border-t border-border flex items-center justify-end gap-2">
         <button
           type="button"
           @click="close"
-          class="px-4 py-2 rounded-xl border border-[#E8E2D9] bg-white text-xs font-bold text-[#1A1C1C] hover:bg-[#FAF7F2] transition-colors"
+          class="h-8 px-3.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground hover:bg-surface-subtle transition-colors cursor-pointer"
         >
           Cancel
         </button>
         <button
           type="button"
           @click="handleSave"
-          class="px-5 py-2 rounded-xl bg-[#FF8800] text-[#1A1C1C] text-xs font-bold hover:bg-[#E67A00] transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+          class="h-8 px-4 rounded-lg bg-cta text-cta-foreground text-xs font-bold hover:brightness-110 transition-colors shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95"
         >
-          <Check class="w-4 h-4 stroke-[2.5]" />
+          <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           <span>Apply Changes</span>
         </button>
       </div>

@@ -298,7 +298,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="quotationStore.loading" @click="fetchQuotations">
           <RefreshCw :size="14" :class="{ 'animate-spin': quotationStore.loading }" />
           <span>Refresh</span>

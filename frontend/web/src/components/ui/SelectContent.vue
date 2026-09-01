@@ -14,6 +14,7 @@ const props = withDefaults(
   defineProps<SelectContentProps & { class?: string }>(),
   {
     position: 'popper',
+    bodyLock: false,
   },
 )
 const emits = defineEmits<SelectContentEmits>()

@@ -29,6 +29,8 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  DatePicker,
+  SelectField,
 } from '@/components/ui'
 
 const expenseStore = useExpenseStore()
@@ -70,6 +72,17 @@ const paymentMethods = [
   'Card',
   'Other',
 ]
+
+const categoryOptions = computed(() => categories.map(c => ({ label: c, value: c })))
+const categoryFilterOptions = computed(() => [
+  { label: 'All Categories', value: '' },
+  ...categories.map(c => ({ label: c, value: c })),
+])
+const paymentMethodOptions = computed(() => paymentMethods.map(pm => ({ label: pm, value: pm })))
+const paymentMethodFilterOptions = computed(() => [
+  { label: 'All Payment Methods', value: '' },
+  ...paymentMethods.map(pm => ({ label: pm, value: pm })),
+])
 
 // Filters
 const filterCategory = ref('')
@@ -316,18 +329,18 @@ onMounted(() => {
         <div class="flex flex-col gap-3">
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Expense Date *</label>
-            <Input id="expense-date" v-model="form.expense_date" type="date" class="h-9 bg-surface text-sm font-mono" />
+            <DatePicker id="expense-date" v-model="form.expense_date" class="h-9 w-full bg-surface text-xs" />
           </div>
 
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Category *</label>
-            <select
+            <SelectField
               id="expense-category"
               v-model="form.category"
-              class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-            >
-              <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
-            </select>
+              :options="categoryOptions"
+              placeholder="Select category"
+              class="w-full h-9 bg-surface text-xs"
+            />
           </div>
 
           <div>
@@ -345,13 +358,13 @@ onMounted(() => {
 
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Payment Method *</label>
-            <select
+            <SelectField
               id="expense-payment-method"
               v-model="form.payment_method"
-              class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-            >
-              <option v-for="pm in paymentMethods" :key="pm" :value="pm">{{ pm }}</option>
-            </select>
+              :options="paymentMethodOptions"
+              placeholder="Select payment method"
+              class="w-full h-9 bg-surface text-xs"
+            />
           </div>
 
           <div>
@@ -386,37 +399,35 @@ onMounted(() => {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Category</label>
-              <select
+              <SelectField
                 id="expense-filter-cat"
                 v-model="filterCategory"
-                class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+                :options="categoryFilterOptions"
+                placeholder="All Categories"
+                class="w-full h-8 bg-surface text-xs"
                 @change="onFilterChange"
-              >
-                <option value="">All Categories</option>
-                <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
-              </select>
+              />
             </div>
 
             <div>
               <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Payment Method</label>
-              <select
+              <SelectField
                 id="expense-filter-pm"
                 v-model="filterPaymentMethod"
-                class="w-full h-8 px-2.5 text-xs bg-surface border border-input rounded-md"
+                :options="paymentMethodFilterOptions"
+                placeholder="All Payment Methods"
+                class="w-full h-8 bg-surface text-xs"
                 @change="onFilterChange"
-              >
-                <option value="">All Payment Methods</option>
-                <option v-for="pm in paymentMethods" :key="pm" :value="pm">{{ pm }}</option>
-              </select>
+              />
             </div>
           </div>
 
           <div class="flex items-center justify-between pt-2 border-t border-border/50 flex-wrap gap-2 text-xs">
             <div class="flex items-center gap-2">
               <span class="text-muted-foreground">Date:</span>
-              <Input v-model="filterDateFrom" type="date" class="h-8 w-32 bg-surface text-xs font-mono" @change="onFilterChange" />
+              <DatePicker v-model="filterDateFrom" placeholder="From date" class="h-8 w-32 bg-surface text-xs" @change="onFilterChange" />
               <span class="text-muted-foreground">to</span>
-              <Input v-model="filterDateTo" type="date" class="h-8 w-32 bg-surface text-xs font-mono" @change="onFilterChange" />
+              <DatePicker v-model="filterDateTo" placeholder="To date" class="h-8 w-32 bg-surface text-xs" @change="onFilterChange" />
             </div>
 
             <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground" @click="resetFilters">

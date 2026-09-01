@@ -16,7 +16,12 @@ import {
   Image as ImageIcon,
   Database,
   Server,
+  Sun,
+  Moon,
+  Laptop,
+  Check,
 } from 'lucide-vue-next'
+import { useThemeStore } from '@/stores/themeStore'
 import {
   Button,
   Badge,
@@ -93,6 +98,8 @@ interface CurrentUser {
   role: string
 }
 
+const themeStore = useThemeStore()
+
 type TabKey = 'branding' | 'printers' | 'diagnostics' | 'account'
 
 // ============================================================================
@@ -100,7 +107,7 @@ type TabKey = 'branding' | 'printers' | 'diagnostics' | 'account'
 // ============================================================================
 const activeTab = ref<TabKey>('branding')
 const tabs = [
-  { key: 'branding' as TabKey, label: 'Store Branding', icon: Palette },
+  { key: 'branding' as TabKey, label: 'Branding & Appearance', icon: Palette },
   { key: 'printers' as TabKey, label: 'Thermal Printers', icon: Printer },
   { key: 'diagnostics' as TabKey, label: 'Diagnostics', icon: Activity },
   { key: 'account' as TabKey, label: 'Account', icon: User },
@@ -620,7 +627,7 @@ const userInitials = (name: string | undefined): string => {
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="flex border-b border-border gap-2">
+    <div class="flex border-b border-border gap-2 overflow-x-auto no-scrollbar">
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -652,6 +659,113 @@ const userInitials = (name: string | undefined): string => {
       <Alert v-if="brandingSuccess" variant="success">
         {{ brandingSuccess }}
       </Alert>
+
+      <!-- Interface Appearance & Dark Mode Section -->
+      <div class="flex flex-col gap-3 p-4 rounded-xl border border-border bg-surface">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Interface Appearance</h3>
+            <p class="text-xs text-foreground font-medium mt-0.5">
+              Choose your preferred visual theme for the OmniPOS dashboard and cashier terminal.
+            </p>
+          </div>
+          <Badge variant="primary" class="font-mono text-2xs uppercase">
+            Active: {{ themeStore.theme }}
+          </Badge>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <!-- Light Theme Tile -->
+          <button
+            type="button"
+            class="group relative flex flex-col items-start gap-2.5 p-3.5 rounded-xl border-2 transition-all text-left cursor-pointer"
+            :class="themeStore.theme === 'light' ? 'border-cta bg-cta/5 shadow-xs' : 'border-border bg-card hover:border-border-strong'"
+            @click="themeStore.setTheme('light')"
+          >
+            <div class="w-full flex items-center justify-between">
+              <div class="w-7 h-7 rounded-lg bg-[#FFFBEB] text-[#D97706] flex items-center justify-center">
+                <Sun :size="15" />
+              </div>
+              <div v-if="themeStore.theme === 'light'" class="w-4 h-4 rounded-full bg-cta text-white flex items-center justify-center">
+                <Check :size="10" />
+              </div>
+            </div>
+            <!-- Visual Mock Preview -->
+            <div class="w-full h-12 rounded-lg bg-[#FAF7F2] border border-[#E8E2D9] p-1.5 flex gap-1 overflow-hidden">
+              <div class="w-3 h-full rounded bg-[#FFFFFF] border border-[#E8E2D9]"></div>
+              <div class="flex-1 flex flex-col gap-1">
+                <div class="w-full h-2 rounded bg-[#924C00]/20"></div>
+                <div class="w-2/3 h-2 rounded bg-[#FF8800]/30"></div>
+              </div>
+            </div>
+            <div>
+              <span class="text-xs font-bold text-foreground block">Light Mode</span>
+              <span class="text-2xs text-muted-foreground">Warm Cream & Amber retail canvas</span>
+            </div>
+          </button>
+
+          <!-- Dark Theme Tile -->
+          <button
+            type="button"
+            class="group relative flex flex-col items-start gap-2.5 p-3.5 rounded-xl border-2 transition-all text-left cursor-pointer"
+            :class="themeStore.theme === 'dark' ? 'border-cta bg-cta/5 shadow-xs' : 'border-border bg-card hover:border-border-strong'"
+            @click="themeStore.setTheme('dark')"
+          >
+            <div class="w-full flex items-center justify-between">
+              <div class="w-7 h-7 rounded-lg bg-[#2E241A] text-[#FFB781] flex items-center justify-center">
+                <Moon :size="15" />
+              </div>
+              <div v-if="themeStore.theme === 'dark'" class="w-4 h-4 rounded-full bg-cta text-white flex items-center justify-center">
+                <Check :size="10" />
+              </div>
+            </div>
+            <!-- Visual Mock Preview -->
+            <div class="w-full h-12 rounded-lg bg-[#14120E] border border-[#332C25] p-1.5 flex gap-1 overflow-hidden">
+              <div class="w-3 h-full rounded bg-[#1E1B17] border border-[#332C25]"></div>
+              <div class="flex-1 flex flex-col gap-1">
+                <div class="w-full h-2 rounded bg-[#FFB781]/30"></div>
+                <div class="w-2/3 h-2 rounded bg-[#FF941A]/40"></div>
+              </div>
+            </div>
+            <div>
+              <span class="text-xs font-bold text-foreground block">Dark Mode</span>
+              <span class="text-2xs text-muted-foreground">Warm Obsidian & Radiant Amber</span>
+            </div>
+          </button>
+
+          <!-- System Auto Tile -->
+          <button
+            type="button"
+            class="group relative flex flex-col items-start gap-2.5 p-3.5 rounded-xl border-2 transition-all text-left cursor-pointer"
+            :class="themeStore.theme === 'system' ? 'border-cta bg-cta/5 shadow-xs' : 'border-border bg-card hover:border-border-strong'"
+            @click="themeStore.setTheme('system')"
+          >
+            <div class="w-full flex items-center justify-between">
+              <div class="w-7 h-7 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                <Laptop :size="15" />
+              </div>
+              <div v-if="themeStore.theme === 'system'" class="w-4 h-4 rounded-full bg-cta text-white flex items-center justify-center">
+                <Check :size="10" />
+              </div>
+            </div>
+            <!-- Visual Mock Preview (Split Light/Dark) -->
+            <div class="w-full h-12 rounded-lg border border-border p-1.5 flex gap-1 overflow-hidden bg-gradient-to-r from-[#FAF7F2] to-[#14120E]">
+              <div class="w-1/2 h-full flex flex-col gap-1">
+                <div class="w-full h-2 rounded bg-[#924C00]/30"></div>
+                <div class="w-2/3 h-2 rounded bg-[#FF8800]/40"></div>
+              </div>
+              <div class="w-1/2 h-full flex flex-col gap-1">
+                <div class="w-full h-2 rounded bg-[#FFB781]/30"></div>
+                <div class="w-2/3 h-2 rounded bg-[#FF941A]/40"></div>
+              </div>
+            </div>
+            <div>
+              <span class="text-xs font-bold text-foreground block">System Default</span>
+              <span class="text-2xs text-muted-foreground">Matches operating system setting</span>
+            </div>
+          </button>
+        </div>
+      </div>
 
       <!-- Logo Section -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 rounded-xl border border-border bg-surface">

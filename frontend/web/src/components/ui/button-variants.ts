@@ -16,11 +16,11 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-cta text-[#1A1C1C] font-semibold hover:bg-cta-hover active:bg-cta-active focus-visible:ring-cta shadow-sm shadow-cta/20',
+          'bg-cta text-white dark:text-neutral-950 font-semibold hover:bg-cta-hover active:bg-cta-active focus-visible:ring-cta shadow-sm shadow-cta/20',
         cta:
-          'bg-cta text-[#1A1C1C] font-semibold hover:bg-cta-hover active:bg-cta-active focus-visible:ring-cta shadow-sm shadow-cta/20',
+          'bg-cta text-white dark:text-neutral-950 font-semibold hover:bg-cta-hover active:bg-cta-active focus-visible:ring-cta shadow-sm shadow-cta/20',
         amber:
-          'bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover active:bg-primary-active focus-visible:ring-primary font-semibold',
+          'bg-primary text-white dark:text-neutral-950 shadow-xs hover:bg-primary-hover active:bg-primary-active focus-visible:ring-primary font-semibold',
         destructive:
           'bg-destructive text-destructive-foreground shadow-xs hover:bg-[#9A1414] active:bg-[#7D0F0F] focus-visible:ring-destructive font-semibold',
         success:

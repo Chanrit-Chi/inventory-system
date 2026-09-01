@@ -2,23 +2,29 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useSalesChannelStore, type SalesChannel } from '@/stores/salesChannelStore'
+import { useNotificationStore, type HeaderNotification } from '@/stores/notificationStore'
+import { usePermissions } from '@/composables/usePermissions'
 import {
   Search,
   Bell,
-  ChevronDown,
-  Check,
-  Radio,
   User,
   Settings,
   LogOut,
   AlertTriangle,
   ArrowDownToLine,
   CheckCircle2,
+  AlertCircle,
+  FileText,
+  Shield,
+  Loader2,
   X,
   CreditCard,
-  LayoutDashboard
+  LayoutDashboard,
+  PanelLeftClose,
+  ChevronDown,
+  Menu,
 } from 'lucide-vue-next'
+import ThemeToggle from '@/components/shell/ThemeToggle.vue'
 
 export interface StoreBranding {
   store_name: string
@@ -31,15 +37,7 @@ export interface BreadcrumbItem {
   to?: string
 }
 
-export interface HeaderNotification {
-  id: string
-  title: string
-  desc: string
-  time: string
-  variant: 'warning' | 'info' | 'success' | 'danger'
-  unread: boolean
-  to?: string
-}
+export type { HeaderNotification }
 
 const props = withDefaults(
   defineProps<{
@@ -65,98 +63,36 @@ const emit = defineEmits<{
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const salesChannelStore = useSalesChannelStore()
+const notificationStore = useNotificationStore()
+const { can } = usePermissions()
 
 // Dropdown popover open states
-const isChannelOpen = ref(false)
 const isNotificationsOpen = ref(false)
 const isUserMenuOpen = ref(false)
-const notificationFilter = ref<'all' | 'unread'>('all')
 
-// Fallback channels
-const defaultChannels: SalesChannel[] = [
-  { id: 'pos-main', name: 'Main Store POS (Register 1)', platform: 'pos', is_active: true, is_default: true },
-  { id: 'web-store', name: 'Online Web Store', platform: 'web', is_active: true, is_default: false },
-  { id: 'wh-hub', name: 'Central Warehouse Hub', platform: 'online', is_active: true, is_default: false },
-]
-
-const currentChannels = computed(() => {
-  if (salesChannelStore.salesChannels.length > 0) {
-    return salesChannelStore.salesChannels
-  }
-  return defaultChannels
+const notificationFilter = computed({
+  get: () => notificationStore.notificationFilter,
+  set: (val: 'all' | 'unread') => {
+    notificationStore.notificationFilter = val
+  },
 })
 
-const activeChannel = ref<SalesChannel>(defaultChannels[0])
-
-function initActiveChannel() {
-  const savedId = localStorage.getItem('omnipos_active_channel')
-  const matched = currentChannels.value.find(c => c.id === savedId)
-  if (matched) {
-    activeChannel.value = matched
-  } else if (currentChannels.value.length > 0) {
-    activeChannel.value = currentChannels.value[0]
-  }
-}
-
-function selectChannel(channel: SalesChannel) {
-  activeChannel.value = channel
-  localStorage.setItem('omnipos_active_channel', channel.id)
-  isChannelOpen.value = false
-}
-
-// Notifications state
-const notifications = ref<HeaderNotification[]>([
-  {
-    id: 'n-1',
-    title: 'Low Stock Alert: Optical Mouse',
-    desc: 'Wireless Optical Mouse (SKU: MOU-001) is down to 3 units.',
-    time: '4m ago',
-    variant: 'warning',
-    unread: true,
-    to: '/inventory',
-  },
-  {
-    id: 'n-2',
-    title: 'Restock Batch #RS-9942 Verified',
-    desc: 'Inbound shipment from TechSupply Co. added 120 items.',
-    time: '38m ago',
-    variant: 'info',
-    unread: true,
-    to: '/restock',
-  },
-  {
-    id: 'n-3',
-    title: 'POS Register Sync Complete',
-    desc: 'Register #1 recorded 18 checkout sales ($1,480.00).',
-    time: '2h ago',
-    variant: 'success',
-    unread: false,
-    to: '/orders',
-  },
-])
-
-const unreadCount = computed(() => {
-  return notifications.value.filter(n => n.unread).length
-})
-
-const filteredNotifications = computed(() => {
-  if (notificationFilter.value === 'unread') {
-    return notifications.value.filter(n => n.unread)
-  }
-  return notifications.value
-})
+// Notifications state synced with store
+const notifications = computed(() => notificationStore.notifications)
+const unreadCount = computed(() => notificationStore.unreadCount)
+const filteredNotifications = computed(() => notificationStore.filteredNotifications)
+const isNotificationsLoading = computed(() => notificationStore.isLoading)
 
 function markAllRead() {
-  notifications.value.forEach(n => (n.unread = false))
+  notificationStore.markAllAsRead()
 }
 
 function dismissNotification(id: string) {
-  notifications.value = notifications.value.filter(n => n.id !== id)
+  notificationStore.dismiss(id)
 }
 
 function handleNotificationClick(item: HeaderNotification) {
-  item.unread = false
+  notificationStore.markAsRead(item.id)
   isNotificationsOpen.value = false
   if (item.to) {
     router.push(item.to)
@@ -165,16 +101,17 @@ function handleNotificationClick(item: HeaderNotification) {
 
 // Dynamic Route Breadcrumbs Hierarchy
 const breadcrumbs = computed<BreadcrumbItem[]>(() => {
+  const homePath = can('reports:view') ? '/dashboard' : '/pos'
   const root: BreadcrumbItem = {
     label: props.branding.store_name || 'OmniPOS',
-    to: '/dashboard',
+    to: homePath,
   }
   const path = route.path
 
-  if (path === '/dashboard' || path === '/') {
+  if (path === '/dashboard' || (path === '/' && can('reports:view'))) {
     return [root, { label: 'Executive Dashboard' }]
   }
-  if (path === '/pos') {
+  if (path === '/pos' || (path === '/' && !can('reports:view'))) {
     return [root, { label: 'POS Terminal' }]
   }
   if (path === '/products') {
@@ -207,6 +144,9 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => {
   }
   if (path === '/restock') {
     return [root, { label: 'Operations', to: '/inventory' }, { label: 'Restock Intake' }]
+  }
+  if (path === '/import') {
+    return [root, { label: 'Operations', to: '/inventory' }, { label: 'Import Data' }]
   }
   if (path === '/suppliers') {
     return [root, { label: 'Operations', to: '/inventory' }, { label: 'Suppliers & Vendors' }]
@@ -286,9 +226,6 @@ function formatRole(role: string) {
 // Close dropdowns on outside click
 function onWindowClick(e: MouseEvent) {
   const target = e.target as HTMLElement
-  if (!target.closest('.header-channel-wrapper')) {
-    isChannelOpen.value = false
-  }
   if (!target.closest('.header-notifications-wrapper')) {
     isNotificationsOpen.value = false
   }
@@ -299,33 +236,43 @@ function onWindowClick(e: MouseEvent) {
 
 onMounted(() => {
   window.addEventListener('click', onWindowClick)
-  salesChannelStore.fetchSalesChannels().then(() => {
-    initActiveChannel()
-  }).catch(() => {
-    initActiveChannel()
-  })
+  notificationStore.startPolling(30000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', onWindowClick)
+  notificationStore.stopPolling()
 })
 </script>
 
 <template>
   <header class="app-header" :class="{ 'app-header--pos-mode': route.path === '/pos' }">
-    <!-- Left Zone: Dynamic Breadcrumbs -->
+    <!-- Left Zone: Universal Sidebar Toggle & Dynamic Breadcrumbs -->
     <div class="header-left">
+      <!-- Universal Sidebar Toggle (Desktop & Mobile) -->
+      <button
+        type="button"
+        class="header-sidebar-toggle-btn"
+        :title="sidebarCollapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)'"
+        :aria-label="sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'"
+        @click="emit('toggle-sidebar')"
+      >
+        <Menu v-if="sidebarCollapsed" :size="18" />
+        <PanelLeftClose v-else :size="18" />
+      </button>
+
       <nav class="header-breadcrumbs" aria-label="Breadcrumb navigation">
         <template v-for="(crumb, idx) in breadcrumbs" :key="crumb.label + idx">
           <RouterLink
             v-if="crumb.to && idx < breadcrumbs.length - 1"
             :to="crumb.to"
             class="header-breadcrumb-link"
+            :class="{ 'header-breadcrumb-root': idx === 0, 'header-breadcrumb-mid': idx > 0 }"
           >
             {{ crumb.label }}
           </RouterLink>
           <span v-else class="header-breadcrumb-current">{{ crumb.label }}</span>
-          <span v-if="idx < breadcrumbs.length - 1" class="header-breadcrumb-sep">/</span>
+          <span v-if="idx < breadcrumbs.length - 1" class="header-breadcrumb-sep" :class="{ 'header-breadcrumb-sep-root': idx === 0 }">/</span>
         </template>
       </nav>
 
@@ -350,45 +297,8 @@ onUnmounted(() => {
         <kbd class="header-search-kbd">⌘K</kbd>
       </button>
 
-      <!-- Active Channel Selector Dropdown -->
-      <div class="header-channel-wrapper">
-        <button
-          type="button"
-          class="header-channel-btn"
-          :class="{ 'header-channel-btn--open': isChannelOpen }"
-          @click="isChannelOpen = !isChannelOpen"
-        >
-          <span class="header-channel-dot"></span>
-          <span class="header-channel-name">{{ activeChannel.name }}</span>
-          <ChevronDown :size="13" class="header-chevron" />
-        </button>
-
-        <Transition name="dropdown-pop">
-          <div v-if="isChannelOpen" class="header-channel-dropdown">
-            <div class="header-dropdown-header">
-              <Radio :size="14" class="text-primary" />
-              <span>Select Sales Channel</span>
-            </div>
-
-            <div class="header-dropdown-list">
-              <button
-                v-for="ch in currentChannels"
-                :key="ch.id"
-                type="button"
-                class="header-dropdown-item"
-                :class="{ 'header-dropdown-item--active': ch.id === activeChannel.id }"
-                @click="selectChannel(ch)"
-              >
-                <div class="header-channel-item-info">
-                  <span class="header-channel-item-name">{{ ch.name }}</span>
-                  <span class="header-channel-item-type">{{ ch.platform || 'POS' }}</span>
-                </div>
-                <Check v-if="ch.id === activeChannel.id" :size="15" class="header-channel-check" />
-              </button>
-            </div>
-          </div>
-        </Transition>
-      </div>
+      <!-- Theme Switcher Dropdown -->
+      <ThemeToggle />
 
       <!-- Notifications Bell Dropdown -->
       <div class="header-notifications-wrapper">
@@ -410,6 +320,7 @@ onUnmounted(() => {
             <div class="header-notifications-header">
               <div class="header-notifications-title-row">
                 <span class="header-notifications-title">Notifications</span>
+                <Loader2 v-if="isNotificationsLoading" :size="12" class="animate-spin text-[#8C8275] ml-1.5" />
                 <span v-if="unreadCount > 0" class="header-unread-count-pill">
                   {{ unreadCount }} unread
                 </span>
@@ -458,8 +369,11 @@ onUnmounted(() => {
                     class="header-notif-icon-wrap"
                     :class="`header-notif-icon-wrap--${item.variant}`"
                   >
-                    <AlertTriangle v-if="item.variant === 'warning'" :size="14" />
-                    <ArrowDownToLine v-else-if="item.variant === 'info'" :size="14" />
+                    <AlertCircle v-if="item.variant === 'danger'" :size="14" />
+                    <AlertTriangle v-else-if="item.variant === 'warning'" :size="14" />
+                    <FileText v-else-if="item.type === 'invoice' || item.type === 'quotation'" :size="14" />
+                    <Shield v-else-if="item.type === 'audit'" :size="14" />
+                    <ArrowDownToLine v-else-if="item.type === 'restock' || item.variant === 'info'" :size="14" />
                     <CheckCircle2 v-else :size="14" />
                   </div>
 
@@ -520,15 +434,19 @@ onUnmounted(() => {
             </div>
 
             <div class="header-user-dropdown-links">
-              <RouterLink to="/dashboard" class="header-user-link" @click="isUserMenuOpen = false">
+              <RouterLink v-if="can('reports:view')" to="/dashboard" class="header-user-link" @click="isUserMenuOpen = false">
                 <LayoutDashboard :size="15" />
                 <span>Dashboard Overview</span>
               </RouterLink>
-              <RouterLink to="/settings" class="header-user-link" @click="isUserMenuOpen = false">
+              <RouterLink v-if="can('pos:checkout')" to="/pos" class="header-user-link" @click="isUserMenuOpen = false">
+                <CreditCard :size="15" />
+                <span>POS Register</span>
+              </RouterLink>
+              <RouterLink v-if="can('settings:*')" to="/settings" class="header-user-link" @click="isUserMenuOpen = false">
                 <Settings :size="15" />
                 <span>Store Settings</span>
               </RouterLink>
-              <RouterLink to="/users" class="header-user-link" @click="isUserMenuOpen = false">
+              <RouterLink v-if="can('users:view')" to="/users" class="header-user-link" @click="isUserMenuOpen = false">
                 <User :size="15" />
                 <span>Staff & Accounts</span>
               </RouterLink>
@@ -554,28 +472,49 @@ onUnmounted(() => {
 <style scoped>
 .app-header {
   height: 64px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
   padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
-  z-index: 30;
-  box-shadow: 0 1px 4px rgba(26, 28, 24, 0.03);
+  z-index: 50;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
 .app-header--pos-mode {
-  border-bottom-color: #FFDCC4;
-  background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF8 100%);
+  border-bottom-color: var(--color-border, #FFDCC4);
+  background: linear-gradient(180deg, var(--color-card, #FFFFFF) 0%, var(--color-surface-subtle, #FFFDF8) 100%);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
+}
+
+.header-sidebar-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
+  color: var(--color-muted-foreground, #6B6358);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+}
+
+.header-sidebar-toggle-btn:hover {
+  background: var(--color-accent, #FFF3E0);
+  color: var(--color-primary, #924C00);
+  border-color: var(--color-border-strong, #FFDCC4);
 }
 
 .header-breadcrumbs {
@@ -583,28 +522,28 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
 }
 
 .header-breadcrumb-link {
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   text-decoration: none;
   transition: color 140ms ease;
 }
 
 .header-breadcrumb-link:hover {
-  color: #924C00;
+  color: var(--color-primary, #924C00);
   text-decoration: underline;
 }
 
 .header-breadcrumb-current {
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   font-weight: 600;
 }
 
 .header-breadcrumb-sep {
-  color: #C7C2B8;
+  color: var(--color-muted-foreground, #C7C2B8);
   font-size: 11px;
 }
 
@@ -614,8 +553,8 @@ onUnmounted(() => {
   gap: 6px;
   padding: 3px 10px;
   border-radius: 9999px;
-  background: #FF8800;
-  color: #FFFFFF;
+  background: var(--color-cta, #FF8800);
+  color: var(--color-cta-foreground, #FFFFFF);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -634,25 +573,25 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  background-color: #FAF7F2;
-  border: 1px solid #E8E2D9;
+  background-color: var(--color-surface-subtle, #FAF7F2);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 10px;
   padding: 7px 12px;
   font-size: 13px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .header-search-btn:hover {
-  background-color: #FFFFFF;
-  border-color: #FFDCC4;
-  color: #1A1C1C;
-  box-shadow: 0 2px 6px rgba(146, 76, 0, 0.06);
+  background-color: var(--color-card, #FFFFFF);
+  border-color: var(--color-border-strong, #FFDCC4);
+  color: var(--color-foreground, #1A1C1C);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .header-search-icon {
-  color: #924C00;
+  color: var(--color-primary, #924C00);
 }
 
 .header-search-placeholder {
@@ -663,11 +602,11 @@ onUnmounted(() => {
   font-family: var(--font-mono, monospace);
   font-size: 10.5px;
   font-weight: 700;
-  background-color: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background-color: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 4px;
   padding: 1px 6px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 /* Sales Channel Selector */
@@ -681,30 +620,30 @@ onUnmounted(() => {
   gap: 8px;
   padding: 7px 12px;
   border-radius: 10px;
-  border: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
   font-size: 12.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .header-channel-btn:hover,
 .header-channel-btn--open {
-  background: #FFFFFF;
-  border-color: #FFDCC4;
+  background: var(--color-card, #FFFFFF);
+  border-color: var(--color-border-strong, #FFDCC4);
 }
 
 .header-channel-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background-color: #10B981;
+  background-color: var(--color-success, #10B981);
 }
 
 .header-chevron {
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   transition: transform 150ms ease;
 }
 
@@ -717,11 +656,11 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   right: 0;
   width: 260px;
-  background: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(26, 28, 24, 0.12);
-  z-index: 50;
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.12));
+  z-index: 60;
   overflow: hidden;
 }
 
@@ -734,9 +673,9 @@ onUnmounted(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6B6358;
-  border-bottom: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  color: var(--color-muted-foreground, #6B6358);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
 }
 
 .header-dropdown-list {
@@ -761,12 +700,12 @@ onUnmounted(() => {
 }
 
 .header-dropdown-item:hover {
-  background-color: #FAF7F2;
+  background-color: var(--color-muted, #FAF7F2);
 }
 
 .header-dropdown-item--active {
-  background-color: #FFF3E0;
-  border-color: #FFDCC4;
+  background-color: var(--color-cta-muted, #FFF3E0);
+  border-color: var(--color-border, #FFDCC4);
 }
 
 .header-channel-item-info {
@@ -777,17 +716,17 @@ onUnmounted(() => {
 .header-channel-item-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .header-channel-item-type {
   font-size: 11px;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   text-transform: uppercase;
 }
 
 .header-channel-check {
-  color: #924C00;
+  color: var(--color-primary, #924C00);
 }
 
 /* Notifications Popover */
@@ -799,9 +738,9 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid #E8E2D9;
-  background: #FAF7F2;
-  color: #574335;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
+  color: var(--color-secondary-foreground, #574335);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -812,9 +751,9 @@ onUnmounted(() => {
 
 .header-icon-btn:hover,
 .header-icon-btn--active {
-  background: #FFFFFF;
-  border-color: #FFDCC4;
-  color: #924C00;
+  background: var(--color-card, #FFFFFF);
+  border-color: var(--color-border-strong, #FFDCC4);
+  color: var(--color-primary, #924C00);
 }
 
 .header-bell-badge {
@@ -825,14 +764,14 @@ onUnmounted(() => {
   height: 17px;
   padding: 0 4px;
   border-radius: 9999px;
-  background-color: #FF8800;
-  color: #FFFFFF;
+  background-color: var(--color-cta, #FF8800);
+  color: var(--color-cta-foreground, #FFFFFF);
   font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #FFFFFF;
+  border: 2px solid var(--color-card, #FFFFFF);
 }
 
 .header-notifications-popover {
@@ -840,11 +779,11 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   right: 0;
   width: 360px;
-  background: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(26, 28, 24, 0.14);
-  z-index: 50;
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(0, 0, 0, 0.14));
+  z-index: 60;
   overflow: hidden;
 }
 
@@ -853,8 +792,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
 }
 
 .header-notifications-title-row {
@@ -866,7 +805,7 @@ onUnmounted(() => {
 .header-notifications-title {
   font-size: 13.5px;
   font-weight: 700;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .header-unread-count-pill {
@@ -874,14 +813,14 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 9999px;
-  background: #FFE4CC;
-  color: #924C00;
+  background: var(--color-cta-muted, #FFE4CC);
+  color: var(--color-primary, #924C00);
 }
 
 .header-mark-all-btn {
   font-size: 11.5px;
   font-weight: 600;
-  color: #924C00;
+  color: var(--color-primary, #924C00);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -890,13 +829,13 @@ onUnmounted(() => {
 }
 
 .header-mark-all-btn:hover {
-  background: #FFF3E0;
+  background: var(--color-accent, #FFF3E0);
 }
 
 .header-notifications-tabs {
   display: flex;
-  border-bottom: 1px solid #E8E2D9;
-  background: #FFFFFF;
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-card, #FFFFFF);
 }
 
 .header-notif-tab {
@@ -904,7 +843,7 @@ onUnmounted(() => {
   padding: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -913,9 +852,9 @@ onUnmounted(() => {
 }
 
 .header-notif-tab--active {
-  color: #924C00;
-  border-bottom-color: #924C00;
-  background: #FFFDF8;
+  color: var(--color-primary, #924C00);
+  border-bottom-color: var(--color-primary, #924C00);
+  background: var(--color-surface-subtle, #FFFDF8);
 }
 
 .header-notifications-list {
@@ -928,18 +867,18 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #E8E2D9;
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
   cursor: pointer;
   transition: background-color 140ms ease;
   position: relative;
 }
 
 .header-notification-item:hover {
-  background-color: #FAF7F2;
+  background-color: var(--color-surface-subtle, #FAF7F2);
 }
 
 .header-notification-item--unread {
-  background-color: #FFFBF5;
+  background-color: var(--color-surface-subtle, #FFFBF5);
 }
 
 .header-notif-icon-wrap {
@@ -953,21 +892,27 @@ onUnmounted(() => {
 }
 
 .header-notif-icon-wrap--warning {
-  background: #FFFBEB;
-  color: #D97706;
-  border: 1px solid #FDE68A;
+  background: var(--color-warning-bg, #FFFBEB);
+  color: var(--color-warning, #D97706);
+  border: 1px solid var(--color-warning-border, #FDE68A);
 }
 
 .header-notif-icon-wrap--info {
-  background: #E0F2FE;
-  color: #0369A1;
-  border: 1px solid #BAE6FD;
+  background: var(--color-info-bg, #E0F2FE);
+  color: var(--color-info-foreground, #0369A1);
+  border: 1px solid var(--color-info-border, #BAE6FD);
 }
 
 .header-notif-icon-wrap--success {
-  background: #ECFDF5;
-  color: #10B981;
-  border: 1px solid #A7F3D0;
+  background: var(--color-success-bg, #ECFDF5);
+  color: var(--color-success, #10B981);
+  border: 1px solid var(--color-success-border, #A7F3D0);
+}
+
+.header-notif-icon-wrap--danger {
+  background: var(--color-error-bg, #FEF2F2);
+  color: var(--color-destructive, #EF4444);
+  border: 1px solid var(--color-error-border, #FECACA);
 }
 
 .header-notif-content {
@@ -981,18 +926,18 @@ onUnmounted(() => {
 .header-notif-title {
   font-size: 12.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .header-notif-desc {
   font-size: 11.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   line-height: 1.35;
 }
 
 .header-notif-time {
   font-size: 10.5px;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   margin-top: 2px;
 }
 
@@ -1002,7 +947,7 @@ onUnmounted(() => {
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1013,7 +958,7 @@ onUnmounted(() => {
 
 .header-notif-dismiss:hover {
   opacity: 1;
-  background: #F0EAE1;
+  background: var(--color-muted, #F0EAE1);
 }
 
 .header-notif-empty {
@@ -1027,19 +972,19 @@ onUnmounted(() => {
 }
 
 .header-notif-empty-icon {
-  color: #10B981;
+  color: var(--color-success, #10B981);
   margin-bottom: 4px;
 }
 
 .header-notif-empty-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .header-notif-empty-desc {
   font-size: 12px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 /* User Profile Menu */
@@ -1053,30 +998,30 @@ onUnmounted(() => {
   gap: 8px;
   padding: 4px 10px 4px 4px;
   border-radius: 12px;
-  border: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
   cursor: pointer;
   transition: all 150ms ease;
 }
 
 .header-user-btn:hover,
 .header-user-btn--open {
-  background: #FFFFFF;
-  border-color: #FFDCC4;
+  background: var(--color-card, #FFFFFF);
+  border-color: var(--color-border-strong, #FFDCC4);
 }
 
 .header-user-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #FFF3E0;
-  color: #924C00;
+  background: var(--color-accent, #FFF3E0);
+  color: var(--color-primary, #924C00);
   font-weight: 700;
   font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #FFDCC4;
+  border: 1px solid var(--color-border, #FFDCC4);
   position: relative;
 }
 
@@ -1087,8 +1032,8 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #10B981;
-  border: 1.5px solid #FFFFFF;
+  background-color: var(--color-success, #10B981);
+  border: 1.5px solid var(--color-card, #FFFFFF);
 }
 
 .header-user-meta {
@@ -1100,13 +1045,13 @@ onUnmounted(() => {
 .header-user-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   line-height: 1.2;
 }
 
 .header-user-role {
   font-size: 10.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 .header-user-dropdown {
@@ -1114,11 +1059,11 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   right: 0;
   width: 240px;
-  background: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(26, 28, 24, 0.14);
-  z-index: 50;
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(0, 0, 0, 0.14));
+  z-index: 60;
   overflow: hidden;
 }
 
@@ -1127,16 +1072,16 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 14px;
-  background: #FAF7F2;
-  border-bottom: 1px solid #E8E2D9;
+  background: var(--color-surface-subtle, #FAF7F2);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
 }
 
 .header-user-dropdown-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #924C00;
-  color: #FFFFFF;
+  background: var(--color-primary, #924C00);
+  color: var(--color-primary-foreground, #FFFFFF);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1155,7 +1100,7 @@ onUnmounted(() => {
 .header-user-dropdown-name {
   font-size: 13px;
   font-weight: 700;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1163,7 +1108,7 @@ onUnmounted(() => {
 
 .header-user-dropdown-email {
   font-size: 11px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1176,8 +1121,8 @@ onUnmounted(() => {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 9999px;
-  background: #FFE4CC;
-  color: #924C00;
+  background: var(--color-cta-muted, #FFE4CC);
+  color: var(--color-primary, #924C00);
   width: fit-content;
 }
 
@@ -1194,7 +1139,7 @@ onUnmounted(() => {
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  color: #574335;
+  color: var(--color-secondary-foreground, #574335);
   text-decoration: none;
   font-size: 12.5px;
   font-weight: 500;
@@ -1202,14 +1147,14 @@ onUnmounted(() => {
 }
 
 .header-user-link:hover {
-  background-color: #FAF7F2;
-  color: #924C00;
+  background-color: var(--color-surface-subtle, #FAF7F2);
+  color: var(--color-primary, #924C00);
 }
 
 .header-user-dropdown-footer {
   padding: 6px;
-  border-top: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  border-top: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
 }
 
 .header-user-logout-btn {
@@ -1218,7 +1163,7 @@ onUnmounted(() => {
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  color: #BA1A1A;
+  color: var(--color-destructive, #BA1A1A);
   background: transparent;
   border: none;
   width: 100%;
@@ -1229,7 +1174,7 @@ onUnmounted(() => {
 }
 
 .header-user-logout-btn:hover {
-  background: #FFDAD6;
+  background: var(--color-error-bg, #FFDAD6);
 }
 
 /* Animations */
@@ -1242,5 +1187,91 @@ onUnmounted(() => {
 .dropdown-pop-leave-to {
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
+}
+
+/* ==========================================================================
+   Responsive Breakpoints & Media Queries
+   ========================================================================== */
+
+@media (max-width: 1023px) {
+  .app-header {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-user-meta {
+    display: none;
+  }
+  .header-user-btn .header-chevron {
+    display: none;
+  }
+  .header-search-placeholder,
+  .header-search-kbd {
+    display: none;
+  }
+  .header-search-btn {
+    padding: 7px;
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    border-radius: 8px;
+  }
+  .header-channel-name {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-notifications-popover {
+    width: calc(100vw - 32px);
+    max-width: 380px;
+    right: -50px;
+  }
+}
+
+@media (max-width: 639px) {
+  .app-header {
+    padding: 0 10px;
+    height: 56px;
+  }
+  .header-breadcrumbs {
+    font-size: 12px;
+  }
+  .header-breadcrumb-root,
+  .header-breadcrumb-mid,
+  .header-breadcrumb-sep {
+    display: none;
+  }
+  .header-breadcrumb-current {
+    font-size: 13px;
+    font-weight: 700;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-channel-name {
+    display: none;
+  }
+  .header-channel-btn {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .header-pos-indicator span {
+    display: none;
+  }
+  .header-pos-indicator {
+    padding: 4px 6px;
+  }
+  .header-notifications-popover {
+    width: calc(100vw - 20px);
+    right: -80px;
+  }
+  .header-user-dropdown {
+    width: calc(100vw - 20px);
+    max-width: 280px;
+    right: 0;
+  }
 }
 </style>

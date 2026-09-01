@@ -8,17 +8,12 @@ import {
   RefreshCw,
   Edit2,
   Trash2,
-  Globe,
-  Store,
-  MessageCircle,
-  Instagram,
-  Facebook,
-  Music2,
-  Smartphone,
   Star,
   CheckCircle2,
   Layers,
+  Sparkles,
 } from 'lucide-vue-next'
+import SocialPlatformIcon, { getPlatformMeta } from '@/components/pos/SocialPlatformIcon.vue'
 import {
   Button,
   Badge,
@@ -40,13 +35,13 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  SelectField,
 } from '@/components/ui'
 
 const salesChannelStore = useSalesChannelStore()
 
 const search = ref('')
 const filterType = ref('ALL')
-const page = ref(1)
 
 const isDeleteDialogOpen = ref(false)
 const deletingChannel = ref<SalesChannel | null>(null)
@@ -58,6 +53,20 @@ const filterTabs = [
   { label: 'POS & Web', value: 'POS_ONLINE' },
   { label: 'Active Only', value: 'ACTIVE' },
   { label: 'Inactive Only', value: 'INACTIVE' }
+]
+
+const platformOptions = [
+  { label: 'Store POS', value: 'pos' },
+  { label: 'Facebook', value: 'facebook' },
+  { label: 'TikTok Live', value: 'tiktok' },
+  { label: 'Telegram', value: 'telegram' },
+  { label: 'Instagram', value: 'instagram' },
+  { label: 'WhatsApp', value: 'whatsapp' },
+  { label: 'LINE', value: 'line' },
+  { label: 'Shopee', value: 'shopee' },
+  { label: 'Lazada', value: 'lazada' },
+  { label: 'Webstore', value: 'web' },
+  { label: 'Wholesale / B2B', value: 'wholesale' },
 ]
 
 const formVisible = ref(false)
@@ -75,42 +84,86 @@ const form = ref({
 })
 
 const totalChannels = computed(() => salesChannelStore.salesChannels.length)
-const activeChannels = computed(() => salesChannelStore.salesChannels.filter(c => c.is_active).length)
-const platformCount = computed(() => new Set(salesChannelStore.salesChannels.map(c => c.platform)).size)
+const activeChannels = computed(() => salesChannelStore.salesChannels.filter(c => c.is_active !== false).length)
+const platformCount = computed(() => new Set(salesChannelStore.salesChannels.map(c => c.platform || c.type || 'pos')).size)
+
+const filteredChannels = computed(() => {
+  let list = salesChannelStore.salesChannels || []
+
+  if (filterType.value === 'ACTIVE') {
+    list = list.filter(c => c.is_active !== false)
+  } else if (filterType.value === 'INACTIVE') {
+    list = list.filter(c => c.is_active === false)
+  } else if (filterType.value === 'SOCIAL') {
+    const socialSet = new Set(['facebook', 'tiktok', 'telegram', 'instagram', 'whatsapp', 'line'])
+    list = list.filter(c => socialSet.has((c.platform || c.type || '').toLowerCase()))
+  } else if (filterType.value === 'POS_ONLINE') {
+    const posSet = new Set(['pos', 'web', 'online', 'website', 'shopee', 'lazada', 'wholesale', 'b2b'])
+    list = list.filter(c => posSet.has((c.platform || c.type || '').toLowerCase()))
+  }
+
+  if (search.value.trim()) {
+    const q = search.value.trim().toLowerCase()
+    list = list.filter(c =>
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.code && c.code.toLowerCase().includes(q)) ||
+      (c.platform && c.platform.toLowerCase().includes(q)) ||
+      (c.type && c.type.toLowerCase().includes(q))
+    )
+  }
+
+  return list
+})
 
 async function loadSalesChannels() {
-  const params: Record<string, unknown> = {
-    page: page.value
-  }
-  if (search.value.trim()) {
-    params.search = search.value.trim()
-  }
-  if (filterType.value !== 'ALL') {
-    params.filter_type = filterType.value
-  }
-
-  await salesChannelStore.fetchSalesChannels(params)
+  await salesChannelStore.fetchSalesChannels({ include_inactive: true })
 }
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    page.value = 1
-    loadSalesChannels()
-  }, 300)
+  // instant client-side filter via computed filteredChannels
 }
 
 function onFilterChange(tab: string) {
   filterType.value = tab
-  page.value = 1
-  loadSalesChannels()
 }
 
 const editingChannel = ref<SalesChannel | null>(null)
+const isCodeCustomized = ref(false)
+
+function generateCodeFromName(name: string, platform: string): string {
+  const prefixMap: Record<string, string> = {
+    pos: 'POS',
+    facebook: 'FB',
+    tiktok: 'TT',
+    telegram: 'TG',
+    instagram: 'IG',
+    whatsapp: 'WA',
+    line: 'LN',
+    shopee: 'SP',
+    lazada: 'LZ',
+    web: 'WEB',
+    online: 'WEB',
+    wholesale: 'B2B',
+  }
+  const prefix = prefixMap[(platform || 'pos').toLowerCase()] || (platform || 'POS').substring(0, 3).toUpperCase()
+  const slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return slug ? `${prefix}-${slug}` : prefix
+}
+
+function onNameOrPlatformInput() {
+  if (!isCodeCustomized.value && form.value.name.trim()) {
+    form.value.code = generateCodeFromName(form.value.name, form.value.platform)
+  }
+}
+
+function regenerateCode() {
+  isCodeCustomized.value = false
+  form.value.code = generateCodeFromName(form.value.name, form.value.platform)
+}
 
 function openCreateModal() {
   editingChannel.value = null
+  isCodeCustomized.value = false
   form.value = {
     name: '',
     platform: 'pos',
@@ -127,6 +180,7 @@ function openCreateModal() {
 
 function openEditModal(channel: any) {
   editingChannel.value = channel
+  isCodeCustomized.value = Boolean(channel.code)
   form.value = {
     name: channel.name,
     platform: channel.platform,
@@ -155,12 +209,33 @@ async function handleSubmit() {
     return
   }
 
+  // Same-platform uniqueness validation check:
+  // Names can be identical across different platforms (e.g. Facebook vs TikTok), but must be unique within the same platform.
+  const normalizedName = form.value.name.trim().toLowerCase()
+  const normalizedPlatform = (form.value.platform || 'pos').toLowerCase()
+
+  const existingOnSamePlatform = salesChannelStore.salesChannels.find(
+    (c) =>
+      c.name.trim().toLowerCase() === normalizedName &&
+      (c.platform || c.type || 'pos').toLowerCase() === normalizedPlatform &&
+      c.id !== editingChannel.value?.id
+  )
+
+  if (existingOnSamePlatform) {
+    const meta = getPlatformMeta(form.value.platform)
+    formError.value = `A sales channel named "${form.value.name.trim()}" already exists on the ${meta.label} platform. Channel names can be identical across different platforms, but must be unique within the same platform.`
+    return
+  }
+
+  // Ensure code is populated if blank
+  const finalCode = form.value.code.trim() || generateCodeFromName(form.value.name, form.value.platform)
+
   try {
     if (editingChannel.value) {
       await salesChannelStore.updateSalesChannel(editingChannel.value.id, {
         name: form.value.name.trim(),
         platform: form.value.platform as SalesChannel['platform'],
-        code: form.value.code.trim() || undefined,
+        code: finalCode,
         type: form.value.type.trim() || form.value.platform,
         image_url: form.value.image_url.trim() || undefined,
         is_active: form.value.is_active,
@@ -171,7 +246,7 @@ async function handleSubmit() {
       await salesChannelStore.createSalesChannel({
         name: form.value.name.trim(),
         platform: form.value.platform as SalesChannel['platform'],
-        code: form.value.code.trim() || undefined,
+        code: finalCode,
         type: form.value.type.trim() || form.value.platform,
         image_url: form.value.image_url.trim() || undefined,
         is_active: form.value.is_active,
@@ -187,17 +262,6 @@ async function handleSubmit() {
   } catch (e: any) {
     formError.value = e.message || 'Failed to save channel'
   }
-}
-
-function getPlatformIcon(platform: string) {
-  const p = (platform || '').toLowerCase()
-  if (p === 'telegram') return MessageCircle
-  if (p === 'facebook') return Facebook
-  if (p === 'instagram') return Instagram
-  if (p === 'tiktok') return Music2
-  if (p === 'web') return Globe
-  if (p === 'pos') return Store
-  return Smartphone
 }
 
 function toggleActive(channel: any) {
@@ -260,7 +324,7 @@ onMounted(loadSalesChannels)
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="salesChannelStore.loading" @click="loadSalesChannels">
           <RefreshCw :size="14" :class="{ 'animate-spin': salesChannelStore.loading }" />
           <span>Refresh</span>
@@ -299,17 +363,17 @@ onMounted(loadSalesChannels)
 
     <!-- Filter Bar & Tabs -->
     <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-      <div class="flex items-center gap-1.5 flex-wrap">
-        <Button
+      <div class="inline-flex items-center gap-1 p-1 bg-surface-subtle border border-border rounded-lg flex-wrap">
+        <button
           v-for="t in filterTabs"
           :key="t.value"
-          :variant="filterType === t.value ? 'primary' : 'ghost'"
-          size="sm"
-          class="h-9 px-3.5 text-xs font-medium"
+          type="button"
+          class="h-7.5 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer select-none"
+          :class="filterType === t.value ? 'bg-cta text-white font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
           @click="onFilterChange(t.value)"
         >
           {{ t.label }}
-        </Button>
+        </button>
       </div>
 
       <div class="min-w-[240px]">
@@ -334,15 +398,18 @@ onMounted(loadSalesChannels)
       </div>
 
       <EmptyState
-        v-else-if="!salesChannelStore.salesChannels.length"
+        v-else-if="!filteredChannels.length"
         :icon="Share2"
-        title="No sales channels found"
-        description="No channels configured or match the filter parameters."
+        :title="salesChannelStore.salesChannels.length ? 'No channels match filters' : 'No sales channels found'"
+        :description="salesChannelStore.salesChannels.length ? 'Try selecting a different filter tab or clearing your search.' : 'No channels configured yet. Add your first sales channel to begin.'"
       >
         <template #action>
-          <Button variant="primary" size="sm" class="gap-1.5" @click="openCreateModal">
+          <Button v-if="!salesChannelStore.salesChannels.length" variant="primary" size="sm" class="gap-1.5" @click="openCreateModal">
             <Plus :size="15" />
             <span>Add First Channel</span>
+          </Button>
+          <Button v-else variant="outline" size="sm" class="gap-1.5" @click="() => { filterType = 'ALL'; search = ''; }">
+            <span>Reset Filters</span>
           </Button>
         </template>
       </EmptyState>
@@ -360,23 +427,39 @@ onMounted(loadSalesChannels)
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="c in salesChannelStore.salesChannels" :key="c.id" class="hover:bg-surface-subtle/80 transition-colors">
+            <TableRow v-for="c in filteredChannels" :key="c.id" class="hover:bg-surface-subtle/80 transition-colors">
               <TableCell>
                 <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center flex-shrink-0">
-                    <component :is="getPlatformIcon(c.platform)" :size="16" />
+                  <div
+                    class="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 shadow-2xs"
+                    :style="{
+                      backgroundColor: getPlatformMeta(c.platform, c.name).bg,
+                      borderColor: getPlatformMeta(c.platform, c.name).border,
+                    }"
+                  >
+                    <SocialPlatformIcon :platform="c.platform" :name="c.name" :size="18" />
                   </div>
                   <div>
                     <div class="font-semibold text-foreground flex items-center gap-1.5">
                       <span>{{ c.name }}</span>
-                      <Badge v-if="c.is_default" variant="success" class="text-[9px] px-1 py-0">Default</Badge>
+                      <Badge v-if="c.is_default" variant="success" class="text-[9px] px-1.5 py-0 font-bold font-mono uppercase">Default</Badge>
                     </div>
                   </div>
                 </div>
               </TableCell>
 
-              <TableCell class="text-xs capitalize text-muted-foreground">
-                {{ c.platform }}
+              <TableCell>
+                <span
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold font-mono border"
+                  :style="{
+                    backgroundColor: getPlatformMeta(c.platform, c.name).badgeBg,
+                    borderColor: getPlatformMeta(c.platform, c.name).border,
+                    color: getPlatformMeta(c.platform, c.name).badgeText,
+                  }"
+                >
+                  <SocialPlatformIcon :platform="c.platform" :name="c.name" :size="12" />
+                  <span>{{ getPlatformMeta(c.platform, c.name).label }}</span>
+                </span>
               </TableCell>
 
               <TableCell class="font-mono text-xs text-primary font-semibold">
@@ -408,12 +491,23 @@ onMounted(loadSalesChannels)
                   >
                     <Star :size="13" />
                   </Button>
-                  <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs gap-1" @click="openEditModal(c)">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    title="Edit Channel"
+                    @click="openEditModal(c)"
+                  >
                     <Edit2 :size="13" />
-                    <span>Edit</span>
                   </Button>
-                  <Button variant="ghost" size="sm" class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10" @click="confirmDelete(c)">
-                    <Trash2 :size="14" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                    title="Delete Channel"
+                    @click="confirmDelete(c)"
+                  >
+                    <Trash2 :size="13" />
                   </Button>
                 </div>
               </TableCell>
@@ -424,7 +518,7 @@ onMounted(loadSalesChannels)
     </div>
 
     <!-- Sales Channel Modal Dialog -->
-    <Dialog :open="formVisible" @update:open="(val) => { if (!val) closeModal(); }">
+    <Dialog :open="formVisible" @update:open="(val) => !val && closeModal()">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle class="font-display">{{ editingChannel ? 'Edit Sales Channel' : 'Create Sales Channel' }}</DialogTitle>
@@ -443,30 +537,53 @@ onMounted(loadSalesChannels)
         <div class="flex flex-col gap-3 py-2">
           <div>
             <label class="block text-xs font-semibold text-foreground mb-1">Channel Name *</label>
-            <Input v-model="form.name" placeholder="e.g. Counter Register #1, Telegram Shop" class="h-9 bg-surface text-sm" />
+            <Input
+              v-model="form.name"
+              placeholder="e.g. Counter Register #1, TikTok Live, Telegram Shop"
+              class="h-9 bg-surface text-sm"
+              @input="onNameOrPlatformInput"
+            />
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Platform</label>
-              <select
+              <SelectField
                 v-model="form.platform"
-                class="w-full h-9 px-3 text-xs bg-surface border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-              >
-                <option value="pos">Store POS</option>
-                <option value="telegram">Telegram Mini-App</option>
-                <option value="facebook">Facebook Shop</option>
-                <option value="instagram">Instagram Direct</option>
-                <option value="tiktok">TikTok Store</option>
-                <option value="web">Web Storefront</option>
-              </select>
+                :options="platformOptions"
+                placeholder="Select Platform"
+                class="w-full h-9 bg-surface text-xs"
+                @change="onNameOrPlatformInput"
+              />
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-foreground mb-1">Channel Code</label>
-              <Input v-model="form.code" placeholder="POS-01" class="h-9 bg-surface text-sm font-mono" />
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-foreground">
+                  Channel Code
+                  <span class="text-3xs text-muted-foreground font-normal">(Optional)</span>
+                </label>
+                <button
+                  type="button"
+                  class="text-3xs text-primary hover:underline font-mono cursor-pointer flex items-center gap-1"
+                  title="Auto generate code from name & platform"
+                  @click="regenerateCode"
+                >
+                  <Sparkles :size="10" />
+                  <span>Auto</span>
+                </button>
+              </div>
+              <Input
+                v-model="form.code"
+                placeholder="e.g. POS-01, FB-LIVE"
+                class="h-9 bg-surface text-sm font-mono"
+                @input="() => isCodeCustomized = true"
+              />
             </div>
           </div>
+          <p class="text-3xs text-muted-foreground -mt-1">
+            Channel code is optional and will be auto-generated if left blank.
+          </p>
 
           <div class="flex items-center justify-between pt-2 border-t border-border">
             <div>

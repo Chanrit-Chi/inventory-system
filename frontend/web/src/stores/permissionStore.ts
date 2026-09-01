@@ -5,9 +5,11 @@ import api, { ApiError } from '@/api/axios'
 export interface Permission {
   id: string
   name: string
-  display_name: string
+  slug: string
+  module: string
   description?: string
-  group: string
+  display_name?: string
+  group?: string
 }
 
 export const usePermissionStore = defineStore('permission', () => {
@@ -20,7 +22,17 @@ export const usePermissionStore = defineStore('permission', () => {
     error.value = null
     try {
       const res = await api.get('/permissions')
-      permissions.value = res.data.data || []
+      const raw = res.data?.data || res.data || []
+      permissions.value = (Array.isArray(raw) ? raw : []).map((p: any) => ({
+        id: p.id,
+        name: p.name || p.display_name || p.slug,
+        slug: p.slug || p.name,
+        module: p.module || p.group || 'system',
+        description: p.description,
+        display_name: p.display_name || p.name,
+        group: p.group || p.module || 'system',
+      }))
+      return permissions.value
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch permissions'
       throw e
@@ -34,7 +46,16 @@ export const usePermissionStore = defineStore('permission', () => {
     error.value = null
     try {
       const res = await api.post('/permissions', data)
-      const permission = res.data.data as Permission
+      const raw = res.data?.data || res.data
+      const permission: Permission = {
+        id: raw.id,
+        name: raw.name || raw.display_name || raw.slug,
+        slug: raw.slug || raw.name,
+        module: raw.module || raw.group || 'system',
+        description: raw.description,
+        display_name: raw.display_name || raw.name,
+        group: raw.group || raw.module || 'system',
+      }
       permissions.value.push(permission)
       return permission
     } catch (e: unknown) {
@@ -50,7 +71,16 @@ export const usePermissionStore = defineStore('permission', () => {
     error.value = null
     try {
       const res = await api.patch(`/permissions/${id}`, data)
-      const permission = res.data.data as Permission
+      const raw = res.data?.data || res.data
+      const permission: Permission = {
+        id: raw.id,
+        name: raw.name || raw.display_name || raw.slug,
+        slug: raw.slug || raw.name,
+        module: raw.module || raw.group || 'system',
+        description: raw.description,
+        display_name: raw.display_name || raw.name,
+        group: raw.group || raw.module || 'system',
+      }
       const idx = permissions.value.findIndex(p => p.id === id)
       if (idx !== -1) permissions.value[idx] = permission
       return permission
@@ -79,12 +109,23 @@ export const usePermissionStore = defineStore('permission', () => {
   const isLoading = computed(() => loading.value)
   const permissionList = computed(() => permissions.value)
 
+  const permissionsByModule = computed(() => {
+    const map: Record<string, Permission[]> = {}
+    for (const p of permissions.value) {
+      const mod = p.module || 'system'
+      if (!map[mod]) map[mod] = []
+      map[mod].push(p)
+    }
+    return map
+  })
+
   return {
     permissions,
     loading,
     error,
     isLoading,
     permissionList,
+    permissionsByModule,
     fetchPermissions,
     createPermission,
     updatePermission,

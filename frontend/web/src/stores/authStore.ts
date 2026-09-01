@@ -9,6 +9,10 @@ export interface User {
   role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SELLER'
   department?: string | null
   phone?: string | null
+  permissions?: string[]
+  overrides?: Record<string, boolean>
+  permissionGroup?: string | null
+  isActive?: boolean
 }
 
 export interface AuthState {
@@ -56,6 +60,13 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = authUser as User
         localStorage.setItem('omnipos_token', authToken)
         localStorage.setItem('omnipos_user', JSON.stringify(authUser))
+        localStorage.removeItem('omnipos_pos_state')
+        try {
+          const { usePosStore } = await import('@/stores/posStore')
+          usePosStore().resetPosState()
+        } catch {
+          // Ignore
+        }
         isLoading.value = false
         return { success: true }
       }
@@ -70,11 +81,18 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Logout
-  function logout() {
+  async function logout() {
     token.value = null
     user.value = null
     localStorage.removeItem('omnipos_token')
     localStorage.removeItem('omnipos_user')
+    localStorage.removeItem('omnipos_pos_state')
+    try {
+      const { usePosStore } = await import('@/stores/posStore')
+      usePosStore().resetPosState()
+    } catch {
+      // Ignore
+    }
     initialized.value = false
   }
 

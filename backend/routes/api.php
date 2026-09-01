@@ -11,9 +11,11 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DeliveryCompanyController;
 use App\Http\Controllers\Api\V1\DeliveryZoneController;
 use App\Http\Controllers\Api\V1\ExpenseController;
+use App\Http\Controllers\Api\V1\ImportController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\MediaController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\PrinterController;
@@ -70,12 +72,20 @@ Route::prefix('v1')->group(function () {
         Route::patch('/auth/password', [AuthController::class, 'changePassword']);
         Route::get('/auth/me',         [AuthController::class, 'me']);
 
+        // System Notifications & Alert Center (All Authenticated Roles)
+        Route::get('/notifications',                  [NotificationController::class, 'index']);
+        Route::get('/notifications/unread-count',     [NotificationController::class, 'unreadCount']);
+        Route::patch('/notifications/{id}/read',      [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/mark-all-read',   [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{id}',          [NotificationController::class, 'dismiss']);
+
         // ============================================================
         // 2. POS & Point-of-Sale Core (All Authenticated Roles: Cashier/Seller, Manager, Admin)
         // ============================================================
         Route::get('/dashboard/summary',          [DashboardController::class, 'summary']);
         Route::get('/dashboard/staff-performance', [DashboardController::class, 'staffPerformance']);
         Route::get('/reports/analytics',           [ReportController::class, 'analytics']);
+        Route::get('/reports/inventory',           [ReportController::class, 'inventory']);
         Route::get('/products',             [ProductController::class, 'index']);
         Route::get('/products/{id}',        [ProductController::class, 'show']);
         Route::get('/variants',             [VariantController::class, 'index']);
@@ -144,6 +154,12 @@ Route::prefix('v1')->group(function () {
             Route::match(['put', 'patch'], '/products/{id}',      [ProductController::class, 'update']);
             Route::delete('/products/{id}',                      [ProductController::class, 'destroy']);
             Route::match(['put', 'patch'], '/variants/{id}',      [VariantController::class, 'update']);
+
+            // Data Import — Products & Sales Migration (XLSX/CSV)
+            Route::post('/import/products',                      [ImportController::class, 'products']);
+            Route::post('/import/sales',                         [ImportController::class, 'sales']);
+            Route::get('/import/template/products',              [ImportController::class, 'productsTemplate']);
+            Route::get('/import/template/sales',                 [ImportController::class, 'salesTemplate']);
 
             // Physical Inventory Intake & Count Adjustment
             Route::post('/inventory/restock',                    [RestockController::class, 'store']);

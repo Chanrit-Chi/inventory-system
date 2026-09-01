@@ -26,7 +26,18 @@ class SellerDailySettlementController extends BaseApiController
     {
         $actor = $request->user();
         $targetDate = $request->input('date', Carbon::today()->toDateString());
-        $sellerId = $request->input('seller_id', $actor?->id);
+        $requestedSellerId = $request->input('seller_id');
+
+        $role = strtoupper(trim($actor?->role ?? ''));
+        $isManager = in_array($role, ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'MANAGER'], true)
+            || ($actor && ($actor->hasPermission('settlement:manage') || $actor->hasPermission('settlement:view') || $actor->hasPermission('payroll:view')));
+
+        // If regular staff tries to view someone else's settlement, restrict to their own ID
+        if (!$isManager || empty($requestedSellerId)) {
+            $sellerId = $actor?->id;
+        } else {
+            $sellerId = $requestedSellerId;
+        }
 
         $seller = User::findOrFail($sellerId);
 
@@ -125,9 +136,19 @@ class SellerDailySettlementController extends BaseApiController
         ]);
 
         $actor = $request->user();
-        $sellerId = $validated['seller_id'] ?? $actor->id;
+        $requestedSellerId = $validated['seller_id'] ?? $actor->id;
         $targetDate = Carbon::parse($validated['confirmed_date'])->toDateString();
 
+        $role = strtoupper(trim($actor->role ?? ''));
+        $isManager = in_array($role, ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'MANAGER'], true)
+            || $actor->hasPermission('settlement:manage')
+            || $actor->hasPermission('payroll:manage');
+
+        if ($requestedSellerId !== $actor->id && !$isManager) {
+            return $this->errorResponse('Unauthorized: You are only permitted to sign off your own daily shift settlement.', null, 403);
+        }
+
+        $sellerId = $requestedSellerId;
         $seller = User::findOrFail($sellerId);
 
         return DB::transaction(function () use ($seller, $targetDate, $actor, $validated) {

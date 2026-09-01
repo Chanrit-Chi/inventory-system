@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-
-function totalStock(p: Product): number {
-  return (p.variants || []).reduce((sum: number, v: any) => sum + (v.quantity_on_hand || 0), 0)
-}
-
-function getStockClass(stock: number, reorderLevel = 5): string {
-  if (stock <= 0) return 'text-red-600 font-semibold'
-  if (stock <= reorderLevel) return 'text-amber-600 font-semibold'
-  return 'text-emerald-600'
-}
 import { RouterLink, useRouter } from 'vue-router'
 import { useProductStore, type Product } from '@/stores/productStore'
+import { useToast } from '@/composables/useToast'
 import {
   Plus,
   Search,
@@ -27,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  Copy,
 } from 'lucide-vue-next'
 import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
 import {
@@ -41,12 +33,6 @@ import {
   DialogDescription,
   DialogFooter,
   StatCard,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
   EmptyState,
   Skeleton,
   Alert,
@@ -54,14 +40,57 @@ import {
 
 const router = useRouter()
 const productStore = useProductStore()
+const toast = useToast()
 
 const search = ref('')
 const activeFilter = ref<string>('all')
+const categoryFilter = ref<string>('all')
 const page = ref(1)
 const viewMode = ref<'table' | 'grid'>('table')
 const deletingProduct = ref<Product | null>(null)
 const deleteLoading = ref(false)
 const isDeleteDialogOpen = ref(false)
+
+const categories = computed(() => {
+  const map = new Map<string, { id: string; name: string }>()
+  for (const p of productStore.products) {
+    if (p.category && p.category.id) {
+      map.set(p.category.id, { id: p.category.id, name: p.category.name })
+    }
+  }
+  return Array.from(map.values())
+})
+
+const displayedProducts = computed(() => {
+  if (categoryFilter.value === 'all') return productStore.products
+  return productStore.products.filter(p => p.category?.id === categoryFilter.value)
+})
+
+function totalStock(p: Product): number {
+  return (p.variants || []).reduce((sum: number, v: any) => sum + (v.quantity_on_hand || 0), 0)
+}
+
+function getStockClass(stock: number, reorderLevel = 5): string {
+  if (stock <= 0) return 'text-red-700 dark:text-red-300 font-semibold'
+  if (stock <= reorderLevel) return 'text-amber-800 dark:text-amber-300 font-semibold'
+  return 'text-emerald-700 dark:text-emerald-300'
+}
+
+function calcMargin(selling: number | string | undefined | null, cost: number | string | undefined | null): number | null {
+  const s = parseFloat(String(selling || 0)) || 0
+  const c = parseFloat(String(cost || 0)) || 0
+  if (s <= 0) return null
+  return Math.round(((s - c) / s) * 100)
+}
+
+async function copyToClipboard(text: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(`Copied ${label} "${text}" to clipboard!`)
+  } catch {
+    toast.info(`${label}: ${text}`)
+  }
+}
 
 // Quick Stock Adjustment Modal State
 const showAdjustmentModal = ref(false)
@@ -198,7 +227,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2.5 flex-wrap">
         <Button
           id="btn-refresh-products"
           variant="outline"
@@ -245,6 +274,36 @@ onMounted(() => {
       />
     </div>
 
+    <!-- Category Filter Pills Carousel / Bar -->
+    <div v-if="categories.length > 0" class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <button
+        type="button"
+        @click="categoryFilter = 'all'; onFilterChange(activeFilter)"
+        :class="[
+          'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer',
+          categoryFilter === 'all'
+            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+            : 'bg-card text-muted-foreground border-border hover:text-foreground hover:bg-surface-subtle'
+        ]"
+      >
+        All Categories
+      </button>
+      <button
+        v-for="cat in categories"
+        :key="cat.id"
+        type="button"
+        @click="categoryFilter = cat.id; onFilterChange(activeFilter)"
+        :class="[
+          'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer',
+          categoryFilter === cat.id
+            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+            : 'bg-card text-muted-foreground border-border hover:text-foreground hover:bg-surface-subtle'
+        ]"
+      >
+        {{ cat.name }}
+      </button>
+    </div>
+
     <!-- Filter & Search Controls -->
     <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
       <div class="flex-1 max-w-md">
@@ -272,7 +331,7 @@ onMounted(() => {
               { label: 'Inactive', val: 'inactive' }
             ]"
             :key="filter.val"
-            class="h-7.5 px-3 flex items-center rounded-md text-xs font-medium transition-colors"
+            class="h-7.5 px-3 flex items-center rounded-md text-xs font-medium transition-colors cursor-pointer"
             :class="activeFilter === filter.val ? 'bg-card text-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'"
             @click="onFilterChange(filter.val)"
           >
@@ -283,7 +342,7 @@ onMounted(() => {
         <!-- View Mode Segmented Control -->
         <div class="inline-flex h-9 items-center rounded-lg border border-border bg-surface p-0.5">
           <button
-            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors"
+            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer"
             :class="viewMode === 'table' ? 'bg-card text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'"
             @click="viewMode = 'table'"
             title="Table View"
@@ -292,7 +351,7 @@ onMounted(() => {
             <span>Table</span>
           </button>
           <button
-            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors"
+            class="h-7.5 flex items-center gap-1.5 px-3 rounded-md text-xs font-medium transition-colors cursor-pointer"
             :class="viewMode === 'grid' ? 'bg-card text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'"
             @click="viewMode = 'grid'"
             title="Cards View"
@@ -339,28 +398,28 @@ onMounted(() => {
 
       <!-- Table View -->
       <div v-else-if="viewMode === 'table'" class="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow class="bg-muted/40">
-              <TableHead class="w-14">Image</TableHead>
-              <TableHead>Product Name</TableHead>
-              <TableHead>Barcode</TableHead>
-              <TableHead>Variants</TableHead>
-              <TableHead>Stock</TableHead>
-              <TableHead>Cost Price</TableHead>
-              <TableHead>Selling Price</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead class="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="p in productStore.products"
+        <table class="w-full text-xs text-left min-w-[980px]">
+          <thead class="bg-surface-subtle text-muted-foreground text-xs font-bold border-b border-border">
+            <tr>
+              <th class="px-4 py-3 w-14">Image</th>
+              <th class="px-4 py-3 min-w-[200px]">Product Name</th>
+              <th class="px-4 py-3 w-36">Barcode / SKU</th>
+              <th class="px-4 py-3 w-40 min-w-[140px]">Variants</th>
+              <th class="px-4 py-3 w-36 min-w-[130px]">Stock</th>
+              <th class="px-4 py-3 text-right w-28 font-mono">Cost Price</th>
+              <th class="px-4 py-3 text-right w-44 min-w-[160px] font-mono">Selling Price & Margin</th>
+              <th class="px-4 py-3 text-center w-20">Active</th>
+              <th class="px-4 py-3 text-right w-36">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border/70">
+            <tr
+              v-for="p in displayedProducts"
               :key="p.id"
-              class="hover:bg-surface-subtle/80 transition-colors"
+              class="hover:bg-surface-subtle/50 transition-colors"
             >
-              <TableCell>
-                <div class="w-10 h-10 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+              <td class="px-4 py-3">
+                <div class="w-10 h-10 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
                   <img
                     v-if="p.image_url"
                     :src="p.image_url"
@@ -368,74 +427,93 @@ onMounted(() => {
                     class="w-full h-full object-cover"
                     @error="($event.target as HTMLElement).style.display='none'"
                   />
-                  <Package v-else :size="18" class="text-muted-foreground/60" />
+                  <Package v-else :size="18" class="text-primary/50" />
                 </div>
-              </TableCell>
+              </td>
 
-              <TableCell>
-                <div class="font-semibold text-foreground hover:text-primary cursor-pointer" @click="router.push(`/products/${p.id}/edit`)">
+              <td class="px-4 py-3">
+                <div class="font-bold text-xs text-foreground hover:text-primary transition-colors cursor-pointer" @click="router.push(`/products/${p.id}/edit`)">
                   {{ p.name }}
                 </div>
-                <div v-if="p.category" class="mt-0.5">
-                  <Badge variant="neutral" class="text-[10px] px-1.5 py-0">
+                <div v-if="p.category" class="mt-1">
+                  <Badge variant="primary" class="text-xs font-semibold">
                     {{ p.category.name }}
                   </Badge>
                 </div>
-              </TableCell>
+              </td>
 
-              <TableCell class="font-mono text-xs">
-                <span v-if="p.barcode" class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-foreground">
-                  {{ p.barcode }}
-                </span>
+              <td class="px-4 py-3 font-mono text-xs">
+                <button
+                  v-if="p.barcode || (p as any).sku"
+                  type="button"
+                  @click="copyToClipboard(p.barcode || (p as any).sku, 'Barcode')"
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-foreground hover:border-cta transition-colors cursor-pointer group"
+                  title="Click to copy barcode"
+                >
+                  <span>{{ p.barcode || (p as any).sku }}</span>
+                  <Copy :size="12" class="text-muted-foreground opacity-60 group-hover:opacity-100" />
+                </button>
                 <span v-else class="text-muted-foreground">—</span>
-              </TableCell>
+              </td>
 
-              <TableCell>
-                <Badge variant="info" class="font-mono text-[11px] px-2 py-0.5">
+              <td class="px-4 py-3">
+                <Badge variant="info" class="font-mono text-xs font-semibold">
                   {{ p.variants ? p.variants.length : 0 }} variants
                 </Badge>
-              </TableCell>
+              </td>
 
-              <TableCell class="font-mono text-xs tabular-nums">
-                <div class="flex items-center gap-1.5">
-                  <span
+              <td class="px-4 py-3 font-mono text-xs tabular-nums">
+                <div class="flex items-center gap-1.5 whitespace-nowrap">
+                  <Badge
                     v-if="totalStock(p) > 0"
-                    :class="getStockClass(totalStock(p))"
-                    class="px-2 py-0.5 rounded bg-surface-subtle border border-border"
+                    :variant="totalStock(p) <= 5 ? 'warning' : 'neutral'"
+                    class="font-mono font-bold text-xs px-2 py-0.5"
                   >
-                    {{ totalStock(p) }}
-                  </span>
-                  <span
+                    {{ totalStock(p) }} units
+                  </Badge>
+                  <Badge
                     v-else
-                    class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-red-600 font-semibold"
+                    variant="error"
+                    class="font-mono font-bold text-xs px-2 py-0.5"
                   >
                     Out of stock
-                  </span>
+                  </Badge>
                 </div>
-              </TableCell>
+              </td>
 
-              <TableCell class="font-mono text-xs text-muted-foreground tabular-nums">
+              <td class="px-4 py-3 text-right font-mono text-xs text-muted-foreground font-medium tabular-nums whitespace-nowrap">
                 {{ fmtMoney(p.purchase_price) }}
-              </TableCell>
+              </td>
 
-              <TableCell class="font-mono text-sm font-bold text-primary tabular-nums">
-                {{ fmtMoney(p.selling_price) }}
-              </TableCell>
+              <td class="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                <div class="flex flex-col items-end">
+                  <span class="font-mono text-xs font-bold text-primary">
+                    {{ fmtMoney(p.selling_price) }}
+                  </span>
+                  <Badge
+                    v-if="calcMargin(p.selling_price, p.purchase_price) !== null"
+                    :variant="(calcMargin(p.selling_price, p.purchase_price) ?? 0) > 20 ? 'success' : 'warning'"
+                    class="text-xs font-mono font-semibold mt-1"
+                  >
+                    {{ (calcMargin(p.selling_price, p.purchase_price) ?? 0) > 0 ? `+${calcMargin(p.selling_price, p.purchase_price)}%` : `${calcMargin(p.selling_price, p.purchase_price)}%` }} Margin
+                  </Badge>
+                </div>
+              </td>
 
-              <TableCell>
+              <td class="px-4 py-3 text-center">
                 <Switch
                   :checked="p.is_active"
                   :disabled="productStore.mutating"
                   @update:checked="(checked) => handleToggleStatus(p, checked)"
                 />
-              </TableCell>
+              </td>
 
-              <TableCell class="text-right">
+              <td class="px-4 py-3 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
-                    class="h-8 px-2 text-xs gap-1"
+                    class="h-7.5 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground hover:bg-surface-subtle font-semibold"
                     title="Quick Stock Adjustment"
                     @click="openStockAdjust(p)"
                   >
@@ -446,7 +524,7 @@ onMounted(() => {
                     :id="`btn-edit-product-${p.id}`"
                     variant="ghost"
                     size="sm"
-                    class="h-8 px-2.5 text-xs gap-1"
+                    class="h-7.5 px-2 text-xs gap-1 text-muted-foreground hover:text-primary hover:bg-surface-subtle font-semibold"
                     @click="router.push(`/products/${p.id}/edit`)"
                   >
                     <Edit2 :size="13" />
@@ -456,27 +534,27 @@ onMounted(() => {
                     :id="`btn-delete-product-${p.id}`"
                     variant="ghost"
                     size="sm"
-                    class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    class="h-7.5 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     @click="confirmDelete(p)"
                   >
                     <Trash2 :size="14" />
                   </Button>
                 </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Cards Grid View -->
       <div v-else class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div
-          v-for="p in productStore.products"
+          v-for="p in displayedProducts"
           :key="p.id"
-          class="rounded-lg border border-border bg-surface p-4 flex flex-col justify-between gap-3 hover:shadow-xs hover:border-border-strong transition-all"
+          class="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between gap-3 hover:shadow-xs hover:border-border-strong transition-all"
         >
           <div class="flex items-start justify-between gap-3">
-            <div class="w-12 h-12 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div class="w-12 h-12 rounded-xl bg-surface-subtle border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
               <img
                 v-if="p.image_url"
                 :src="p.image_url"
@@ -501,8 +579,15 @@ onMounted(() => {
             <h3 class="font-semibold text-sm text-foreground line-clamp-1 hover:text-primary cursor-pointer" @click="router.push(`/products/${p.id}/edit`)">
               {{ p.name }}
             </h3>
-            <div v-if="p.barcode" class="text-xs font-mono text-muted-foreground mt-0.5">
-              Barcode: {{ p.barcode }}
+            <div v-if="p.barcode || (p as any).sku" class="text-xs font-mono text-muted-foreground mt-0.5">
+              <button
+                type="button"
+                @click="copyToClipboard(p.barcode || (p as any).sku, 'Barcode')"
+                class="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+              >
+                <span>Barcode: {{ p.barcode || (p as any).sku }}</span>
+                <Copy :size="10" class="opacity-60 group-hover:opacity-100" />
+              </button>
             </div>
             <div class="text-xs mt-1" :class="getStockClass(totalStock(p))">
               <span v-if="totalStock(p) > 0">{{ totalStock(p) }} units in stock</span>
@@ -513,9 +598,17 @@ onMounted(() => {
           <div class="flex items-center justify-between pt-2 border-t border-border/60">
             <div>
               <span class="text-[10px] text-muted-foreground block uppercase font-medium">Selling Price</span>
-              <span class="font-mono font-bold text-base text-primary tabular-nums">
-                {{ fmtMoney(p.selling_price) }}
-              </span>
+              <div class="flex items-baseline gap-1.5">
+                <span class="font-mono font-bold text-base text-primary tabular-nums">
+                  {{ fmtMoney(p.selling_price) }}
+                </span>
+                <span
+                  v-if="calcMargin(p.selling_price, p.purchase_price) !== null"
+                  class="text-3xs font-bold font-mono text-emerald-600"
+                >
+                  {{ (calcMargin(p.selling_price, p.purchase_price) ?? 0) > 0 ? `+${calcMargin(p.selling_price, p.purchase_price)}%` : `${calcMargin(p.selling_price, p.purchase_price)}%` }}
+                </span>
+              </div>
             </div>
             <div class="text-right">
               <span class="text-[10px] text-muted-foreground block uppercase font-medium">Cost</span>

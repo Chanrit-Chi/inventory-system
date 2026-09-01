@@ -24,15 +24,16 @@ import {
   Shield,
   KeyRound,
   Settings,
-  ChevronRight,
-  ChevronLeft,
   LayoutDashboard,
   Boxes,
   FileSpreadsheet,
   LogOut,
-  PanelLeftOpen,
   ShieldCheck,
+  Upload,
+  X,
 } from 'lucide-vue-next'
+
+import { usePermissions } from '@/composables/usePermissions'
 
 export interface NavItem {
   to: string
@@ -42,6 +43,7 @@ export interface NavItem {
   badgeVariant?: 'primary' | 'orange' | 'success' | 'warning' | 'info'
   highlight?: boolean
   roles?: ('SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SELLER')[]
+  permission?: string
 }
 
 export interface NavGroup {
@@ -72,13 +74,19 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'update:collapsed', value: boolean): void
-  (e: 'toggle-collapse'): void
   (e: 'logout'): void
+  (e: 'close'): void
 }>()
+
+function handleNavClick() {
+  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+    emit('close')
+  }
+}
 
 const route = useRoute()
 const authStore = useAuthStore()
+const { can } = usePermissions()
 
 // Comprehensive 5 Navigation Groups covering all 26 application routes
 const navGroups: NavGroup[] = [
@@ -93,6 +101,7 @@ const navGroups: NavGroup[] = [
         badge: 'Quick Sale',
         badgeVariant: 'orange',
         highlight: true,
+        permission: 'pos:checkout',
       },
       {
         to: '/orders',
@@ -100,6 +109,7 @@ const navGroups: NavGroup[] = [
         icon: Receipt,
         badge: 'Live',
         badgeVariant: 'primary',
+        permission: 'pos:checkout',
       },
       {
         to: '/daily-settlements',
@@ -107,6 +117,7 @@ const navGroups: NavGroup[] = [
         icon: ShieldCheck,
         badge: 'Reconcile',
         badgeVariant: 'success',
+        permission: 'reports:view',
       },
     ],
   },
@@ -118,6 +129,7 @@ const navGroups: NavGroup[] = [
         to: '/products',
         label: 'Products Matrix',
         icon: Package,
+        permission: 'products:read',
       },
       {
         to: '/products/create',
@@ -125,16 +137,19 @@ const navGroups: NavGroup[] = [
         icon: Sparkles,
         badge: 'New',
         badgeVariant: 'info',
+        permission: 'products:create',
       },
       {
         to: '/categories',
         label: 'Categories',
         icon: FolderTree,
+        permission: 'categories:manage',
       },
       {
         to: '/attributes',
         label: 'Attributes',
         icon: SlidersHorizontal,
+        permission: 'attributes:manage',
       },
     ],
   },
@@ -148,6 +163,7 @@ const navGroups: NavGroup[] = [
         icon: Boxes,
         badge: 'Stock',
         badgeVariant: 'warning',
+        permission: 'inventory:adjust',
       },
       {
         to: '/purchase-orders',
@@ -155,21 +171,33 @@ const navGroups: NavGroup[] = [
         icon: FileText,
         badge: 'PO',
         badgeVariant: 'info',
+        permission: 'purchase-orders:create',
       },
       {
         to: '/restock',
         label: 'Restock Intake',
         icon: ArrowDownToLine,
+        permission: 'inventory:restock',
+      },
+      {
+        to: '/import',
+        label: 'Import Data',
+        icon: Upload,
+        badge: 'XLSX',
+        badgeVariant: 'info',
+        permission: 'products:create',
       },
       {
         to: '/suppliers',
         label: 'Suppliers & Vendors',
         icon: Truck,
+        permission: 'suppliers:view',
       },
       {
         to: '/delivery-settings',
         label: 'Delivery & Shipping',
         icon: MapPin,
+        permission: 'delivery:view',
       },
     ],
   },
@@ -181,36 +209,43 @@ const navGroups: NavGroup[] = [
         to: '/customers',
         label: 'Customer Loyalty',
         icon: Users,
+        permission: 'customers:view',
       },
       {
         to: '/quotations',
         label: 'Quotations',
         icon: FileText,
+        permission: 'quotations:create',
       },
       {
         to: '/invoices',
         label: 'Tax Invoices',
         icon: FileSpreadsheet,
+        permission: 'invoices:view',
       },
       {
         to: '/expenses',
         label: 'Expenses & Costs',
         icon: DollarSign,
+        permission: 'expenses:*',
       },
       {
         to: '/bank-accounts',
         label: 'Bank Accounts',
         icon: Building2,
+        permission: 'payment-methods:view',
       },
       {
         to: '/payroll',
         label: 'Staff Payroll',
         icon: Coins,
+        permission: 'payroll:view',
       },
       {
         to: '/sales-channels',
         label: 'Sales Channels',
         icon: Radio,
+        permission: 'channels:view',
       },
     ],
   },
@@ -222,71 +257,86 @@ const navGroups: NavGroup[] = [
         to: '/dashboard',
         label: 'Executive Dashboard',
         icon: LayoutDashboard,
+        permission: 'reports:view',
       },
       {
         to: '/reports',
         label: 'Reports & Analytics',
         icon: TrendingUp,
+        permission: 'reports:view',
       },
       {
         to: '/audit-logs',
         label: 'Security Audit Logs',
         icon: ScrollText,
+        permission: 'audit:view',
       },
       {
         to: '/settings',
         label: 'Store Settings',
         icon: Settings,
+        permission: 'settings:*',
       },
       {
         to: '/users',
         label: 'Admin Users',
         icon: UserCheck,
+        permission: 'users:view',
       },
       {
         to: '/roles',
         label: 'Roles Management',
         icon: Shield,
+        permission: 'roles:manage',
       },
       {
         to: '/permissions',
         label: 'Permissions Matrix',
         icon: KeyRound,
+        permission: 'roles:manage',
       },
     ],
   },
 ]
 
-// Determine role visibility (super-admins and admins see everything; managers and sellers see appropriate sets)
+// Determine role and capability visibility
 const userRole = computed(() => authStore.user?.role ?? 'SELLER')
 
 const visibleNavGroups = computed(() => {
-  if (userRole.value === 'SUPER_ADMIN' || userRole.value === 'ADMIN') {
+  if (!authStore.user || userRole.value === 'SUPER_ADMIN') {
     return navGroups
   }
 
-  // Filter for Manager / Cashier
-  return navGroups.map(group => {
-    return {
-      ...group,
-      items: group.items.filter(item => {
-        if (!item.roles) return true
-        return item.roles.includes(userRole.value as any)
-      }),
-    }
-  }).filter(group => group.items.length > 0)
+  return navGroups
+    .map(group => {
+      return {
+        ...group,
+        items: group.items.filter(item => {
+          if (item.permission && !can(item.permission)) {
+            return false
+          }
+          if (item.roles && !item.roles.includes(userRole.value as any)) {
+            return false
+          }
+          return true
+        }),
+      }
+    })
+    .filter(group => group.items.length > 0)
 })
+
+const homeRoute = computed(() => (can('reports:view') ? '/dashboard' : '/pos'))
 
 // Route active matching helper
 function isRouteActive(targetPath: string): boolean {
   if (targetPath === '/dashboard') {
-    return route.path === '/dashboard' || route.path === '/'
+    return route.path === '/dashboard' || (route.path === '/' && can('reports:view'))
   }
   if (targetPath === '/products') {
     return route.path === '/products' || (route.path.startsWith('/products/') && !route.path.startsWith('/products/create'))
   }
   if (targetPath === '/pos') {
-    return route.path.startsWith('/pos')
+    return route.path.startsWith('/pos') || (route.path === '/' && !can('reports:view'))
   }
   return route.path === targetPath || route.path.startsWith(`${targetPath}/`)
 }
@@ -311,11 +361,6 @@ function formatRole(role: string) {
   return map[role] || role
 }
 
-function toggle() {
-  emit('toggle-collapse')
-  emit('update:collapsed', !props.collapsed)
-}
-
 function handleLogout() {
   emit('logout')
 }
@@ -329,7 +374,7 @@ function handleLogout() {
   >
     <!-- Brand Header -->
     <div class="sidebar-brand-container">
-      <RouterLink to="/dashboard" class="sidebar-brand-link" :title="branding.store_name">
+      <RouterLink :to="homeRoute" class="sidebar-brand-link" :title="branding.store_name" @click="handleNavClick">
         <div class="sidebar-brand-logo-wrap">
           <img
             :src="branding.logo_url || '/logo.png'"
@@ -344,14 +389,15 @@ function handleLogout() {
         </div>
       </RouterLink>
 
+      <!-- Dedicated Mobile Close Button -->
       <button
+        v-if="!collapsed"
         type="button"
-        class="sidebar-toggle-btn"
-        :title="collapsed ? 'Expand Sidebar (Ctrl+B)' : 'Collapse Sidebar (Ctrl+B)'"
-        @click="toggle"
+        class="sidebar-mobile-close-btn"
+        title="Close Navigation Menu"
+        @click="emit('close')"
       >
-        <ChevronRight v-if="collapsed" :size="15" />
-        <ChevronLeft v-else :size="15" />
+        <X :size="18" />
       </button>
     </div>
 
@@ -377,6 +423,7 @@ function handleLogout() {
               'sidebar-nav-link--highlight': item.highlight && !isRouteActive(item.to),
             }"
             :title="collapsed ? `${item.label} (${group.title})` : undefined"
+            @click="handleNavClick"
           >
             <!-- Nav Icon -->
             <span class="sidebar-nav-icon-wrap">
@@ -411,7 +458,7 @@ function handleLogout() {
     <!-- Sidebar Bottom User Profile & Actions -->
     <div class="sidebar-footer">
       <div class="sidebar-user-card" :class="{ 'sidebar-user-card--collapsed': collapsed }">
-        <div class="sidebar-user-avatar" :title="authStore.user?.name || 'Guest User'">
+        <div class="sidebar-user-avatar" :title="`${authStore.user?.name || 'Guest User'} (${formatRole(authStore.user?.role || 'SELLER')})`">
           <span>{{ userInitials }}</span>
           <span class="sidebar-user-status-dot"></span>
         </div>
@@ -431,18 +478,6 @@ function handleLogout() {
           <LogOut :size="15" />
         </button>
       </div>
-
-      <!-- Quick collapse toggle in footer for collapsed mode ergonomics -->
-      <div v-if="collapsed" class="sidebar-footer-toggle-wrap">
-        <button
-          type="button"
-          class="sidebar-footer-toggle-btn"
-          title="Expand Sidebar"
-          @click="toggle"
-        >
-          <PanelLeftOpen :size="16" />
-        </button>
-      </div>
     </div>
   </aside>
 </template>
@@ -450,8 +485,8 @@ function handleLogout() {
 <style scoped>
 .app-sidebar {
   width: 260px;
-  background-color: #FFFFFF;
-  border-right: 1px solid #E8E2D9;
+  background-color: var(--color-card, #FFFFFF);
+  border-right: 1px solid var(--color-border, #E8E2D9);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -459,7 +494,7 @@ function handleLogout() {
   left: 0;
   z-index: 40;
   transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 2px 0 12px rgba(26, 28, 24, 0.03);
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.05);
 }
 
 .app-sidebar--collapsed {
@@ -473,9 +508,19 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #E8E2D9;
-  background: linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%);
+  border-bottom: 1px solid var(--color-border, #E8E2D9);
+  background: linear-gradient(180deg, var(--color-card, #FFFFFF) 0%, var(--color-surface-subtle, #FAF7F2) 100%);
   flex-shrink: 0;
+}
+
+.app-sidebar--collapsed .sidebar-brand-container {
+  padding: 0;
+  justify-content: center;
+}
+
+.app-sidebar--collapsed .sidebar-brand-link {
+  justify-content: center;
+  flex: none;
 }
 
 .sidebar-brand-link {
@@ -492,7 +537,7 @@ function handleLogout() {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #924C00 0%, #FF8800 100%);
+  background: linear-gradient(135deg, var(--color-primary, #924C00) 0%, var(--color-cta, #FF8800) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -515,39 +560,18 @@ function handleLogout() {
 }
 
 .sidebar-brand-name {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Poppins', sans-serif);
   font-weight: 700;
   font-size: 15.5px;
   letter-spacing: -0.02em;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   line-height: 1.2;
 }
 
 .sidebar-brand-tagline {
   font-size: 11px;
   font-weight: 500;
-  color: #6B6358;
-}
-
-.sidebar-toggle-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: 1px solid #E8E2D9;
-  background: #FAF7F2;
-  color: #6B6358;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 150ms ease;
-  flex-shrink: 0;
-}
-
-.sidebar-toggle-btn:hover {
-  background: #FFF3E0;
-  color: #924C00;
-  border-color: #FFDCC4;
+  color: var(--color-muted-foreground, #6B6358);
 }
 
 /* Nav Scroll Area */
@@ -572,7 +596,7 @@ function handleLogout() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8C8275;
+  color: var(--color-muted-foreground, #8C8275);
   padding: 4px 10px;
   margin-bottom: 2px;
   white-space: nowrap;
@@ -582,7 +606,7 @@ function handleLogout() {
 
 .sidebar-group-divider {
   height: 1px;
-  background-color: #E8E2D9;
+  background-color: var(--color-border, #E8E2D9);
   margin: 6px 8px;
 }
 
@@ -599,7 +623,7 @@ function handleLogout() {
   gap: 10px;
   padding: 8px 10px;
   border-radius: 10px;
-  color: #574335;
+  color: var(--color-secondary-foreground, #574335);
   text-decoration: none;
   font-weight: 500;
   font-size: 13px;
@@ -609,24 +633,24 @@ function handleLogout() {
 }
 
 .sidebar-nav-link:hover {
-  background-color: #FAF7F2;
-  color: #1A1C1C;
+  background-color: var(--color-muted, #FAF7F2);
+  color: var(--color-foreground, #1A1C1C);
 }
 
 .sidebar-nav-link--highlight {
-  background-color: #FFF9F2;
-  color: #924C00;
+  background-color: var(--color-accent, #FFF9F2);
+  color: var(--color-primary, #924C00);
   font-weight: 600;
 }
 
 .sidebar-nav-link--active {
-  background-color: #FFF3E0;
-  color: #924C00;
+  background-color: var(--color-cta-muted, #FFF3E0);
+  color: var(--color-primary, #924C00);
   font-weight: 600;
 }
 
 .sidebar-nav-link--active:hover {
-  background-color: #FFEADB;
+  background-color: var(--color-accent, #FFEADB);
 }
 
 .sidebar-active-indicator {
@@ -636,7 +660,7 @@ function handleLogout() {
   bottom: 6px;
   width: 3.5px;
   border-radius: 0 4px 4px 0;
-  background-color: #924C00;
+  background-color: var(--color-cta, #924C00);
 }
 
 .sidebar-nav-icon-wrap {
@@ -665,26 +689,26 @@ function handleLogout() {
 }
 
 .sidebar-nav-badge--primary {
-  background-color: #FFF3E0;
-  color: #924C00;
-  border: 1px solid #FFDCC4;
+  background-color: var(--color-cta-muted, #FFF3E0);
+  color: var(--color-primary, #924C00);
+  border: 1px solid var(--color-border, #FFDCC4);
 }
 
 .sidebar-nav-badge--orange {
-  background-color: #FF8800;
-  color: #FFFFFF;
+  background-color: var(--color-cta, #FF8800);
+  color: var(--color-cta-foreground, #FFFFFF);
 }
 
 .sidebar-nav-badge--warning {
-  background-color: #FFFBEB;
-  color: #92400E;
-  border: 1px solid #FDE68A;
+  background-color: var(--color-warning-bg, #FFFBEB);
+  color: var(--color-warning, #92400E);
+  border: 1px solid var(--color-warning-border, #FDE68A);
 }
 
 .sidebar-nav-badge--info {
-  background-color: #E0F2FE;
-  color: #0369A1;
-  border: 1px solid #BAE6FD;
+  background-color: var(--color-info-bg, #E0F2FE);
+  color: var(--color-info-foreground, #0369A1);
+  border: 1px solid var(--color-info-border, #BAE6FD);
 }
 
 /* Collapsed Tooltip */
@@ -693,8 +717,8 @@ function handleLogout() {
   left: calc(100% + 8px);
   top: 50%;
   transform: translateY(-50%);
-  background-color: #1D1B16;
-  color: #FFFFFF;
+  background-color: var(--color-surface-inverse, #1D1B16);
+  color: var(--color-surface, #FFFFFF);
   padding: 6px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -704,7 +728,7 @@ function handleLogout() {
   visibility: hidden;
   transition: all 120ms ease;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.2));
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -712,12 +736,12 @@ function handleLogout() {
 
 .sidebar-collapsed-tooltip .tooltip-title {
   font-weight: 600;
-  color: #FFFFFF;
+  color: inherit;
 }
 
 .sidebar-collapsed-tooltip .tooltip-group {
   font-size: 10px;
-  color: #C7C2B8;
+  color: var(--color-muted-foreground, #C7C2B8);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -731,8 +755,8 @@ function handleLogout() {
 /* Footer & User Profile */
 .sidebar-footer {
   padding: 10px;
-  border-top: 1px solid #E8E2D9;
-  background: #FAF7F2;
+  border-top: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -745,8 +769,8 @@ function handleLogout() {
   gap: 10px;
   padding: 6px 8px;
   border-radius: 10px;
-  background: #FFFFFF;
-  border: 1px solid #E8E2D9;
+  background: var(--color-card, #FFFFFF);
+  border: 1px solid var(--color-border, #E8E2D9);
 }
 
 .sidebar-user-card--collapsed {
@@ -758,14 +782,14 @@ function handleLogout() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #FFF3E0;
-  color: #924C00;
+  background: var(--color-accent, #FFF3E0);
+  color: var(--color-primary, #924C00);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 700;
-  border: 1px solid #FFDCC4;
+  border: 1px solid var(--color-border, #FFDCC4);
   position: relative;
   flex-shrink: 0;
 }
@@ -777,8 +801,8 @@ function handleLogout() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #10B981;
-  border: 1.5px solid #FFFFFF;
+  background-color: var(--color-success, #10B981);
+  border: 1.5px solid var(--color-card, #FFFFFF);
 }
 
 .sidebar-user-info {
@@ -792,7 +816,7 @@ function handleLogout() {
 .sidebar-user-name {
   font-size: 12.5px;
   font-weight: 600;
-  color: #1A1C1C;
+  color: var(--color-foreground, #1A1C1C);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -800,7 +824,7 @@ function handleLogout() {
 
 .sidebar-user-role {
   font-size: 10.5px;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -812,7 +836,7 @@ function handleLogout() {
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
-  color: #6B6358;
+  color: var(--color-muted-foreground, #6B6358);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -822,32 +846,49 @@ function handleLogout() {
 }
 
 .sidebar-logout-btn:hover {
-  background: #FFDAD6;
-  color: #BA1A1A;
-  border-color: #FFDAD6;
+  background: var(--color-error-bg, #FFDAD6);
+  color: var(--color-destructive, #BA1A1A);
+  border-color: var(--color-error-border, #FFDAD6);
 }
 
-.sidebar-footer-toggle-wrap {
-  display: flex;
-  justify-content: center;
-}
-
-.sidebar-footer-toggle-btn {
+.sidebar-mobile-close-btn {
+  display: none;
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid #E8E2D9;
-  background: #FFFFFF;
-  color: #6B6358;
-  display: flex;
+  border: 1px solid var(--color-border, #E8E2D9);
+  background: var(--color-surface-subtle, #FAF7F2);
+  color: var(--color-muted-foreground, #6B6358);
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 150ms ease;
+  flex-shrink: 0;
 }
 
-.sidebar-footer-toggle-btn:hover {
-  background: #FFF3E0;
-  color: #924C00;
+.sidebar-mobile-close-btn:hover {
+  background: var(--color-accent, #FFF3E0);
+  color: var(--color-primary, #924C00);
+  border-color: var(--color-border-strong, #FFDCC4);
+}
+
+@media (max-width: 1023px) {
+  .sidebar-mobile-close-btn {
+    display: flex;
+  }
+  .app-sidebar {
+    transform: translateX(-100%);
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+    z-index: 50;
+  }
+  .app-sidebar:not(.app-sidebar--collapsed) {
+    transform: translateX(0);
+    width: 260px;
+  }
+  .app-sidebar--collapsed {
+    transform: translateX(-100%);
+    width: 260px;
+  }
 }
 </style>

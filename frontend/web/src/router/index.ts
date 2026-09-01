@@ -29,12 +29,20 @@ import PurchaseOrdersView from '@/views/PurchaseOrdersView.vue'
 import { useAuthStore } from '@/stores/authStore'
 import { usePermissions } from '@/composables/usePermissions'
 
+export function getDefaultRouteForUser(): string {
+  const { can } = usePermissions()
+  if (can('reports:view')) return '/dashboard'
+  if (can('pos:checkout')) return '/pos'
+  if (can('products:read')) return '/products'
+  return '/pos'
+}
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/dashboard' },
+    { path: '/', redirect: () => getDefaultRouteForUser() },
     { path: '/login', name: 'login', component: LoginView },
-    { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true } },
+    { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { requiresAuth: true, permission: 'reports:view' } },
     { path: '/products', name: 'products.list', component: ProductListView, meta: { requiresAuth: true, permission: 'products:read' } },
     { path: '/products/create', name: 'products.create', component: ProductCreateView, meta: { requiresAuth: true, permission: 'products:create' } },
     { path: '/products/:id/edit', name: 'products.edit', component: ProductEditView, meta: { requiresAuth: true, permission: 'products:update' } },
@@ -61,6 +69,7 @@ export const router = createRouter({
     { path: '/delivery-settings', name: 'delivery-settings', component: DeliverySettingsView, meta: { requiresAuth: true, permission: 'delivery:view' } },
     { path: '/roles', name: 'roles', component: RolesView, meta: { requiresAuth: true, permission: 'roles:manage' } },
     { path: '/permissions', name: 'permissions', component: PermissionsView, meta: { requiresAuth: true, permission: 'roles:manage' } },
+    { path: '/import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { requiresAuth: true, permission: 'products:create' } },
   ],
 })
 
@@ -72,9 +81,9 @@ router.beforeEach((to, _from, next) => {
 
   // Routes that don't require auth
   if (!to.meta.requiresAuth || to.name === 'login') {
-    // If user is already authenticated and trying to access login, redirect to dashboard
+    // If user is already authenticated and trying to access login, redirect to role-specific default home
     if (to.name === 'login' && authStore.isAuthenticated) {
-      next({ name: 'dashboard' })
+      next(getDefaultRouteForUser())
     } else {
       next()
     }
@@ -92,7 +101,7 @@ router.beforeEach((to, _from, next) => {
   if (requiredPermission) {
     const { can } = usePermissions()
     if (!can(requiredPermission)) {
-      next({ name: 'dashboard' })
+      next(getDefaultRouteForUser())
       return
     }
   }

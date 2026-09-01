@@ -52,6 +52,25 @@ export interface PaginationMeta {
   per_page: number
 }
 
+export interface CreateVariantInput {
+  name?: string
+  sku?: string
+  barcode?: string | null
+  purchase_price?: number
+  selling_price?: number
+  cost_price?: number
+  quantity_on_hand?: number
+  reorder_level?: number
+  is_active?: boolean
+  attribute_values?: Array<{
+    attribute_id?: string
+    attribute_value_id?: string
+    id?: string
+    attribute_name?: string
+    value_name?: string
+  } | string>
+}
+
 export interface CreateProductPayload {
   name: string
   barcode?: string
@@ -66,11 +85,26 @@ export interface CreateProductPayload {
     attribute_id: string
     value_ids: string[]
   }>
+  variants?: CreateVariantInput[]
   product_type?: string
   initial_stock?: number
 }
 
 export type CreateProductRequest = CreateProductPayload | FormData
+
+export interface UpdateVariantInput {
+  id?: string
+  name?: string
+  sku?: string
+  barcode?: string | null
+  purchase_price?: number
+  selling_price?: number
+  cost_price?: number
+  quantity_on_hand?: number
+  reorder_level?: number
+  is_active?: boolean
+  attribute_values?: any[]
+}
 
 export interface UpdateProductPayload {
   name?: string
@@ -81,6 +115,8 @@ export interface UpdateProductPayload {
   image_url?: string | null
   is_active?: boolean
   description?: string | null
+  category_id?: string | null
+  variants?: UpdateVariantInput[]
 }
 
 export const useProductStore = defineStore('products', () => {

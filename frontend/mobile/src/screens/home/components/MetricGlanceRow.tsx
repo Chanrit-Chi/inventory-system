@@ -6,13 +6,15 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { styles } from '../HomeScreen.styles'
-import type { DashboardSummary } from '../../../types'
+import type { DashboardSummary, StaffPerformance } from '../../../types'
 
 export interface MetricGlanceRowProps {
   summary: DashboardSummary | null
   canRestock: boolean
   canReadProducts: boolean
   onLowStockPress: () => void
+  isSeller?: boolean
+  myPerformance?: StaffPerformance | null
 }
 
 export const MetricGlanceRow: React.FC<MetricGlanceRowProps> = ({
@@ -20,21 +22,33 @@ export const MetricGlanceRow: React.FC<MetricGlanceRowProps> = ({
   canRestock,
   canReadProducts,
   onLowStockPress,
+  isSeller = false,
+  myPerformance = null,
 }) => {
   const lowStockCount = summary?.low_stock_skus ?? 0
 
+  const myOrdersCount = myPerformance
+    ? (myPerformance.summary?.total_orders ?? myPerformance.total_orders ?? 0)
+    : 0
+
+  const myAvgSale = myPerformance
+    ? (myPerformance.summary?.avg_order_value ?? myPerformance.avg_order_value ?? 0)
+    : 0
+
   return (
     <View style={styles.metricRow}>
-      {/* Card 1: Units Sold */}
+      {/* Card 1: Units Sold (Store) vs My Orders (Seller) */}
       <View style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Text style={styles.metricLabel}>UNITS SOLD</Text>
+          <Text style={styles.metricLabel}>{isSeller ? 'MY ORDERS' : 'UNITS SOLD'}</Text>
           <View style={[styles.metricIconCircle, { backgroundColor: '#CCFBF1' }]}>
-            <Ionicons name="cube" size={13} color="#0D9488" />
+            <Ionicons name={isSeller ? 'receipt' : 'cube'} size={13} color="#0D9488" />
           </View>
         </View>
-        <Text style={styles.metricValue}>{summary?.units_sold ?? 0}</Text>
-        <Text style={styles.metricMeta}>Sold today</Text>
+        <Text style={styles.metricValue}>
+          {isSeller ? myOrdersCount : (summary?.units_sold ?? 0)}
+        </Text>
+        <Text style={styles.metricMeta}>{isSeller ? 'Orders today' : 'Sold today'}</Text>
       </View>
 
       {/* Card 2: Low Stock */}
@@ -62,16 +76,16 @@ export const MetricGlanceRow: React.FC<MetricGlanceRowProps> = ({
         </View>
       </TouchableOpacity>
 
-      {/* Card 3: Avg / Sale */}
+      {/* Card 3: Avg / Sale (Store) vs My Avg / Sale (Seller) */}
       <View style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Text style={styles.metricLabel}>AVG / SALE</Text>
+          <Text style={styles.metricLabel}>{isSeller ? 'MY AVG / SALE' : 'AVG / SALE'}</Text>
           <View style={[styles.metricIconCircle, { backgroundColor: '#EDE9FE' }]}>
             <Ionicons name="card" size={13} color="#7C3AED" />
           </View>
         </View>
         <Text style={styles.metricValue}>
-          ${(summary?.avg_basket_value ?? 0).toFixed(2)}
+          ${(isSeller ? myAvgSale : (summary?.avg_basket_value ?? 0)).toFixed(2)}
         </Text>
         <Text style={styles.metricMeta}>Per order</Text>
       </View>

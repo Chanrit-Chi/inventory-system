@@ -13,7 +13,7 @@ function dismiss(id: string) {
 </script>
 
 <template>
-  <div class="fixed z-50 flex w-full flex-col pointer-events-none p-4 bottom-4 right-4 sm:top-4 sm:bottom-auto sm:right-4 sm:w-auto sm:max-w-md gap-2">
+  <div class="fixed z-[200] flex w-full flex-col pointer-events-none p-4 bottom-4 right-4 sm:top-4 sm:bottom-auto sm:right-4 sm:w-auto sm:max-w-md gap-2">
     <transition-group
       name="toast"
       enter-active-class="transition duration-200 ease-out"

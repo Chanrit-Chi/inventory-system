@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import api from '@/api/axios'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 import Toast from '@/components/ui/Toast.vue'
 import AppSidebar from '@/components/shell/AppSidebar.vue'
 import AppHeader from '@/components/shell/AppHeader.vue'
@@ -11,6 +12,7 @@ import CommandPalette from '@/components/shell/CommandPalette.vue'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 // Check if currently on authentication route (login/register)
 const isAuthRoute = computed(() => {
@@ -19,18 +21,22 @@ const isAuthRoute = computed(() => {
 
 // Collapsible Sidebar State (persisted to localStorage)
 const isSidebarCollapsed = ref<boolean>(
-  localStorage.getItem('omnipos_sidebar_collapsed') === 'true'
+  window.innerWidth < 1024 ? true : localStorage.getItem('omnipos_sidebar_collapsed') === 'true'
 )
 
 function toggleSidebar() {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
-  localStorage.setItem('omnipos_sidebar_collapsed', String(isSidebarCollapsed.value))
+  if (window.innerWidth >= 1024) {
+    localStorage.setItem('omnipos_sidebar_collapsed', String(isSidebarCollapsed.value))
+  }
 }
 
-function handleSidebarCollapse(val: boolean) {
-  isSidebarCollapsed.value = val
-  localStorage.setItem('omnipos_sidebar_collapsed', String(val))
-}
+// Auto-collapse sidebar on route changes for small screens
+watch(() => route.path, () => {
+  if (window.innerWidth < 1024) {
+    isSidebarCollapsed.value = true
+  }
+})
 
 // Global Command Palette (Ctrl+K) State
 const isCommandPaletteOpen = ref(false)
@@ -88,6 +94,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  themeStore.initTheme()
   window.addEventListener('keydown', handleGlobalKeydown)
   fetchBranding()
 })
@@ -106,12 +113,18 @@ onUnmounted(() => {
 
   <!-- Authenticated Application Shell -->
   <div v-else class="app-layout" :class="{ 'app-layout--collapsed': isSidebarCollapsed }">
+    <!-- Backdrop for Mobile Slide-over Drawer (< 1024px) -->
+    <div
+      v-if="!isSidebarCollapsed"
+      class="lg:hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-xs transition-opacity"
+      @click="isSidebarCollapsed = true"
+    />
+
     <!-- Collapsible Modern Sidebar Navigation -->
     <AppSidebar
       :collapsed="isSidebarCollapsed"
       :branding="branding"
-      @update:collapsed="handleSidebarCollapse"
-      @toggle-collapse="toggleSidebar"
+      @close="isSidebarCollapsed = true"
       @logout="handleLogout"
     />
 
@@ -199,9 +212,10 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
-  .app-main-wrapper {
-    margin-left: 72px;
+@media (max-width: 1023px) {
+  .app-main-wrapper,
+  .app-main-wrapper--collapsed {
+    margin-left: 0;
   }
   .app-main-content {
     padding: 16px 16px 48px;

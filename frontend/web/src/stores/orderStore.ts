@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref } from 'vue'
 import api, { ApiError } from '@/api/axios'
 
@@ -70,6 +70,8 @@ export interface Order {
   } | null
   items?: OrderItem[]
   payments?: Payment[]
+  user?: { id: string; name: string } | null
+  seller?: { id: string; name: string } | null
 }
 
 export interface OrderPaginationMeta {
@@ -145,6 +147,36 @@ export const useOrderStore = defineStore('orders', () => {
     }
   }
 
+  async function updateOrderStatus(id: string, status: string, notes?: string, paymentMethod?: string) {
+    detailLoading.value = true
+    error.value = null
+    try {
+      const res = await api.patch(`/orders/${id}/status`, {
+        status,
+        notes,
+        payment_method: paymentMethod,
+      })
+      const updated = res.data.data
+      if (selectedOrder.value && selectedOrder.value.id === id) {
+        selectedOrder.value = { ...selectedOrder.value, ...updated }
+      }
+      const idx = orders.value.findIndex(o => o.id === id)
+      if (idx !== -1) {
+        orders.value[idx] = { ...orders.value[idx], ...updated }
+      }
+      return updated
+    } catch (e: unknown) {
+      if (e instanceof ApiError) {
+        error.value = e.message
+      } else {
+        error.value = e instanceof Error ? e.message : 'Failed to update order status.'
+      }
+      throw e
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
   function clearSelectedOrder() {
     selectedOrder.value = null
   }
@@ -160,6 +192,11 @@ export const useOrderStore = defineStore('orders', () => {
     fetchChannels,
     fetchOrders,
     fetchOrder,
+    updateOrderStatus,
     clearSelectedOrder,
   }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useOrderStore, import.meta.hot))
+}

@@ -298,21 +298,25 @@ const formatMoney = (amount: number | string | undefined): string => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border: 1px solid transparent;
 }
 
 .stock-badge.out-of-stock {
-  background: var(--color-error);
-  color: var(--color-error-foreground);
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-border);
 }
 
 .stock-badge.low-stock {
-  background: var(--color-warning);
-  color: var(--color-warning-foreground);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-border);
 }
 
 .stock-badge.in-stock {
-  background: var(--color-success);
-  color: var(--color-success-foreground);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-color: var(--color-success-border);
 }
 
 .product-info {

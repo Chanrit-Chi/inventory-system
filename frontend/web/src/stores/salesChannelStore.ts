@@ -33,11 +33,16 @@ export const useSalesChannelStore = defineStore('salesChannels', () => {
     page?: number
     search?: string
     filter_type?: string
+    include_inactive?: boolean
   } = {}) {
     loading.value = true
     error.value = null
     try {
-      const res = await api.get('/sales-channels', { params })
+      const queryParams = {
+        include_inactive: true,
+        ...params,
+      }
+      const res = await api.get('/sales-channels', { params: queryParams })
       salesChannels.value = res.data.data ?? []
       meta.value = res.data.meta ?? null
       return salesChannels.value
@@ -58,7 +63,7 @@ export const useSalesChannelStore = defineStore('salesChannels', () => {
     error.value = null
     try {
       const res = await api.post('/sales-channels', payload)
-      await fetchSalesChannels() // Refresh list
+      await fetchSalesChannels({ include_inactive: true }) // Refresh full list
       return res.data.data
     } catch (e: unknown) {
       if (e instanceof ApiError) {
@@ -77,7 +82,7 @@ export const useSalesChannelStore = defineStore('salesChannels', () => {
     error.value = null
     try {
       const res = await api.put(`/sales-channels/${id}`, payload)
-      await fetchSalesChannels() // Refresh list
+      await fetchSalesChannels({ include_inactive: true }) // Refresh full list
       return res.data.data
     } catch (e: unknown) {
       if (e instanceof ApiError) {
@@ -96,7 +101,7 @@ export const useSalesChannelStore = defineStore('salesChannels', () => {
     error.value = null
     try {
       const res = await api.delete(`/sales-channels/${id}`)
-      await fetchSalesChannels() // Refresh list
+      await fetchSalesChannels({ include_inactive: true }) // Refresh full list
       return res.data
     } catch (e: unknown) {
       if (e instanceof ApiError) {

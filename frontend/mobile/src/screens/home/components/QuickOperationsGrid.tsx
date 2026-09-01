@@ -13,19 +13,25 @@ export interface QuickOperationsGridProps {
   onNavigate: (tab: TabType) => void
   onQuickStockIn: () => void
   onQuickStockAdj: () => void
+  canRestock?: boolean
+  canAdjustStock?: boolean
 }
 
 export const QuickOperationsGrid: React.FC<QuickOperationsGridProps> = ({
   onNavigate,
   onQuickStockIn,
   onQuickStockAdj,
+  canRestock = true,
+  canAdjustStock = true,
 }) => {
+  const hasInventoryControls = canRestock || canAdjustStock
+
   return (
     <>
       <View style={styles.sectionHeaderRow}>
         <View>
           <Text style={styles.sectionTitle}>Quick Operations</Text>
-          <Text style={styles.sectionSubtitle}>Fast register & warehouse actions</Text>
+          <Text style={styles.sectionSubtitle}>Fast register & daily actions</Text>
         </View>
       </View>
 
@@ -57,49 +63,97 @@ export const QuickOperationsGrid: React.FC<QuickOperationsGridProps> = ({
           </View>
         </SpringScaleCard>
 
-        {/* Secondary Column: Stock In & Stock Adjustment */}
+        {/* Secondary Column: Stock Actions or Sales/CRM Shortcuts */}
         <View style={styles.actionSecondaryColumn}>
-          {/* Stock In */}
-          <SpringScaleCard
-            testID="btn-quick-stock-in"
-            style={styles.actionCardSecondary}
-            touchStyle={styles.actionCardSecondaryTouch}
-            onPress={onQuickStockIn}
-            activeOpacity={0.88}
-            accessibilityLabel="Stock In Receive Goods"
-          >
-            <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="download-outline" size={18} color="#B45309" />
-            </View>
-            <View style={styles.actionSecondaryInfo}>
-              <Text style={styles.actionTitleSecondary}>Stock In</Text>
-              <Text style={styles.actionSubSecondary} numberOfLines={1}>
-                Receive goods & POs
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
-          </SpringScaleCard>
+          {hasInventoryControls ? (
+            <>
+              {/* Stock In */}
+              <SpringScaleCard
+                testID="btn-quick-stock-in"
+                style={styles.actionCardSecondary}
+                touchStyle={styles.actionCardSecondaryTouch}
+                onPress={onQuickStockIn}
+                activeOpacity={0.88}
+                accessibilityLabel="Stock In Receive Goods"
+              >
+                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="download-outline" size={18} color="#B45309" />
+                </View>
+                <View style={styles.actionSecondaryInfo}>
+                  <Text style={styles.actionTitleSecondary}>Stock In</Text>
+                  <Text style={styles.actionSubSecondary} numberOfLines={1}>
+                    Receive goods & POs
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
+              </SpringScaleCard>
 
-          {/* Stock Adjustment */}
-          <SpringScaleCard
-            testID="btn-quick-stock-adj"
-            style={styles.actionCardSecondary}
-            touchStyle={styles.actionCardSecondaryTouch}
-            onPress={onQuickStockAdj}
-            activeOpacity={0.88}
-            accessibilityLabel="Adjust Stock Audit Counts"
-          >
-            <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#E0F2FE' }]}>
-              <Ionicons name="options-outline" size={18} color="#0284C7" />
-            </View>
-            <View style={styles.actionSecondaryInfo}>
-              <Text style={styles.actionTitleSecondary}>Adjust Stock</Text>
-              <Text style={styles.actionSubSecondary} numberOfLines={1}>
-                Audit counts & damage
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
-          </SpringScaleCard>
+              {/* Stock Adjustment */}
+              <SpringScaleCard
+                testID="btn-quick-stock-adj"
+                style={styles.actionCardSecondary}
+                touchStyle={styles.actionCardSecondaryTouch}
+                onPress={onQuickStockAdj}
+                activeOpacity={0.88}
+                accessibilityLabel="Adjust Stock Audit Counts"
+              >
+                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#E0F2FE' }]}>
+                  <Ionicons name="options-outline" size={18} color="#0284C7" />
+                </View>
+                <View style={styles.actionSecondaryInfo}>
+                  <Text style={styles.actionTitleSecondary}>Adjust Stock</Text>
+                  <Text style={styles.actionSubSecondary} numberOfLines={1}>
+                    Audit counts & damage
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
+              </SpringScaleCard>
+            </>
+          ) : (
+            <>
+              {/* New Quotation for Sellers */}
+              <SpringScaleCard
+                testID="btn-quick-new-quote"
+                style={styles.actionCardSecondary}
+                touchStyle={styles.actionCardSecondaryTouch}
+                onPress={() => onNavigate('quotations')}
+                activeOpacity={0.88}
+                accessibilityLabel="Create Quotation"
+              >
+                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#E0F2FE' }]}>
+                  <Ionicons name="document-text-outline" size={18} color="#0284C7" />
+                </View>
+                <View style={styles.actionSecondaryInfo}>
+                  <Text style={styles.actionTitleSecondary}>New Quote</Text>
+                  <Text style={styles.actionSubSecondary} numberOfLines={1}>
+                    Price estimate
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
+              </SpringScaleCard>
+
+              {/* Customers Directory for Sellers */}
+              <SpringScaleCard
+                testID="btn-quick-customers"
+                style={styles.actionCardSecondary}
+                touchStyle={styles.actionCardSecondaryTouch}
+                onPress={() => onNavigate('customers')}
+                activeOpacity={0.88}
+                accessibilityLabel="Customers Directory"
+              >
+                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#EDE9FE' }]}>
+                  <Ionicons name="people-outline" size={18} color="#7C3AED" />
+                </View>
+                <View style={styles.actionSecondaryInfo}>
+                  <Text style={styles.actionTitleSecondary}>Customers</Text>
+                  <Text style={styles.actionSubSecondary} numberOfLines={1}>
+                    CRM & VIP list
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
+              </SpringScaleCard>
+            </>
+          )}
         </View>
       </View>
     </>
