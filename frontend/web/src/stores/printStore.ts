@@ -40,7 +40,7 @@ export const usePrintStore = defineStore('print', () => {
    * The backend renders the receipt as HTML, and we open it in a new window.
    */
   async function printReceipt(orderId: string) {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://backend.test/api/v1'
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://inventory-backend-api.fly.dev/api/v1'
     const token = localStorage.getItem('omnipos_token')
     const url = `${baseURL}/orders/${orderId}/receipt`
 

@@ -29,13 +29,13 @@ export const StoreHeaderCard: React.FC<StoreHeaderCardProps> = ({ branding }) =>
         </View>
         <View style={styles.storeInfo}>
           <View style={styles.storeNameRow}>
-            <Text style={styles.storeName}>{branding.store_name || 'KC Inventory'}</Text>
+            <Text style={styles.storeName}>{branding.store_name || 'KC Shop'}</Text>
             <View style={styles.storeIdBadge}>
               <Text style={styles.storeIdText}>Store #01</Text>
             </View>
           </View>
           <Text style={styles.storeAddress}>
-            {branding.tagline || branding.store_address || 'Omnichannel Retail Suite'}
+            {branding.tagline || branding.store_address || 'High-Velocity POS & ERP Platform'}
           </Text>
           <View style={styles.terminalStatusRow}>
             <View style={styles.activeDot} />

@@ -164,8 +164,8 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
                 />
               )}
               <View>
-                <Text style={styles.brandTitle}>{branding.store_name || 'KC Inventory'}</Text>
-                <Text style={styles.brandSubtitle}>{branding.tagline || 'Omnichannel Suite'}</Text>
+                <Text style={styles.brandTitle}>{branding.store_name || 'KC Shop'}</Text>
+                <Text style={styles.brandSubtitle}>{branding.tagline || 'High-Velocity POS & ERP Platform'}</Text>
               </View>
             </View>
 

@@ -85,7 +85,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
     connected: false,
     status: 'Checking...',
     version: '...',
-    app: 'KC Inventory Core',
+    app: 'KC Shop Core',
     database: 'Checking...',
   })
 
@@ -99,7 +99,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
           connected: true,
           status: res.data.status || 'Operational',
           version: res.data.version || 'v1.4.2',
-          app: res.data.app || 'KC Inventory Core',
+          app: res.data.app || 'KC Shop Core',
           database: res.data.database || 'Connected',
         })
       }
@@ -234,8 +234,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [selectedLogoUri, setSelectedLogoUri] = useState<string | null>(null)
   const [selectedLogoFile, setSelectedLogoFile] = useState<{ uri: string; name: string; type: string } | null>(null)
   const [removeLogoFlag, setRemoveLogoFlag] = useState(false)
-  const [brandStoreName, setBrandStoreName] = useState(branding.store_name || 'KC Inventory')
-  const [brandTagline, setBrandTagline] = useState(branding.tagline || 'Omnichannel Suite')
+  const [brandStoreName, setBrandStoreName] = useState(branding.store_name || 'KC Shop')
+  const [brandTagline, setBrandTagline] = useState(branding.tagline || 'High-Velocity POS & ERP Platform')
   const [brandAddress, setBrandAddress] = useState(branding.store_address || '')
   const [brandPhone, setBrandPhone] = useState(branding.store_phone || '')
   const [brandReceiptHeader, setBrandReceiptHeader] = useState(branding.receipt_header || '')
@@ -245,7 +245,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const [brandShowTax, setBrandShowTax] = useState(branding.show_tax ?? false)
 
   useEffect(() => {
-    setBrandStoreName(branding.store_name || 'KC Inventory')
+    setBrandStoreName(branding.store_name || 'KC Shop')
     setBrandTagline(branding.tagline || '')
     setBrandAddress(branding.store_address || '')
     setBrandPhone(branding.store_phone || '')
@@ -296,7 +296,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
       setSavingPrinter(true)
       await saveBranding(
         {
-          store_name: brandStoreName.trim() || 'KC Inventory',
+          store_name: brandStoreName.trim() || 'KC Shop',
           tagline: brandTagline.trim(),
           store_address: brandAddress.trim(),
           store_phone: brandPhone.trim(),
@@ -312,7 +312,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
       await savePrinterConfig({
         ...printerConfig,
-        storeName: brandStoreName.trim() || 'KC Inventory',
+        storeName: brandStoreName.trim() || 'KC Shop',
         subHeader: brandTagline.trim(),
         receiptTitle: brandReceiptHeader.trim() || 'TAX INVOICE / RECEIPT',
         invoiceTitle: brandInvoiceHeader.trim() || 'INVOICE',

@@ -129,7 +129,7 @@ export const StoreBrandingSection: React.FC<StoreBrandingSectionProps> = ({
             <Text style={styles.printerInputLabel} numberOfLines={1}>STORE NAME (HEADER)</Text>
             <TextInput
               style={styles.printerTextInput}
-              placeholder="e.g. KC Inventory"
+              placeholder="e.g. KC Shop"
               placeholderTextColor={tokens.colors.secondary}
               value={brandStoreName}
               onChangeText={setBrandStoreName}
@@ -139,7 +139,7 @@ export const StoreBrandingSection: React.FC<StoreBrandingSectionProps> = ({
             <Text style={styles.printerInputLabel} numberOfLines={1}>SUB-HEADER / SLOGAN</Text>
             <TextInput
               style={styles.printerTextInput}
-              placeholder="e.g. Omnichannel Suite"
+              placeholder="e.g. High-Velocity POS & ERP Platform"
               placeholderTextColor={tokens.colors.secondary}
               value={brandTagline}
               onChangeText={setBrandTagline}

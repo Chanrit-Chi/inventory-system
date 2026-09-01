@@ -14,12 +14,12 @@ import type { StoreBranding } from '../types'
 const BRANDING_STORAGE_KEY = '@kc_inventory_branding'
 
 export const DEFAULT_BRANDING: StoreBranding = {
-  store_name: 'KC Inventory',
-  tagline: '',
+  store_name: 'KC Shop',
+  tagline: 'High-Velocity POS & ERP Platform',
   logo_url: null,
-  primary_color: '#FF8800',
-  store_address: '',
-  store_phone: '',
+  primary_color: '#005F83',
+  store_address: 'Phnom Penh, Cambodia',
+  store_phone: '+855 12 345 678',
   receipt_header: null,
   invoice_header: null,
   quotation_header: null,

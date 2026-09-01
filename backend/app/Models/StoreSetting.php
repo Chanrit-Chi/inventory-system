@@ -38,10 +38,10 @@ class StoreSetting extends Model
         $setting = self::first();
         if (!$setting) {
             $setting = self::create([
-                'store_name'       => 'KC Inventory',
-                'tagline'          => '',
+                'store_name'       => 'KC Shop',
+                'tagline'          => 'High-Velocity POS & ERP Platform',
                 'logo_url'         => null,
-                'primary_color'    => '#FF8800',
+                'primary_color'    => '#005F83',
                 'store_address'    => 'Phnom Penh, Cambodia',
                 'store_phone'      => '+855 12 345 678',
                 'receipt_header'   => null,

@@ -1,8 +1,6 @@
 import axios, { AxiosError } from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
 import { tokenStore } from './tokenStore'
-import { useAuthStore } from '@/stores/authStore'
-import { useToast } from '@/composables/useToast'
 
 export interface ApiErrorPayload {
   message: string
@@ -25,7 +23,7 @@ export class ApiError extends Error {
 }
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://backend.test/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://inventory-backend-api.fly.dev/api/v1',
   timeout: 15000, // 15s default timeout (matches mobile)
   headers: {
     'Content-Type': 'application/json',
@@ -73,10 +71,23 @@ api.interceptors.response.use(
 
     // Clear auth on 401 Unauthorized and notify user
     if (status === 401) {
-      const auth = useAuthStore()
-      auth.handleSessionExpired() // sets isAuthenticated=false, clears token
-      const toast = useToast()
-      toast.warning('Your session has expired. Please log in again.')
+      tokenStore.clear()
+      import('@/stores/authStore').then(({ useAuthStore }) => {
+        try {
+          const auth = useAuthStore()
+          auth.handleSessionExpired()
+        } catch {
+          // ignore
+        }
+      }).catch(() => {})
+      import('@/composables/useToast').then(({ useToast }) => {
+        try {
+          const toast = useToast()
+          toast.warning('Your session has expired. Please log in again.')
+        } catch {
+          // ignore
+        }
+      }).catch(() => {})
     }
 
     return Promise.reject(new ApiError(message, errors, status, false))

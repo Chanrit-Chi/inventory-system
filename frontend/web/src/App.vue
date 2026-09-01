@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import api from '@/api/axios'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import Toast from '@/components/ui/Toast.vue'
@@ -46,38 +45,11 @@ function openCommandPalette() {
 }
 
 // Store Branding State (Synced across devices)
-export interface StoreBranding {
-  store_name: string
-  tagline?: string
-  logo_url?: string | null
-}
+import { useBrandingStore, type StoreBranding } from '@/stores/brandingStore'
+export type { StoreBranding }
 
-const branding = ref<StoreBranding>({
-  store_name: localStorage.getItem('omnipos_store_name') || 'KC Inventory',
-  tagline: localStorage.getItem('omnipos_tagline') || 'Omnichannel Retail Suite',
-  logo_url: localStorage.getItem('omnipos_logo_url') || '/logo.png',
-})
-
-async function fetchBranding() {
-  try {
-    const res = await api.get('/settings/branding')
-    if (res.data?.data) {
-      const data = res.data.data
-      branding.value = {
-        store_name: data.store_name || 'KC Inventory',
-        tagline: data.tagline || 'Omnichannel Retail Suite',
-        logo_url: data.logo_url || '/logo.png',
-      }
-      localStorage.setItem('omnipos_store_name', branding.value.store_name)
-      localStorage.setItem('omnipos_tagline', branding.value.tagline || '')
-      if (data.logo_url) {
-        localStorage.setItem('omnipos_logo_url', data.logo_url)
-      }
-    }
-  } catch {
-    // Retain fallback defaults
-  }
-}
+const brandingStore = useBrandingStore()
+const branding = computed(() => brandingStore.branding)
 
 // Logout Handler
 function handleLogout() {
@@ -96,7 +68,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 onMounted(() => {
   themeStore.initTheme()
   window.addEventListener('keydown', handleGlobalKeydown)
-  fetchBranding()
+  brandingStore.fetchBranding()
 })
 
 onUnmounted(() => {

@@ -66,8 +66,8 @@ const props = withDefaults(
   {
     collapsed: false,
     branding: () => ({
-      store_name: 'KC Inventory',
-      tagline: 'Omnichannel Retail Suite',
+      store_name: 'KC Shop',
+      tagline: 'High-Velocity POS & ERP Platform',
       logo_url: '/logo.png',
     }),
   }

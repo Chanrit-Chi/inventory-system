@@ -173,7 +173,7 @@ export const DigitalReceipt = forwardRef<ViewShot, DigitalReceiptProps>((props, 
               contentFit="contain"
             />
           )}
-          <Text style={styles.brandStoreName}>{storeName || branding.store_name || 'KC Inventory'}</Text>
+          <Text style={styles.brandStoreName}>{storeName || branding.store_name || 'KC Shop'}</Text>
         </View>
         <Text style={styles.brandSubtitle}>{getDocumentSubtitle()}</Text>
         {Boolean(branding.store_address || branding.store_phone) && (

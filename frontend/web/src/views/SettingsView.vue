@@ -55,19 +55,7 @@ const showDeletePrinterDialog = ref(false)
 const printerToDelete = ref<PrinterDevice | null>(null)
 const showLogoutDialog = ref(false)
 
-interface StoreBranding {
-  store_name: string
-  tagline?: string
-  logo_url?: string
-  store_address?: string
-  store_phone?: string
-  primary_color?: string
-  receipt_header?: string
-  invoice_header?: string
-  quotation_header?: string
-  receipt_footer?: string
-  include_tax?: boolean
-}
+import { useBrandingStore, DEFAULT_BRANDING, type StoreBranding } from '@/stores/brandingStore'
 
 interface PrinterDevice {
   id: string
@@ -99,6 +87,7 @@ interface CurrentUser {
 }
 
 const themeStore = useThemeStore()
+const brandingStore = useBrandingStore()
 
 type TabKey = 'branding' | 'printers' | 'diagnostics' | 'account'
 
@@ -125,7 +114,7 @@ const brandStoreName = ref('')
 const brandTagline = ref('')
 const brandAddress = ref('')
 const brandPhone = ref('')
-const brandPrimaryColor = ref('#924c00')
+const brandPrimaryColor = ref('#005F83')
 const brandReceiptHeader = ref('')
 const brandInvoiceHeader = ref('')
 const brandQuotationHeader = ref('')
@@ -139,16 +128,16 @@ const removeLogoFlag = ref(false)
 const logoFileInput = ref<HTMLInputElement | null>(null)
 
 function resetBrandingForm(data: Partial<StoreBranding> = {}) {
-  brandStoreName.value = data.store_name ?? 'KC Inventory'
-  brandTagline.value = data.tagline ?? 'Omnichannel Suite'
-  brandAddress.value = data.store_address ?? ''
-  brandPhone.value = data.store_phone ?? ''
-  brandPrimaryColor.value = data.primary_color ?? '#924c00'
-  brandReceiptHeader.value = data.receipt_header ?? 'TAX INVOICE / RECEIPT'
-  brandInvoiceHeader.value = data.invoice_header ?? 'INVOICE'
-  brandQuotationHeader.value = data.quotation_header ?? 'QUOTATION'
-  brandReceiptFooter.value = data.receipt_footer ?? 'Thank you for your business!'
-  brandIncludeTax.value = data.include_tax ?? false
+  brandStoreName.value = data.store_name ?? DEFAULT_BRANDING.store_name
+  brandTagline.value = data.tagline !== undefined ? (data.tagline || '') : (DEFAULT_BRANDING.tagline || '')
+  brandAddress.value = data.store_address ?? (DEFAULT_BRANDING.store_address || '')
+  brandPhone.value = data.store_phone ?? (DEFAULT_BRANDING.store_phone || '')
+  brandPrimaryColor.value = data.primary_color ?? DEFAULT_BRANDING.primary_color ?? '#005F83'
+  brandReceiptHeader.value = data.receipt_header ?? DEFAULT_BRANDING.receipt_header ?? 'TAX INVOICE / RECEIPT'
+  brandInvoiceHeader.value = data.invoice_header ?? DEFAULT_BRANDING.invoice_header ?? 'INVOICE'
+  brandQuotationHeader.value = data.quotation_header ?? DEFAULT_BRANDING.quotation_header ?? 'QUOTATION'
+  brandReceiptFooter.value = data.receipt_footer ?? DEFAULT_BRANDING.receipt_footer ?? 'Thank you for your business!'
+  brandIncludeTax.value = data.show_tax ?? false
   existingLogoUrl.value = data.logo_url ?? null
   logoPreview.value = data.logo_url ?? null
   logoFile.value = null
@@ -159,13 +148,12 @@ async function fetchBranding() {
   brandingLoading.value = true
   brandingError.value = ''
   try {
-    const res = await api.get('/settings/branding')
-    const data = res.data?.data ?? res.data
+    const data = await brandingStore.fetchBranding()
     resetBrandingForm(data)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to load store branding'
     brandingError.value = msg
-    resetBrandingForm()
+    resetBrandingForm(brandingStore.branding)
   } finally {
     brandingLoading.value = false
   }
@@ -204,31 +192,25 @@ async function saveBranding() {
   brandingError.value = ''
   brandingSuccess.value = ''
   try {
-    const formData = new FormData()
-    formData.append('store_name', brandStoreName.value.trim() || 'KC Inventory')
-    formData.append('tagline', brandTagline.value.trim())
-    formData.append('store_address', brandAddress.value.trim())
-    formData.append('store_phone', brandPhone.value.trim())
-    formData.append('primary_color', brandPrimaryColor.value || '#924c00')
-    formData.append('receipt_header', brandReceiptHeader.value.trim())
-    formData.append('invoice_header', brandInvoiceHeader.value.trim())
-    formData.append('quotation_header', brandQuotationHeader.value.trim())
-    formData.append('receipt_footer', brandReceiptFooter.value.trim())
-    formData.append('include_tax', brandIncludeTax.value ? '1' : '0')
-
-    if (logoFile.value) {
-      formData.append('logo', logoFile.value, logoFile.value.name)
-    }
-    if (removeLogoFlag.value) {
-      formData.append('remove_logo', '1')
-    }
-
-    const res = await api.post('/settings/branding', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    const data = res.data?.data ?? res.data
-    resetBrandingForm(data)
+    const updated = await brandingStore.saveBranding(
+      {
+        store_name: brandStoreName.value.trim() || DEFAULT_BRANDING.store_name,
+        tagline: brandTagline.value.trim(),
+        store_address: brandAddress.value.trim(),
+        store_phone: brandPhone.value.trim(),
+        primary_color: brandPrimaryColor.value || DEFAULT_BRANDING.primary_color,
+        receipt_header: brandReceiptHeader.value.trim(),
+        invoice_header: brandInvoiceHeader.value.trim(),
+        quotation_header: brandQuotationHeader.value.trim(),
+        receipt_footer: brandReceiptFooter.value.trim(),
+        show_tax: brandIncludeTax.value,
+      },
+      logoFile.value,
+      removeLogoFlag.value
+    )
+    resetBrandingForm(updated)
     brandingSuccess.value = 'Store branding saved successfully.'
+    toast.success('Store branding saved successfully.')
     setTimeout(() => (brandingSuccess.value = ''), 4000)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to save store branding'
@@ -433,7 +415,7 @@ const healthStatus = ref<HealthStatus>({
   connected: false,
   status: 'Not Checked',
   version: '—',
-  app: 'KC Inventory Core',
+  app: 'KC Shop Core',
   database: 'Unknown',
   latency: '—',
 })
@@ -451,7 +433,7 @@ async function checkBackendHealth() {
       connected: true,
       status: data?.status || 'Operational',
       version: data?.version || 'v1.0.0',
-      app: data?.app || 'KC Inventory Core',
+      app: data?.app || 'KC Shop Core',
       database: data?.database || 'Connected',
       latency: `${elapsed}ms`,
     }
@@ -461,7 +443,7 @@ async function checkBackendHealth() {
       connected: false,
       status: 'Offline / Unreachable',
       version: 'Local Cache',
-      app: 'KC Inventory Core',
+      app: 'KC Shop Core',
       database: 'Offline Queue Active',
       latency: `${elapsed}ms (timeout)`,
     }
@@ -822,7 +804,7 @@ const userInitials = (name: string | undefined): string => {
             id="brand-store-name"
             v-model="brandStoreName"
             type="text"
-            placeholder="e.g., KC Inventory"
+            placeholder="e.g., KC Shop"
             class="h-9 bg-surface text-sm"
           />
         </div>
@@ -832,7 +814,7 @@ const userInitials = (name: string | undefined): string => {
             id="brand-tagline"
             v-model="brandTagline"
             type="text"
-            placeholder="e.g., Omnichannel Retail POS"
+            placeholder="e.g., High-Velocity POS & ERP Platform"
             class="h-9 bg-surface text-sm"
           />
         </div>

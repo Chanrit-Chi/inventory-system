@@ -228,7 +228,7 @@ const GlobalHeader = ({
               />
             )}
             <Text style={styles.brandName} numberOfLines={1}>
-              {branding.store_name || 'KC Inventory'}
+              {branding.store_name || 'KC Shop'}
             </Text>
           </View>
         </TouchableOpacity>
@@ -654,7 +654,7 @@ function AppShell() {
                 letterSpacing: -0.5,
               }}
             >
-              {branding.store_name || 'KC Inventory'}
+              {branding.store_name || 'KC Shop'}
             </Text>
             <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
           </View>

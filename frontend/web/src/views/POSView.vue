@@ -27,6 +27,7 @@ import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { useDeliveryZoneStore } from '@/stores/deliveryZoneStore'
 import { usePosStore, type CartItem, type CartTab, type StaffMember } from '@/stores/posStore'
+import { useBrandingStore } from '@/stores/brandingStore'
 import { type SalesChannel } from '@/stores/salesChannelStore'
 import { useOfflineQueue } from '@/hooks/useOfflineQueue'
 import { calculateLoyalty, getTierDetails } from '@/utils/loyalty'
@@ -130,6 +131,7 @@ const authStore = useAuthStore()
 const toast = useToast()
 const deliveryStore = useDeliveryZoneStore()
 const posStore = usePosStore()
+const brandingStore = useBrandingStore()
 
 // ============================================================================
 // State
@@ -1915,6 +1917,12 @@ defineExpose({
     <PosReceiptModal
       v-model:open="showReceiptModal"
       :order="completedOrder"
+      :store-name="brandingStore.branding.store_name"
+      :store-tagline="brandingStore.branding.tagline"
+      :store-phone="brandingStore.branding.store_phone"
+      :store-address="brandingStore.branding.store_address"
+      :receipt-header="brandingStore.branding.receipt_header"
+      :footer-message="brandingStore.branding.receipt_footer"
       @new-sale="() => { showReceiptModal = false; }"
     />
 

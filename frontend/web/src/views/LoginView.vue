@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
+import { useBrandingStore } from '@/stores/brandingStore'
 import { useRouter, useRoute } from 'vue-router'
-import { AlertCircle, Lock, Mail, ArrowRight, Shield } from 'lucide-vue-next'
+import { AlertCircle, Lock, Mail, ArrowRight } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
 import {
   Button,
-  Badge,
   Input,
   Card,
   Alert,
@@ -15,6 +15,7 @@ import {
 import { usePermissions } from '@/composables/usePermissions'
 
 const authStore = useAuthStore()
+const brandingStore = useBrandingStore()
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
@@ -39,6 +40,7 @@ const redirectPath = computed(() => {
 
 onMounted(() => {
   authStore.initAuth()
+  brandingStore.fetchBranding()
   if (authStore.isAuthenticated) {
     router.push(redirectPath.value)
   }
@@ -61,18 +63,21 @@ const handleLogin = async () => {
     error.value = result.error || 'Login failed. Please try again.'
   }
 }
-const logoUrl = ref('/logo.png')
+
+const logoUrl = computed(() => brandingStore.branding.logo_url || '/logo.png')
+const storeName = computed(() => brandingStore.branding.store_name || 'KC Shop')
+const tagline = computed(() => brandingStore.branding.tagline || 'High-Velocity POS & ERP Platform')
 </script>
 
 <template>
   <div class="min-h-screen bg-background flex flex-col items-center justify-center p-4 selection:bg-cta/20 selection:text-foreground">
     <!-- Brand Header -->
-    <div class="w-full max-w-md flex flex-col items-center mb-6">
+    <div class="w-full max-w-md flex flex-col items-center mb-6 text-center">
       <div class="w-16 h-16 rounded-2xl bg-card border border-border/80 shadow-md p-2 flex items-center justify-center mb-3">
-        <img :src="logoUrl" alt="OmniPOS Logo" class="max-h-full max-w-full object-contain" />
+        <img :src="logoUrl" :alt="`${storeName} Logo`" class="max-h-full max-w-full object-contain" />
       </div>
-      <h1 class="font-display text-2xl sm:text-3xl font-bold text-foreground tracking-tight">OmniPOS Retail</h1>
-      <p class="text-xs text-muted-foreground mt-0.5">High-Velocity Omnichannel POS & ERP Platform</p>
+      <h1 class="font-display text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{{ storeName }}</h1>
+      <p class="text-xs text-muted-foreground mt-0.5">{{ tagline }}</p>
     </div>
 
     <!-- Login Card -->
@@ -134,40 +139,6 @@ const logoUrl = ref('/logo.png')
           <ArrowRight v-if="!isLoading" :size="15" />
         </Button>
       </form>
-
-      <!-- Demo Accounts -->
-      <div class="pt-4 border-t border-border flex flex-col gap-2">
-        <span class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-          <Shield :size="12" />
-          <span>Quick Login Test Accounts</span>
-        </span>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-          <button
-            type="button"
-            class="p-2.5 rounded-lg border border-border/80 bg-surface-subtle/60 hover:bg-surface-subtle text-left transition-colors cursor-pointer"
-            @click="email = 'admin@inventory.local'; password = 'password'"
-          >
-            <div class="font-bold text-foreground flex items-center justify-between">
-              <span>Admin Account</span>
-              <Badge variant="info" class="text-[9px] px-1 py-0">Admin</Badge>
-            </div>
-            <div class="font-mono text-[10px] text-muted-foreground truncate mt-0.5">admin@inventory.local</div>
-          </button>
-
-          <button
-            type="button"
-            class="p-2.5 rounded-lg border border-border/80 bg-surface-subtle/60 hover:bg-surface-subtle text-left transition-colors cursor-pointer"
-            @click="email = 'seller@inventory.local'; password = 'password'"
-          >
-            <div class="font-bold text-foreground flex items-center justify-between">
-              <span>Cashier Account</span>
-              <Badge variant="neutral" class="text-[9px] px-1 py-0">Seller</Badge>
-            </div>
-            <div class="font-mono text-[10px] text-muted-foreground truncate mt-0.5">seller@inventory.local</div>
-          </button>
-        </div>
-      </div>
     </Card>
 
     <!-- Footer Security Notice -->

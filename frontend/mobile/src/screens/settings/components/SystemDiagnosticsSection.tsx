@@ -131,7 +131,7 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
               <Ionicons name="phone-portrait-outline" size={18} color={tokens.colors.secondary} />
             </View>
             <View>
-              <Text style={styles.diagnosticLabel}>KC Inventory Mobile</Text>
+              <Text style={styles.diagnosticLabel}>KC Shop Mobile</Text>
               <Text style={styles.diagnosticSub}>Version 1.0.0 (Build 2026.08.22)</Text>
             </View>
           </View>

@@ -10,6 +10,7 @@ let _setter: (val: string | null) => void = (val) => {
 export const tokenStore = {
   get: () => _getter(),
   set: (val: string | null) => _setter(val),
+  clear: () => _setter(null),
   configure: (getter: () => string | null, setter: (val: string | null) => void) => {
     _getter = getter
     _setter = setter

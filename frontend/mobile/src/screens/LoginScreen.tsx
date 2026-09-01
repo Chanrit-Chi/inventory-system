@@ -88,8 +88,8 @@ export default function LoginScreen() {
             />
           )}
           <View>
-            <Text style={styles.appName}>{branding.store_name || 'KC Inventory'}</Text>
-            <Text style={styles.appTagline}>{branding.tagline || 'Omnichannel Suite'}</Text>
+            <Text style={styles.appName}>{branding.store_name || 'KC Shop'}</Text>
+            <Text style={styles.appTagline}>{branding.tagline || 'High-Velocity POS & ERP Platform'}</Text>
           </View>
         </View>
 
