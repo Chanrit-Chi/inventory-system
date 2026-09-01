@@ -1,0 +1,9 @@
+backend/
+frontend/web/
+tests/
+.agents/
+.claude/
+node_modules/
+.expo/
+dist/
+*.log

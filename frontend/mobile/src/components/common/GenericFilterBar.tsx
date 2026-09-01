@@ -62,6 +62,7 @@ export function GenericFilterBar<T extends string = string>({
   const containerStyle = isAnimated
     ? [
         styles.headerContainer,
+        styles.animatedHeader,
         {
           transform: [{ translateY: headerTranslateY! }],
           opacity: headerOpacity!,
@@ -83,7 +84,7 @@ export function GenericFilterBar<T extends string = string>({
           <TextInput
             style={styles.searchInput}
             placeholder={searchPlaceholder}
-            placeholderTextColor={tokens.colors.outline}
+            placeholderTextColor={tokens.colors.secondary}
             value={searchQuery}
             onChangeText={onSearchChange}
             autoCapitalize="none"
@@ -123,7 +124,7 @@ export function GenericFilterBar<T extends string = string>({
                   <Ionicons
                     name={chip.icon!}
                     size={14}
-                    color={isActive ? tokens.colors.onPrimary : tokens.colors.onSurfaceVariant}
+                    color={isActive ? tokens.colors.onPrimary : tokens.colors.secondary}
                     style={{ marginRight: 4 }}
                   />
                 )}
@@ -162,17 +163,19 @@ export function GenericFilterBar<T extends string = string>({
 
 const styles = StyleSheet.create({
   headerContainer: {
+    backgroundColor: tokens.colors.surfaceCard,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderSubtle,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+  },
+  animatedHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: tokens.colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: tokens.colors.surfaceAlt,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingHorizontal: 16,
   },
   searchRow: {
     flexDirection: 'row',
@@ -184,19 +187,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: tokens.colors.surface,
-    borderRadius: tokens.borderRadius.md,
+    backgroundColor: tokens.colors.surfaceMuted,
+    borderRadius: tokens.borderRadius.pill,
     borderWidth: 1,
-    borderColor: tokens.colors.surfaceAlt,
-    paddingHorizontal: 10,
-    height: 40,
+    borderColor: tokens.colors.borderSubtle,
+    paddingHorizontal: 12,
+    height: 38,
   },
   searchIcon: {
     marginRight: 6,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: tokens.colors.onBackground,
     paddingVertical: 0,
   },
@@ -211,10 +214,10 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: tokens.colors.surface,
+    backgroundColor: tokens.colors.surfaceMuted,
     borderRadius: tokens.borderRadius.pill,
     borderWidth: 1,
-    borderColor: tokens.colors.surfaceAlt,
+    borderColor: tokens.colors.borderSubtle,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -225,10 +228,11 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: tokens.colors.onSurfaceVariant,
+    color: tokens.colors.secondary,
   },
   chipTextActive: {
     color: tokens.colors.onPrimary,
+    fontWeight: '700',
   },
   chipCountBadge: {
     backgroundColor: tokens.colors.surfaceAlt,

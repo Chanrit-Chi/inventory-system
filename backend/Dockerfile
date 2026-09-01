@@ -2,12 +2,15 @@
 # Production Dockerfile for Laravel Backend
 # Compatible with Fly.io, Railway, Render, & Docker
 # ==========================================
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
+
+# Set environment variables
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Install system dependencies & Nginx
+# Install system dependencies & libraries needed for extensions
 RUN apk add --no-cache \
     nginx \
     curl \
@@ -20,9 +23,10 @@ RUN apk add --no-cache \
     postgresql-dev \
     icu-dev \
     oniguruma-dev \
+    libxml2-dev \
     bash
 
-# Configure and install PHP extensions
+# Configure and install all required PHP extensions (including Excel/Flysystem requirements)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo \
@@ -34,7 +38,12 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         intl \
         bcmath \
         opcache \
-        mbstring
+        mbstring \
+        dom \
+        xml \
+        simplexml \
+        fileinfo \
+        pcntl
 
 # Copy OPcache production settings
 RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
@@ -49,16 +58,22 @@ RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.
     && echo "memory_limit=256M" >> /usr/local/etc/php/conf.d/uploads.ini
 
 # Install Composer
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
 # Copy Nginx configuration
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 
-# Copy application files
+# Step 1: Copy composer definitions first for layer caching
+COPY composer.json composer.lock /var/www/html/
+
+# Step 2: Install dependencies without executing artisan scripts
+RUN composer install --no-dev --no-interaction --no-scripts --prefer-dist --no-autoloader
+
+# Step 3: Copy the rest of the application files
 COPY . /var/www/html
 
-# Install Composer dependencies (production only)
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+# Step 4: Generate optimized autoloader classmap
+RUN composer dump-autoload --optimize --no-dev
 
 # Setup storage directory permissions
 RUN mkdir -p /var/www/html/storage/framework/cache/data \

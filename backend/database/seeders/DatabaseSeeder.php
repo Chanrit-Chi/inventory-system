@@ -17,14 +17,6 @@ class DatabaseSeeder extends Seeder
             RolePermissionSeeder::class,
             UserSeeder::class,
             SalesChannelSeeder::class,
-            ProductCategorySeeder::class,
-            AttributeSeeder::class,
-            ProductSeeder::class,
-            CustomerSeeder::class,
-            RestockSeeder::class,
-            OrderSeeder::class,
-            ExpenseSeeder::class,
-            QuotationInvoiceSeeder::class,
             DeliveryAndBankSeeder::class,
         ]);
     }

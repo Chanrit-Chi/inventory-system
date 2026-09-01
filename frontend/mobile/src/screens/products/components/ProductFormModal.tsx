@@ -46,6 +46,7 @@ export function ProductFormModal({
     isSavingProduct,
     selectedPhotoUri,
     uploadingPhoto,
+    uploadProgress,
     handleTakeProductPhoto,
     handlePickProductPhotoFromGallery,
     handleRemoveProductPhoto,
@@ -87,6 +88,12 @@ export function ProductFormModal({
                   <Ionicons name="image-outline" size={16} color={tokens.colors.primaryContainer} />
                   <Text style={styles.formSectionTitle}>Product Photo</Text>
                 </View>
+                {Boolean(selectedPhotoUri && !uploadingPhoto) && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFDF5', paddingHorizontal: 7, paddingVertical: 2.5, borderRadius: 10 }}>
+                    <Ionicons name="checkmark-circle" size={12} color="#059669" />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>Uploaded</Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.photoUploadRow}>
@@ -98,13 +105,15 @@ export function ProductFormModal({
                       contentFit="cover"
                       transition={150}
                     />
-                    <TouchableOpacity
-                      style={styles.photoRemoveBtn}
-                      onPress={handleRemoveProductPhoto}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#DC2626" />
-                    </TouchableOpacity>
+                    {!uploadingPhoto && (
+                      <TouchableOpacity
+                        style={styles.photoRemoveBtn}
+                        onPress={handleRemoveProductPhoto}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#DC2626" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.photoPlaceholder}>
@@ -118,6 +127,7 @@ export function ProductFormModal({
                     style={styles.photoPickBtn}
                     onPress={handleTakeProductPhoto}
                     activeOpacity={0.8}
+                    disabled={uploadingPhoto}
                   >
                     <Ionicons name="camera" size={15} color={tokens.colors.primaryContainer} />
                     <Text style={styles.photoPickBtnText}>Take Photo</Text>
@@ -127,19 +137,40 @@ export function ProductFormModal({
                     style={styles.photoPickBtn}
                     onPress={handlePickProductPhotoFromGallery}
                     activeOpacity={0.8}
+                    disabled={uploadingPhoto}
                   >
                     <Ionicons name="images" size={15} color={tokens.colors.primaryContainer} />
                     <Text style={styles.photoPickBtnText}>Choose Gallery</Text>
                   </TouchableOpacity>
-
-                  {Boolean(uploadingPhoto) && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                      <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
-                      <Text style={{ fontSize: 10.5, color: tokens.colors.secondary }}>Uploading photo...</Text>
-                    </View>
-                  )}
                 </View>
               </View>
+
+              {/* Progress Bar & Uploading Indicator */}
+              {Boolean(uploadingPhoto) && (
+                <View style={{ marginTop: 12, paddingHorizontal: 2 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                      <Text style={{ fontSize: 11.5, fontWeight: '600', color: tokens.colors.primaryContainer }}>
+                        Uploading photo to cloud...
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 11.5, fontWeight: '700', color: tokens.colors.primaryContainer }}>
+                      {uploadProgress || 15}%
+                    </Text>
+                  </View>
+                  <View style={{ height: 6, backgroundColor: tokens.colors.surfaceMuted, borderRadius: 3, overflow: 'hidden' }}>
+                    <View
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, Math.max(12, uploadProgress || 15))}%`,
+                        backgroundColor: tokens.colors.primaryContainer,
+                        borderRadius: 3,
+                      }}
+                    />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Product Structure Selector: Simple vs Variable */}
@@ -533,15 +564,20 @@ export function ProductFormModal({
             </View>
 
             <TouchableOpacity
-              style={[styles.submitBtn, isSavingProduct && { opacity: 0.7 }]}
+              style={[styles.submitBtn, (isSavingProduct || uploadingPhoto) && { opacity: 0.75 }]}
               onPress={handleSubmit(onSubmit, onFormError)}
-              disabled={isSavingProduct}
+              disabled={isSavingProduct || uploadingPhoto}
               activeOpacity={0.85}
             >
               {isSavingProduct ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <ActivityIndicator size="small" color={tokens.colors.onPrimary} />
                   <Text style={styles.submitBtnText}>Saving Product...</Text>
+                </View>
+              ) : uploadingPhoto ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <ActivityIndicator size="small" color={tokens.colors.onPrimary} />
+                  <Text style={styles.submitBtnText}>Uploading Photo ({uploadProgress || 15}%)...</Text>
                 </View>
               ) : (
                 <Text style={styles.submitBtnText}>{editingProduct ? 'Save Product Changes' : 'Create Product'}</Text>

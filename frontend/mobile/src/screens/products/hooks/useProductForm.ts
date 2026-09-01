@@ -4,6 +4,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
+import { compressProductImage } from '../../../utils/imageCompressor'
 import { queryKeys } from '../../../api/queryKeys'
 import { productSchema, ProductFormValues } from '../../../utils/validation'
 import { createProduct, updateProduct, uploadMedia } from '../../../api/endpoints'
@@ -76,6 +77,8 @@ export function useProductForm({
   const [selectedPhotoUri, setSelectedPhotoUri] = useState<string | null>(null)
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<{ uri: string; name: string; type: string } | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [isSavingProduct, setIsSavingProduct] = useState(false)
 
   // Interactive Product Attributes Selection State (Selected from DB)
@@ -102,6 +105,25 @@ export function useProductForm({
   const formName = watch('name')
   const formSellPrice = watch('selling_price')
 
+  const uploadPhotoImmediately = async (file: { uri: string; name: string; type: string }) => {
+    setUploadingPhoto(true)
+    setUploadProgress(15)
+    try {
+      const uploadRes = await uploadMedia(file, 'products', (pct) => {
+        setUploadProgress(Math.max(15, Math.min(95, pct)))
+      })
+      if (uploadRes && uploadRes.data?.url) {
+        setUploadProgress(100)
+        setUploadedImageUrl(uploadRes.data.url)
+        setSelectedPhotoUri(uploadRes.data.url)
+      }
+    } catch (err: unknown) {
+      console.warn('Immediate photo upload failed, keeping local preview:', err)
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   const handlePickProductPhotoFromGallery = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -113,15 +135,14 @@ export function useProductForm({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
+        quality: 0.9,
       })
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0]
         setSelectedPhotoUri(asset.uri)
-        const filename = asset.fileName || asset.uri.split('/').pop() || 'product.jpg'
-        const ext = filename.split('.').pop()?.toLowerCase() || 'jpg'
-        const mimeType = asset.mimeType || (ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg')
-        setSelectedPhotoFile({ uri: asset.uri, name: filename, type: mimeType })
+        const compressed = await compressProductImage(asset.uri, 1800, 0.85)
+        setSelectedPhotoFile(compressed)
+        uploadPhotoImmediately(compressed)
       }
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to select image.')
@@ -138,13 +159,14 @@ export function useProductForm({
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
+        quality: 0.9,
       })
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0]
         setSelectedPhotoUri(asset.uri)
-        const filename = `photo_${Date.now()}.jpg`
-        setSelectedPhotoFile({ uri: asset.uri, name: filename, type: 'image/jpeg' })
+        const compressed = await compressProductImage(asset.uri, 1800, 0.85)
+        setSelectedPhotoFile(compressed)
+        uploadPhotoImmediately(compressed)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to capture photo.'
@@ -155,6 +177,9 @@ export function useProductForm({
   const handleRemoveProductPhoto = () => {
     setSelectedPhotoUri(null)
     setSelectedPhotoFile(null)
+    setUploadedImageUrl(null)
+    setUploadProgress(0)
+    setUploadingPhoto(false)
   }
 
   const handleToggleAttributeValue = (attrId: string, value: string) => {
@@ -285,18 +310,24 @@ export function useProductForm({
     const sellP = parseFloat(data.selling_price || '0') || 0
     const reorder = parseInt(data.default_reorder_level || '10') || 10
 
-    let finalImageUrl: string | null = selectedPhotoUri?.startsWith('http') ? selectedPhotoUri : null
+    let finalImageUrl: string | null = null
+    if (uploadedImageUrl?.startsWith('http')) {
+      finalImageUrl = uploadedImageUrl
+    } else if (selectedPhotoUri?.startsWith('http')) {
+      finalImageUrl = selectedPhotoUri
+    }
 
-    if (selectedPhotoFile) {
-      setUploadingPhoto(true)
+    // Fallback if user clicked submit while background upload was still pending
+    if (!finalImageUrl && selectedPhotoFile && !uploadingPhoto) {
       try {
+        setUploadingPhoto(true)
         const uploadRes = await uploadMedia(selectedPhotoFile, 'products')
         if (uploadRes && uploadRes.data?.url) {
           finalImageUrl = uploadRes.data.url
+          setUploadedImageUrl(uploadRes.data.url)
         }
       } catch (err: unknown) {
-        console.warn('Image upload failed, preserving local preview:', err)
-        finalImageUrl = selectedPhotoUri
+        console.warn('Fallback image upload failed, proceeding without cloud image:', err)
       } finally {
         setUploadingPhoto(false)
       }
@@ -447,6 +478,9 @@ export function useProductForm({
     setEditingProduct(null)
     setSelectedPhotoUri(null)
     setSelectedPhotoFile(null)
+    setUploadedImageUrl(null)
+    setUploadProgress(0)
+    setUploadingPhoto(false)
     setSelectedProductAttributes([])
     reset({
       productType: 'VARIABLE',
@@ -470,6 +504,9 @@ export function useProductForm({
     setEditingProduct(prod)
     setSelectedPhotoUri(prod.image_url || null)
     setSelectedPhotoFile(null)
+    setUploadedImageUrl(prod.image_url || null)
+    setUploadProgress(prod.image_url ? 100 : 0)
+    setUploadingPhoto(false)
 
     const isVar =
       (prod.variants && prod.variants.length > 1) ||
@@ -554,6 +591,8 @@ export function useProductForm({
     reset,
     selectedPhotoUri,
     uploadingPhoto,
+    uploadProgress,
+    uploadedImageUrl,
     isSavingProduct,
     handlePickProductPhotoFromGallery,
     handleTakeProductPhoto,

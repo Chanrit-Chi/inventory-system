@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('source_type', 50); // STOCK_MOVEMENT, PERSONAL_ACCESS_TOKEN, ORDER, INVOICE, USER, PAYROLL_AUDIT_LOG
-            $table->uuid('source_id'); // Original record ID
+            $table->string('source_id', 255); // Original record ID
             $table->string('action', 60); // e.g., STOCK_ADJUSTMENT, USER_LOGIN, ORDER_COMPLETED
             $table->string('category', 30); // INVENTORY, SECURITY, ORDERS, BILLING, STAFF, PAYROLL
             $table->string('target', 255); // Human-readable target description

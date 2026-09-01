@@ -20,6 +20,7 @@ import {
   Switch,
   StatCard,
   Card,
+  ImageUploader,
 } from '@/components/ui'
 
 const route = useRoute()
@@ -481,13 +482,12 @@ defineExpose({
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Product Image URL</label>
-            <Input
+            <ImageUploader
               id="product-edit-image"
               v-model="form.image_url"
-              type="url"
-              placeholder="https://example.com/image.jpg"
-              class="h-9 bg-surface text-sm"
+              label="Product Image"
+              folder="products"
+              help-text="PNG, JPG, WEBP, or GIF up to 10MB"
             />
           </div>
 

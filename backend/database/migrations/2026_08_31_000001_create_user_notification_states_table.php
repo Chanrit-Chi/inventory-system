@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('user_notification_states', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('user_id');
+            $table->uuid('user_id');
             $table->string('notification_key', 191);
             $table->boolean('is_read')->default(false);
             $table->boolean('is_dismissed')->default(false);

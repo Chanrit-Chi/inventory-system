@@ -45,12 +45,18 @@ class RoleController extends BaseApiController
     private function findRoleOrFail(string $id): Role
     {
         $upper = strtoupper(trim($id));
+        $isUuid = \Illuminate\Support\Str::isUuid($id);
+
         $role = Role::with('permissions')
-            ->where('id', $id)
-            ->orWhere('slug', $id)
-            ->orWhere('slug', $upper)
-            ->orWhere('name', $id)
-            ->orWhereRaw('UPPER(slug) = ?', [$upper])
+            ->where(function ($query) use ($id, $upper, $isUuid) {
+                $query->where('slug', $id)
+                    ->orWhere('slug', $upper)
+                    ->orWhere('name', $id);
+
+                if ($isUuid) {
+                    $query->orWhere('id', $id);
+                }
+            })
             ->first();
 
         if (! $role) {
@@ -100,8 +106,22 @@ class RoleController extends BaseApiController
         $permissionIds = [];
 
         if (! empty($permissionInputs)) {
-            $permissions = Permission::whereIn('slug', $permissionInputs)
-                ->orWhereIn('id', $permissionInputs)
+            $uuidInputs = array_values(array_filter($permissionInputs, fn ($val) => \Illuminate\Support\Str::isUuid((string) $val)));
+            $slugInputs = array_values(array_filter($permissionInputs, fn ($val) => ! \Illuminate\Support\Str::isUuid((string) $val)));
+
+            $permissions = Permission::query()
+                ->where(function ($query) use ($uuidInputs, $slugInputs) {
+                    if (! empty($slugInputs)) {
+                        $query->whereIn('slug', $slugInputs);
+                    }
+                    if (! empty($uuidInputs)) {
+                        if (! empty($slugInputs)) {
+                            $query->orWhereIn('id', $uuidInputs);
+                        } else {
+                            $query->whereIn('id', $uuidInputs);
+                        }
+                    }
+                })
                 ->get();
 
             $permissionIds = $permissions->pluck('id')->toArray();

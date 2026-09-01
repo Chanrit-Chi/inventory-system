@@ -18,6 +18,13 @@ return new class extends Migration
                 DB::statement('DROP INDEX IF EXISTS sales_channels_name_unique');
                 DB::statement('DROP INDEX IF EXISTS sales_channels_code_unique');
                 DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS sales_channels_name_platform_unique ON sales_channels(name, platform)');
+            } elseif ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE sales_channels DROP CONSTRAINT IF EXISTS sales_channels_name_unique');
+                DB::statement('ALTER TABLE sales_channels DROP CONSTRAINT IF EXISTS sales_channels_code_unique');
+                $exists = DB::select("SELECT 1 FROM pg_constraint WHERE conname = 'sales_channels_name_platform_unique'");
+                if (empty($exists)) {
+                    DB::statement('ALTER TABLE sales_channels ADD CONSTRAINT sales_channels_name_platform_unique UNIQUE (name, platform)');
+                }
             } else {
                 Schema::table('sales_channels', function (Blueprint $table) {
                     try {
@@ -43,6 +50,8 @@ return new class extends Migration
             $driver = DB::getDriverName();
             if ($driver === 'sqlite') {
                 DB::statement('DROP INDEX IF EXISTS sales_channels_name_platform_unique');
+            } elseif ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE sales_channels DROP CONSTRAINT IF EXISTS sales_channels_name_platform_unique');
             } else {
                 Schema::table('sales_channels', function (Blueprint $table) {
                     try {

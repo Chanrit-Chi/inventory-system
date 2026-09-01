@@ -1300,7 +1300,8 @@ export async function record13thMonthPayout(
  */
 export async function uploadMedia(
   file: { uri: string; name: string; type: string },
-  folder = 'products'
+  folder = 'products',
+  onProgress?: (percent: number) => void
 ): Promise<ApiResponse<{ url: string; path: string; disk: string; filename: string }>> {
   const formData = new FormData()
   formData.append('image', file as any)
@@ -1311,6 +1312,13 @@ export async function uploadMedia(
     {
       headers: {
         'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000,
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          onProgress(percent)
+        }
       },
     }
   )

@@ -120,7 +120,8 @@ class VariantGeneratorService
         foreach ($attributeValues as $av) {
             $attrValId = null;
             if (is_array($av)) {
-                $attrValId = $av['id'] ?? $av['attribute_value_id'] ?? null;
+                $rawId = $av['id'] ?? $av['attribute_value_id'] ?? null;
+                $attrValId = ($rawId && Str::isUuid((string) $rawId)) ? (string) $rawId : null;
                 $attrName = $av['attribute']['name'] ?? $av['attribute_name'] ?? null;
                 $valName = $av['value_name'] ?? $av['value'] ?? null;
 
@@ -138,7 +139,7 @@ class VariantGeneratorService
                 $attrValId = $av;
             }
 
-            if ($attrValId && AttributeValue::where('id', $attrValId)->exists()) {
+            if ($attrValId && Str::isUuid($attrValId) && AttributeValue::where('id', $attrValId)->exists()) {
                 VariantAttributeValue::firstOrCreate([
                     'variant_id'         => $variant->id,
                     'attribute_value_id' => $attrValId,
@@ -169,17 +170,28 @@ class VariantGeneratorService
 
         // Attach attribute pivot records
         foreach ($attributes as $attributeEntry) {
-            ProductAttribute::firstOrCreate([
-                'product_id'   => $product->id,
-                'attribute_id' => $attributeEntry['attribute_id'],
-            ]);
+            $attrId = $attributeEntry['attribute_id'] ?? null;
+            if ($attrId && Str::isUuid((string) $attrId)) {
+                ProductAttribute::firstOrCreate([
+                    'product_id'   => $product->id,
+                    'attribute_id' => $attrId,
+                ]);
+            }
         }
 
         // Build value groups per attribute
         $valueGroups = [];
         foreach ($attributes as $attributeEntry) {
-            $values = AttributeValue::whereIn('id', $attributeEntry['value_ids'])
-                ->where('attribute_id', $attributeEntry['attribute_id'])
+            $attrId = $attributeEntry['attribute_id'] ?? null;
+            $rawValIds = $attributeEntry['value_ids'] ?? [];
+            $valIds = array_values(array_filter($rawValIds, fn ($id) => Str::isUuid((string) $id)));
+
+            if (empty($valIds) || !$attrId || !Str::isUuid((string) $attrId)) {
+                continue;
+            }
+
+            $values = AttributeValue::whereIn('id', $valIds)
+                ->where('attribute_id', $attrId)
                 ->get();
 
             if ($values->isEmpty()) {

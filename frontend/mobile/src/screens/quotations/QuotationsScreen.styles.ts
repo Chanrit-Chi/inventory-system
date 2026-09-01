@@ -81,12 +81,14 @@ export const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: tokens.spacing.md,
-    paddingTop: tokens.spacing.sm,
+    paddingTop: tokens.spacing.md,
     paddingBottom: 40,
+    flexGrow: 1,
   },
   loadingContainer: {
     padding: 36,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
   },
   loadingText: {
@@ -103,6 +105,7 @@ export const styles = StyleSheet.create({
     borderColor: tokens.colors.borderSubtle,
     gap: 8,
     marginTop: 12,
+    ...tokens.shadows.card,
   },
   emptyTitle: {
     fontSize: 14,

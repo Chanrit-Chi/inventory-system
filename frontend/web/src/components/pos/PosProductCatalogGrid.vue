@@ -130,6 +130,9 @@ const formatMoney = (amount: number | string | undefined): string => {
         </div>
 
         <div class="product-info">
+          <div v-if="product.category" class="product-category">
+            {{ product.category.name }}
+          </div>
           <h3 class="product-name">{{ product.name }}</h3>
           <div class="product-price">
             {{ formatMoney(
@@ -321,6 +324,18 @@ const formatMoney = (amount: number | string | undefined): string => {
 
 .product-info {
   padding: 16px;
+}
+
+.product-category {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .product-name {

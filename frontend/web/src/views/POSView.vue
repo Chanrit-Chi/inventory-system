@@ -1306,39 +1306,39 @@ defineExpose({
                 <ShoppingBag :size="10" />
                 <span>{{ getProductCartCount(product.id) }}</span>
               </div>
+
+              <!-- Bottom Left: High Contrast Stock Status Badge (Overlaid on thumbnail with backdrop-blur) -->
+              <span
+                :class="[
+                  'absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border shadow-xs backdrop-blur-md',
+                  getProductStock(product) <= 0
+                    ? 'bg-rose-50/95 text-rose-800 border-rose-200 dark:bg-rose-950/90 dark:text-rose-300 dark:border-rose-800'
+                    : getProductStock(product) <= 5
+                      ? 'bg-amber-50/95 text-amber-800 border-amber-200 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-800'
+                      : 'bg-card/95 text-foreground border-border dark:bg-card/90'
+                ]"
+              >
+                <span
+                  class="w-1.5 h-1.5 rounded-full shrink-0"
+                  :class="[
+                    getProductStock(product) <= 0
+                      ? 'bg-rose-500'
+                      : getProductStock(product) <= 5
+                        ? 'bg-amber-500 animate-pulse'
+                        : 'bg-emerald-500'
+                  ]"
+                />
+                <span>{{ getProductStock(product) <= 0 ? 'Out of stock' : `${getProductStock(product)} in stock` }}</span>
+              </span>
             </div>
 
             <!-- Product Metadata -->
             <div class="flex-1 flex flex-col justify-between min-h-0">
               <div class="space-y-1">
-                <!-- Category + High-Contrast Stock Status Row -->
-                <div class="flex items-center justify-between gap-1.5 min-h-[18px]">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-primary truncate max-w-[55%]">
+                <!-- Category Badge Row (Dedicated full width, no overlap) -->
+                <div class="flex items-center gap-1.5 min-h-[18px]">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-primary/10 text-primary truncate max-w-full">
                     {{ product.category?.name || 'General' }}
-                  </span>
-
-                  <!-- High Contrast Stock Pill (WCAG AA Compliant Light & Dark) -->
-                  <span
-                    :class="[
-                      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold border shrink-0',
-                      getProductStock(product) <= 0
-                        ? 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800'
-                        : getProductStock(product) <= 5
-                          ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800'
-                          : 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800'
-                    ]"
-                  >
-                    <span
-                      class="w-1.5 h-1.5 rounded-full shrink-0"
-                      :class="[
-                        getProductStock(product) <= 0
-                          ? 'bg-rose-500'
-                          : getProductStock(product) <= 5
-                            ? 'bg-amber-500 animate-pulse'
-                            : 'bg-emerald-500'
-                      ]"
-                    />
-                    <span>{{ getProductStock(product) <= 0 ? 'Out of stock' : `${getProductStock(product)} in stock` }}</span>
                   </span>
                 </div>
 

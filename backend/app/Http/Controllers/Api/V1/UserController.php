@@ -98,10 +98,11 @@ class UserController extends BaseApiController
             }
 
             // Look up dynamically in roles table by slug, name, or UUID
+            $isUuid = \Illuminate\Support\Str::isUuid($trimmed);
             $matched = \App\Models\Role::where('slug', $trimmed)
                 ->orWhere('slug', $upper)
                 ->orWhere('name', $trimmed)
-                ->orWhere('id', $trimmed)
+                ->when($isUuid, fn ($q) => $q->orWhere('id', $trimmed))
                 ->first();
 
             if ($matched) {

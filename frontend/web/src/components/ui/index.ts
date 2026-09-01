@@ -29,6 +29,7 @@ export { default as Skeleton } from './Skeleton.vue'
 export { default as Switch } from './Switch.vue'
 export { default as Radio } from './Radio.vue'
 export { default as Modal } from './Modal.vue'
+export { default as ImageUploader } from './ImageUploader.vue'
 
 // Table Primitives
 export { default as Table } from './Table.vue'

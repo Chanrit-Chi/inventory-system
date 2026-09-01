@@ -10,7 +10,6 @@ import {
   Tag,
   Layers,
   TrendingUp,
-  Upload,
   Info,
   ScanBarcode,
   Sparkles,
@@ -21,6 +20,7 @@ import {
   Input,
   Switch,
   Card,
+  ImageUploader,
 } from '@/components/ui'
 
 const router = useRouter()
@@ -29,29 +29,10 @@ const attrStore = useAttributeStore()
 const productStore = useProductStore()
 const categoryStore = useCategoryStore()
 
-const imagePreviewUrl = ref<string>('')
-
 onMounted(() => {
   attrStore.fetchAttributes()
   categoryStore.fetchCategories()
 })
-
-function handleImageFile(event: Event) {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0] ?? null
-  form.value.image_file = file
-
-  if (file) {
-    imagePreviewUrl.value = URL.createObjectURL(file)
-  } else {
-    imagePreviewUrl.value = ''
-  }
-}
-
-function removeImage() {
-  form.value.image_file = null
-  imagePreviewUrl.value = ''
-}
 
 // --- Base product form ---
 const form = ref({
@@ -62,6 +43,7 @@ const form = ref({
   selling_price: '',
   initial_stock: 0,
   default_reorder_level: '5',
+  image_url: '',
   image_file: null as File | null,
   description: '',
   is_active: true,
@@ -347,8 +329,8 @@ async function submit() {
     }))
   }
 
-  // Use FormData when we have an image file to upload
-  if (form.value.image_file) {
+  // Use FormData when we have a raw image file that hasn't been uploaded to cloud storage
+  if (form.value.image_file && !form.value.image_url) {
     const formData = new FormData()
     formData.append('name', form.value.name.trim())
     if (form.value.barcode.trim()) {
@@ -380,13 +362,14 @@ async function submit() {
       toast.error(msg)
     }
   } else {
-    // Original JSON payload when no image
+    // Standard payload with uploaded image_url or no image
     const payload: any = {
       name: form.value.name.trim(),
       barcode: form.value.barcode.trim() || undefined,
       purchase_price: pPrice,
       selling_price: sPrice,
       default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
+      image_url: form.value.image_url.trim() || undefined,
       description: form.value.description.trim() || undefined,
       is_active: Boolean(form.value.is_active),
       product_type: form.value.product_type,
@@ -613,31 +596,14 @@ defineExpose({
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Product Image</label>
-            <div class="flex flex-col items-start gap-2">
-              <div
-                class="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-surface px-3 text-sm text-muted-foreground file:mr-4 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
-              >
-                <Upload :size="14" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  @change="handleImageFile"
-                  class="file:cursor-pointer w-full cursor-pointer"
-                />
-              </div>
-              <div v-if="form.image_file && imagePreviewUrl" class="flex items-center gap-3 mt-2">
-                <img :src="imagePreviewUrl" alt="Product preview" class="w-24 h-20 object-cover rounded border border-border" />
-                <span class="text-xs text-muted-foreground truncate max-w-[100px]" title="form.image_file.name">{{ form.image_file.name }}</span>
-                <button
-                  type="button"
-                  @click="removeImage"
-                  class="text-xs text-destructive underline hover:underline cursor-pointer"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
+            <ImageUploader
+              id="product-create-image"
+              v-model="form.image_url"
+              label="Product Image"
+              folder="products"
+              help-text="PNG, JPG, WEBP, or GIF up to 10MB"
+              @file-selected="(file) => form.image_file = file"
+            />
           </div>
 
           <div>

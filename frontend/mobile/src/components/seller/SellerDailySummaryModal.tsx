@@ -57,6 +57,9 @@ export const SellerDailySummaryModal: React.FC<SellerDailySummaryModalProps> = (
   const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'assisted'>('all')
 
   // Printer State
+  const [printerDevices, setPrinterDevices] = useState<PrinterDevice[]>([])
+  const [printerPickerOpen, setPrinterPickerOpen] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const isManager = useMemo(() => {
     if (!currentUser?.role) return false
     const r = currentUser.role.toUpperCase().trim()
