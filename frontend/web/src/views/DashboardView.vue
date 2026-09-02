@@ -10,7 +10,6 @@ import {
   Wallet,
   ArrowDownToLine,
   Package,
-  Star,
   Zap,
   Clock,
   Minus,
@@ -171,44 +170,90 @@ const healthIndicators = computed<HealthIndicator[]>(() => [
   { label: 'Security & Idempotency Check', value: 'UUID v4 Locks Active' },
 ])
 
-const recentEvents = ref<ActivityEvent[]>([
-  {
-    id: 'e1',
-    title: 'POS Shift Checkout #ORD-1092',
-    desc: 'Cashier processed $45.00 via ABA PayWay QR',
-    time: '2 mins ago',
-    icon: Receipt,
-    badgeText: 'Completed',
-    badgeVariant: 'success',
-  },
-  {
-    id: 'e2',
-    title: 'Supplier Restock Session #RS-8802',
-    desc: 'Intake batch received +120 units across 4 SKUs',
-    time: '35 mins ago',
-    icon: Package,
-    badgeText: 'Restocked',
-    badgeVariant: 'info',
-  },
-  {
-    id: 'e3',
-    title: 'Loyalty Upgrade: Sophia Chan',
-    desc: 'Customer reached 1,200 lifetime points -> Gold Tier',
-    time: '1 hour ago',
-    icon: Star,
-    badgeText: 'Gold Tier',
-    badgeVariant: 'warning',
-  },
-  {
-    id: 'e4',
-    title: 'Store Utility Expense Recorded',
-    desc: 'Log store electricity & internet expense ($185.00)',
-    time: '3 hours ago',
-    icon: Wallet,
-    badgeText: 'Expense',
-    badgeVariant: 'neutral',
-  },
-])
+const recentEvents = ref<ActivityEvent[]>([])
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return 'Recently'
+  try {
+    const diffMs = Date.now() - new Date(dateStr).getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) return 'Just now'
+    const diffMin = Math.floor(diffSec / 60)
+    if (diffMin < 60) return `${diffMin}m ago`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr}h ago`
+    const diffDay = Math.floor(diffHr / 24)
+    if (diffDay < 7) return `${diffDay}d ago`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch {
+    return 'Recently'
+  }
+}
+
+function resolveEventIcon(category?: string, action?: string): Component {
+  const cat = (category || '').toUpperCase()
+  const act = (action || '').toUpperCase()
+  if (cat === 'INVENTORY' || act.includes('STOCK') || act.includes('RESTOCK')) return Package
+  if (cat === 'SECURITY' || act.includes('LOGIN') || act.includes('AUTH') || act.includes('USER')) return ShieldCheck
+  if (cat === 'ORDERS' || act.includes('ORDER') || act.includes('SALE')) return Receipt
+  if (cat === 'BILLING' || cat === 'EXPENSES' || act.includes('INVOICE') || act.includes('PAYMENT')) return DollarSign
+  return Zap
+}
+
+function resolveBadgeVariant(category?: string, action?: string): 'success' | 'info' | 'warning' | 'purple' | 'neutral' | 'default' {
+  const cat = (category || '').toUpperCase()
+  const act = (action || '').toUpperCase()
+  if (act.includes('CANCEL') || act.includes('DELETE') || act.includes('FAIL')) return 'warning'
+  if (act.includes('COMPLETE') || act.includes('RESTOCK') || act.includes('PAID')) return 'success'
+  if (cat === 'SECURITY' || act.includes('LOGIN')) return 'info'
+  if (cat === 'INVENTORY') return 'purple'
+  return 'neutral'
+}
+
+function resolveEventTitle(log: any): string {
+  const action = (log.action || '').replace(/_/g, ' ')
+  if (log.target) {
+    return `${action}: ${log.target}`
+  }
+  return action || 'Operational Event'
+}
+
+async function fetchRecentOperationalFeed(): Promise<ActivityEvent[]> {
+  try {
+    const res = await api.get('/audit-logs', { params: { per_page: 5 } })
+    const logs = res.data?.data || []
+    if (Array.isArray(logs) && logs.length > 0) {
+      return logs.map((log: any) => ({
+        id: log.id,
+        title: resolveEventTitle(log),
+        desc: log.details || (log.actor_name ? `By ${log.actor_name}` : 'System logged event'),
+        time: formatRelativeTime(log.occurred_at || log.created_at),
+        icon: resolveEventIcon(log.category, log.action),
+        badgeText: (log.category || log.action || 'Event').toUpperCase(),
+        badgeVariant: resolveBadgeVariant(log.category, log.action),
+      }))
+    }
+  } catch {}
+
+  // Fallback to recent orders if audit logs are not accessible
+  try {
+    const ordersRes = await api.get('/orders', { params: { per_page: 4 } })
+    const ordData = ordersRes.data?.data || ordersRes.data || []
+    if (Array.isArray(ordData) && ordData.length > 0) {
+      return ordData.map((o: any) => ({
+        id: o.id,
+        title: `Order #${o.order_number || o.id.slice(0, 8)}`,
+        desc: `${o.customer_name ? o.customer_name + ' • ' : ''}$${Number(o.total_amount || 0).toFixed(2)} (${o.payment_method || 'Cash'})`,
+        time: formatRelativeTime(o.created_at),
+        icon: Receipt,
+        badgeText: (o.status || 'COMPLETED').toUpperCase(),
+        badgeVariant: o.status === 'COMPLETED' ? 'success' : 'info',
+      }))
+    }
+  } catch {}
+
+  return []
+}
 
 async function fetchDashboardSummary() {
   try {
@@ -270,11 +315,13 @@ async function fetchLowStockProducts() {
 async function loadStats() {
   loading.value = true
   try {
-    const [summary, recentOrdersData, lowStockItemsData] = await Promise.all([
+    const [summary, recentOrdersData, lowStockItemsData, eventsData] = await Promise.all([
       fetchDashboardSummary(),
       fetchRecentOrders(),
       fetchLowStockProducts(),
+      fetchRecentOperationalFeed(),
     ])
+    recentEvents.value = eventsData
 
     // Build stats from dashboard summary
     const totalOrders = summary.totalOrders
@@ -829,10 +876,13 @@ onMounted(loadStats)
             </div>
             <h3 class="font-display font-bold text-base text-foreground">Recent Operational Feed</h3>
           </div>
-          <span class="text-xs font-mono text-muted-foreground">Live Stream</span>
+          <RouterLink to="/audit-logs" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+            <span>View All</span>
+            <ArrowRight :size="12" />
+          </RouterLink>
         </div>
 
-        <div class="flex flex-col gap-2">
+        <div v-if="recentEvents.length > 0" class="flex flex-col gap-2">
           <div
             v-for="event in recentEvents"
             :key="event.id"
@@ -852,6 +902,12 @@ onMounted(loadStats)
               <span class="text-[10px] font-mono text-muted-foreground/80 mt-0.5 block">{{ event.time }}</span>
             </div>
           </div>
+        </div>
+
+        <div v-else class="py-8 text-center flex flex-col items-center justify-center gap-1.5">
+          <Clock :size="24" class="text-muted-foreground/40 mb-1" />
+          <p class="text-xs font-medium text-foreground">No recent operational activity</p>
+          <p class="text-3xs text-muted-foreground">New sales, stock updates, and system events will appear here live.</p>
         </div>
       </section>
     </div>
