@@ -378,7 +378,11 @@ function AppShell() {
   // Configure Android System Navigation Bar
   React.useEffect(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setButtonStyleAsync('dark').catch(() => {})
+      try {
+        NavigationBar.setButtonStyleAsync('dark').catch(() => {})
+      } catch {
+        // Safe fallback
+      }
     }
   }, [])
 

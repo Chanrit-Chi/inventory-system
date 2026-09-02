@@ -6,6 +6,8 @@ import { useToast } from '@/composables/useToast'
 import {
   PERMISSION_MODULES,
   ROLE_DEFAULT_PERMISSIONS,
+  getPermissionOriginStatus,
+  type PermissionOriginInfo,
 } from '@/composables/usePermissions'
 import {
   Shield,
@@ -274,10 +276,16 @@ function revokeAll() {
   activePermissions.value = new Set()
 }
 
+function getOriginInfo(slug: string): PermissionOriginInfo {
+  const isGranted = activePermissions.value.has(slug) || isSuperAdminRole.value
+  return getPermissionOriginStatus(slug, selectedRoleSlug.value, isGranted)
+}
+
 function resetToRoleDefault() {
   if (!selectedRole.value || isSuperAdminRole.value) return
   const defaults = ROLE_DEFAULT_PERMISSIONS[selectedRole.value.slug] || []
   activePermissions.value = new Set(defaults)
+  toast.info(`Reset permissions for ${selectedRole.value.display_name || selectedRole.value.name} to baseline defaults.`)
 }
 
 function discardChanges() {
@@ -643,12 +651,40 @@ onMounted(loadData)
 
               <!-- Permission Info -->
               <div class="min-w-0 flex flex-col gap-0.5">
-                <span
-                  class="font-semibold text-xs text-foreground truncate leading-tight"
-                  :class="{ 'font-bold text-primary': activePermissions.has(p.slug) }"
-                >
-                  {{ formatPermissionTitle(p) }}
-                </span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span
+                    class="font-semibold text-xs text-foreground truncate leading-tight"
+                    :class="{ 'font-bold text-primary': activePermissions.has(p.slug) }"
+                  >
+                    {{ formatPermissionTitle(p) }}
+                  </span>
+
+                  <!-- Origin Status Badge -->
+                  <template v-if="getOriginInfo(p.slug).type === 'SUPER_ADMIN_LOCKED'">
+                    <span class="font-mono text-3xs px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-muted text-muted-foreground border border-border font-medium">
+                      <Lock :size="9" />
+                      <span>Role Baseline (Locked)</span>
+                    </span>
+                  </template>
+                  <template v-else-if="getOriginInfo(p.slug).type === 'ROLE_DEFAULT'">
+                    <span class="font-mono text-3xs px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium">
+                      <ShieldCheck :size="9" />
+                      <span>Role Default</span>
+                    </span>
+                  </template>
+                  <template v-else-if="getOriginInfo(p.slug).type === 'CUSTOM_ADDED'">
+                    <span class="font-mono text-3xs px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 font-bold">
+                      <Sparkles :size="9" />
+                      <span>+ Custom Added</span>
+                    </span>
+                  </template>
+                  <template v-else-if="getOriginInfo(p.slug).type === 'BASELINE_REMOVED'">
+                    <span class="font-mono text-3xs px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 font-semibold">
+                      <ShieldAlert :size="9" />
+                      <span>- Baseline Removed</span>
+                    </span>
+                  </template>
+                </div>
                 <span class="text-[11px] text-muted-foreground truncate leading-tight">
                   {{ formatPermissionDesc(p) }}
                 </span>

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import type { RoleItem, PermissionItem } from '../../types'
+import { matchPermission, ROLE_DEFAULT_PERMISSIONS } from '../../hooks/usePermissions'
 
 export interface PermissionModuleGroup {
   id: string
@@ -7,6 +8,117 @@ export interface PermissionModuleGroup {
   icon: keyof typeof Ionicons.glyphMap
   color: string
   permissions: PermissionItem[]
+}
+
+export type PermissionOriginType =
+  | 'SUPER_ADMIN_LOCKED'
+  | 'ROLE_DEFAULT'
+  | 'CUSTOM_ADDED'
+  | 'BASELINE_REMOVED'
+  | 'UNGRANTED'
+
+export interface PermissionOriginInfo {
+  type: PermissionOriginType
+  label: string
+  color: string
+  bg: string
+  borderColor: string
+  icon: keyof typeof Ionicons.glyphMap
+  description: string
+  isDefault: boolean
+  isCustom: boolean
+  isRevoked: boolean
+  isLocked: boolean
+}
+
+/**
+ * Distinguishes whether a permission is inherited by role default, custom-added, or revoked.
+ */
+export function getPermissionOriginStatus(
+  slug: string,
+  roleSlug: string,
+  isGranted: boolean
+): PermissionOriginInfo {
+  if (roleSlug === 'SUPER_ADMIN') {
+    return {
+      type: 'SUPER_ADMIN_LOCKED',
+      label: 'Role Baseline (Locked)',
+      color: '#64748B',
+      bg: '#F1F5F9',
+      borderColor: '#CBD5E1',
+      icon: 'lock-closed-outline',
+      description: 'Permanent unrestricted access for Super Administrator.',
+      isDefault: true,
+      isCustom: false,
+      isRevoked: false,
+      isLocked: true,
+    }
+  }
+
+  const baselineGrants = ROLE_DEFAULT_PERMISSIONS[roleSlug] || []
+  const isInBaseline = baselineGrants.some((g) => matchPermission(g, slug))
+
+  if (isInBaseline && isGranted) {
+    return {
+      type: 'ROLE_DEFAULT',
+      label: 'Role Default',
+      color: '#0284C7',
+      bg: '#E0F2FE',
+      borderColor: '#BAE6FD',
+      icon: 'shield-checkmark-outline',
+      description: `Inherited standard capability for ${roleSlug}.`,
+      isDefault: true,
+      isCustom: false,
+      isRevoked: false,
+      isLocked: false,
+    }
+  }
+
+  if (!isInBaseline && isGranted) {
+    return {
+      type: 'CUSTOM_ADDED',
+      label: '+ Custom Added',
+      color: '#15803D',
+      bg: '#DCFCE7',
+      borderColor: '#86EFAC',
+      icon: 'sparkles-outline',
+      description: 'Additional custom capability granted on top of role baseline.',
+      isDefault: false,
+      isCustom: true,
+      isRevoked: false,
+      isLocked: false,
+    }
+  }
+
+  if (isInBaseline && !isGranted) {
+    return {
+      type: 'BASELINE_REMOVED',
+      label: '- Baseline Removed',
+      color: '#B45309',
+      bg: '#FEF3C7',
+      borderColor: '#FDE68A',
+      icon: 'alert-circle-outline',
+      description: `Default ${roleSlug} permission that has been disabled.`,
+      isDefault: false,
+      isCustom: false,
+      isRevoked: true,
+      isLocked: false,
+    }
+  }
+
+  return {
+    type: 'UNGRANTED',
+    label: 'Not Granted',
+    color: '#94A3B8',
+    bg: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    icon: 'close-circle-outline',
+    description: 'Capability is inactive for this role.',
+    isDefault: false,
+    isCustom: false,
+    isRevoked: false,
+    isLocked: false,
+  }
 }
 
 export const DEFAULT_ROLES: RoleItem[] = [

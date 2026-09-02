@@ -1,3 +1,6 @@
+import { enableScreens } from 'react-native-screens';
+enableScreens(true);
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

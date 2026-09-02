@@ -35,8 +35,9 @@ import {
   record13thMonthPayout,
 } from '../api/endpoints'
 import { useAuth } from '../context/AuthContext'
-import { usePermissions } from '../hooks/usePermissions'
+import { usePermissions, ROLE_DEFAULT_PERMISSIONS } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
+import { getPermissionOriginStatus } from '../screens/admin_roles/adminRoleUtils'
 
 export interface StaffDetailModalProps {
   visible: boolean
@@ -416,6 +417,46 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                       <Text style={{ fontSize: 12.5, color: tokens.colors.onSurface, marginTop: 2 }}>{activeUser.notes}</Text>
                     </View>
                   ) : null}
+                </View>
+
+                {/* ACCESS & ROLE CAPABILITIES CARD */}
+                <View style={styles.sectionCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <Text style={styles.cardSectionTitle}>ACCESS & SECURITY CAPABILITIES</Text>
+                    <View style={[styles.roleBadge, { backgroundColor: '#E0F2FE' }]}>
+                      <Text style={[styles.roleBadgeText, { color: '#0369A1' }]}>{activeUser.role}</Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                    {activeUser.role === 'SUPER_ADMIN' ? (
+                      <View style={[styles.permOriginChip, { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }]}>
+                        <Ionicons name="lock-closed" size={11} color="#64748B" />
+                        <Text style={[styles.permOriginText, { color: '#475569' }]}>* (Permanent Root Access)</Text>
+                      </View>
+                    ) : (
+                      (activeUser.permissions && activeUser.permissions.length > 0
+                        ? activeUser.permissions
+                        : ROLE_DEFAULT_PERMISSIONS[activeUser.role] || []
+                      ).map((slug) => {
+                        const origin = getPermissionOriginStatus(slug, activeUser.role, true)
+                        return (
+                          <View
+                            key={slug}
+                            style={[
+                              styles.permOriginChip,
+                              { backgroundColor: origin.bg, borderColor: origin.borderColor },
+                            ]}
+                          >
+                            <Ionicons name={origin.icon} size={11} color={origin.color} />
+                            <Text style={[styles.permOriginText, { color: origin.color }]}>
+                              {slug}
+                            </Text>
+                          </View>
+                        )
+                      })
+                    )}
+                  </View>
                 </View>
 
                 <View style={styles.sectionCard}>
@@ -1559,5 +1600,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 13,
+  },
+  permOriginChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  permOriginText: {
+    fontSize: 10.5,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
   },
 })

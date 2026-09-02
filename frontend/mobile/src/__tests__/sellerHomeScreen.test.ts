@@ -23,6 +23,7 @@ jest.mock('@react-native-community/netinfo', () => ({
 }))
 
 import { matchPermission, ROLE_DEFAULT_PERMISSIONS } from '../hooks/usePermissions'
+import { getPermissionOriginStatus } from '../screens/admin_roles/adminRoleUtils'
 
 describe('Seller Role and Home Screen Permission Logic', () => {
   describe('SELLER default permissions', () => {
@@ -71,4 +72,36 @@ describe('Seller Role and Home Screen Permission Logic', () => {
       expect(canRestock).toBe(true)
     })
   })
+
+  describe('Permission Origin & Visual Distinction (getPermissionOriginStatus)', () => {
+    it('identifies ROLE_DEFAULT for baseline permissions', () => {
+      const sellerStatus = getPermissionOriginStatus('pos:checkout', 'SELLER', true)
+      expect(sellerStatus.type).toBe('ROLE_DEFAULT')
+      expect(sellerStatus.label).toBe('Role Default')
+      expect(sellerStatus.isDefault).toBe(true)
+      expect(sellerStatus.isCustom).toBe(false)
+      expect(sellerStatus.isRevoked).toBe(false)
+    })
+
+    it('identifies CUSTOM_ADDED for non-baseline permission', () => {
+      const customStatus = getPermissionOriginStatus('products:create', 'SELLER', true)
+      expect(customStatus.type).toBe('CUSTOM_ADDED')
+      expect(customStatus.label).toBe('+ Custom Added')
+      expect(customStatus.isCustom).toBe(true)
+    })
+
+    it('identifies BASELINE_REMOVED when a baseline permission is disabled', () => {
+      const removedStatus = getPermissionOriginStatus('pos:checkout', 'SELLER', false)
+      expect(removedStatus.type).toBe('BASELINE_REMOVED')
+      expect(removedStatus.label).toBe('- Baseline Removed')
+      expect(removedStatus.isRevoked).toBe(true)
+    })
+
+    it('identifies SUPER_ADMIN_LOCKED for Super Admin', () => {
+      const lockedStatus = getPermissionOriginStatus('anything', 'SUPER_ADMIN', true)
+      expect(lockedStatus.type).toBe('SUPER_ADMIN_LOCKED')
+      expect(lockedStatus.isLocked).toBe(true)
+    })
+  })
 })
+

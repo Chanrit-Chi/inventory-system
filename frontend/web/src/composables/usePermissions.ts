@@ -199,6 +199,99 @@ export function matchPermission(granted: string, requested: string): boolean {
   return false
 }
 
+export type PermissionOriginType =
+  | 'SUPER_ADMIN_LOCKED'
+  | 'ROLE_DEFAULT'
+  | 'CUSTOM_ADDED'
+  | 'BASELINE_REMOVED'
+  | 'UNGRANTED'
+
+export interface PermissionOriginInfo {
+  type: PermissionOriginType
+  label: string
+  badgeVariant: 'neutral' | 'info' | 'success' | 'warning' | 'error' | 'primary'
+  description: string
+  isDefault: boolean
+  isCustom: boolean
+  isRevoked: boolean
+  isLocked: boolean
+}
+
+/**
+ * Distinguishes whether a permission is inherited by role default, custom-added, or revoked.
+ */
+export function getPermissionOriginStatus(
+  slug: string,
+  roleSlug: string,
+  isGranted: boolean
+): PermissionOriginInfo {
+  if (roleSlug === 'SUPER_ADMIN') {
+    return {
+      type: 'SUPER_ADMIN_LOCKED',
+      label: 'Locked Wildcard (*)',
+      badgeVariant: 'neutral',
+      description: 'Permanent unrestricted access for Super Administrator.',
+      isDefault: true,
+      isCustom: false,
+      isRevoked: false,
+      isLocked: true,
+    }
+  }
+
+  const baselineGrants = ROLE_DEFAULT_PERMISSIONS[roleSlug] || []
+  const isInBaseline = baselineGrants.some((g) => matchPermission(g, slug))
+
+  if (isInBaseline && isGranted) {
+    return {
+      type: 'ROLE_DEFAULT',
+      label: 'Role Default',
+      badgeVariant: 'info',
+      description: `Inherited standard permission for ${roleSlug}.`,
+      isDefault: true,
+      isCustom: false,
+      isRevoked: false,
+      isLocked: false,
+    }
+  }
+
+  if (!isInBaseline && isGranted) {
+    return {
+      type: 'CUSTOM_ADDED',
+      label: '+ Custom Added',
+      badgeVariant: 'success',
+      description: 'Additional custom privilege granted on top of role baseline.',
+      isDefault: false,
+      isCustom: true,
+      isRevoked: false,
+      isLocked: false,
+    }
+  }
+
+  if (isInBaseline && !isGranted) {
+    return {
+      type: 'BASELINE_REMOVED',
+      label: '- Baseline Removed',
+      badgeVariant: 'warning',
+      description: `Default ${roleSlug} permission that has been explicitly disabled.`,
+      isDefault: false,
+      isCustom: false,
+      isRevoked: true,
+      isLocked: false,
+    }
+  }
+
+  return {
+    type: 'UNGRANTED',
+    label: 'Not Granted',
+    badgeVariant: 'neutral',
+    description: 'Capability is inactive for this role.',
+    isDefault: false,
+    isCustom: false,
+    isRevoked: false,
+    isLocked: false,
+  }
+}
+
 export function usePermissions() {
   const authStore = useAuthStore()
 

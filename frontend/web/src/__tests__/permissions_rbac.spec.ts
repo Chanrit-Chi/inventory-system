@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { matchPermission, usePermissions } from '@/composables/usePermissions'
+import { matchPermission, usePermissions, getPermissionOriginStatus } from '@/composables/usePermissions'
 import { useAuthStore } from '@/stores/authStore'
 import { usePermissionStore } from '@/stores/permissionStore'
 import { useRoleStore } from '@/stores/roleStore'
@@ -409,4 +409,38 @@ describe('System Permissions & RBAC Module', () => {
       expect(wrapper.text()).toContain('Daily Revenue Target')
     })
   })
+
+  describe('Permission Origin & Visual Distinction (getPermissionOriginStatus)', () => {
+    it('identifies ROLE_DEFAULT for baseline permissions', () => {
+      const sellerStatus = getPermissionOriginStatus('pos:checkout', 'SELLER', true)
+      expect(sellerStatus.type).toBe('ROLE_DEFAULT')
+      expect(sellerStatus.label).toBe('Role Default')
+      expect(sellerStatus.isDefault).toBe(true)
+      expect(sellerStatus.isCustom).toBe(false)
+      expect(sellerStatus.isRevoked).toBe(false)
+    })
+
+    it('identifies CUSTOM_ADDED when a non-baseline permission is granted', () => {
+      const customStatus = getPermissionOriginStatus('products:create', 'SELLER', true)
+      expect(customStatus.type).toBe('CUSTOM_ADDED')
+      expect(customStatus.label).toBe('+ Custom Added')
+      expect(customStatus.isCustom).toBe(true)
+      expect(customStatus.isDefault).toBe(false)
+    })
+
+    it('identifies BASELINE_REMOVED when a baseline permission is ungranted', () => {
+      const removedStatus = getPermissionOriginStatus('pos:checkout', 'SELLER', false)
+      expect(removedStatus.type).toBe('BASELINE_REMOVED')
+      expect(removedStatus.label).toBe('- Baseline Removed')
+      expect(removedStatus.isRevoked).toBe(true)
+      expect(removedStatus.isDefault).toBe(false)
+    })
+
+    it('identifies SUPER_ADMIN_LOCKED for Super Admin role', () => {
+      const lockedStatus = getPermissionOriginStatus('products:create', 'SUPER_ADMIN', true)
+      expect(lockedStatus.type).toBe('SUPER_ADMIN_LOCKED')
+      expect(lockedStatus.isLocked).toBe(true)
+    })
+  })
 })
+

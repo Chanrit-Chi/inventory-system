@@ -16,6 +16,7 @@ import {
   fetchPermissions,
   updateRolePermissions,
 } from '../api/endpoints'
+import { ROLE_DEFAULT_PERMISSIONS } from '../hooks/usePermissions'
 import type { RoleItem, PermissionItem, TabType } from '../types'
 import { styles } from './admin_roles/AdminRolesScreen.styles'
 import {
@@ -350,6 +351,15 @@ export const AdminRolesScreen: React.FC<AdminRolesScreenProps> = ({ onNavigate }
     setSaveSuccessMessage(null)
   }, [selectedRole])
 
+  // Reset to static role template defaults
+  const handleResetToRoleDefaults = useCallback(() => {
+    if (!selectedRole || selectedRole.slug === 'SUPER_ADMIN') return
+    const defaultPerms = ROLE_DEFAULT_PERMISSIONS[selectedRole.slug] || []
+    setActivePermissions(defaultPerms)
+    setSaveSuccessMessage(null)
+    showToast(`Reset permissions for "${selectedRole.name}" to template defaults.`, 'info')
+  }, [selectedRole, showToast])
+
   // Save changes to backend
   const handleSavePermissions = useCallback(async () => {
     if (!selectedRole) return
@@ -468,6 +478,7 @@ export const AdminRolesScreen: React.FC<AdminRolesScreenProps> = ({ onNavigate }
           activePermissions={activePermissions}
           isDirty={isDirty}
           saveSuccessMessage={saveSuccessMessage}
+          onResetToDefaults={handleResetToRoleDefaults}
         />
 
         {/* Categorized Permissions Matrix (Accordion) */}
@@ -477,6 +488,7 @@ export const AdminRolesScreen: React.FC<AdminRolesScreenProps> = ({ onNavigate }
             group={group}
             isExpanded={Boolean(expandedModules[group.id])}
             isSuperAdminRole={isSuperAdminRole}
+            selectedRoleSlug={selectedRole.slug}
             saving={saving}
             onToggleExpanded={toggleModuleExpanded}
             onToggleModuleAll={handleToggleModuleAll}

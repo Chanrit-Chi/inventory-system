@@ -1277,13 +1277,17 @@ onMounted(() => {
               </Badge>
             </div>
             <p class="text-muted-foreground text-xs">{{ group.description }}</p>
-            <div class="flex flex-wrap gap-1.5 pt-1">
+            <div class="flex items-center gap-2 pt-1">
+              <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Default Role Capabilities:</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
               <span
                 v-for="perm in group.permissions"
                 :key="perm"
-                class="px-2 py-0.5 rounded bg-surface-subtle border border-border text-[11px] font-mono text-foreground"
+                class="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-200 dark:border-blue-800 text-[11px] font-mono text-blue-700 dark:text-blue-300 flex items-center gap-1"
               >
-                {{ perm }}
+                <ShieldCheck :size="10" />
+                <span>{{ perm }}</span>
               </span>
             </div>
           </div>

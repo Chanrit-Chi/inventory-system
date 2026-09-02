@@ -9,12 +9,13 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../AdminRolesScreen.styles'
-import type { PermissionModuleGroup } from '../adminRoleUtils'
+import { type PermissionModuleGroup, getPermissionOriginStatus } from '../adminRoleUtils'
 
 export interface PermissionModuleSectionProps {
   group: PermissionModuleGroup
   isExpanded: boolean
   isSuperAdminRole: boolean
+  selectedRoleSlug?: string
   saving: boolean
   onToggleExpanded: (groupId: string) => void
   onToggleModuleAll: (group: PermissionModuleGroup, enable: boolean) => void
@@ -87,6 +88,7 @@ export const PermissionModuleSection: React.FC<PermissionModuleSectionProps> = (
           <View style={styles.permissionsList}>
             {group.permissions.map((perm) => {
               const enabled = isPermissionEnabled(perm.slug, group.id)
+              const originInfo = getPermissionOriginStatus(perm.slug, selectedRoleSlug || 'ADMIN', enabled || isSuperAdminRole)
 
               return (
                 <View key={perm.slug} style={styles.permissionRow}>
@@ -96,6 +98,24 @@ export const PermissionModuleSection: React.FC<PermissionModuleSectionProps> = (
                       <View style={styles.slugCodeChip}>
                         <Text style={styles.slugCodeText}>{perm.slug}</Text>
                       </View>
+
+                      {/* Visual Origin Distinction Badge */}
+                      {originInfo.type !== 'UNGRANTED' && (
+                        <View
+                          style={[
+                            styles.originBadgeChip,
+                            {
+                              backgroundColor: originInfo.bg,
+                              borderColor: originInfo.borderColor,
+                            },
+                          ]}
+                        >
+                          <Ionicons name={originInfo.icon} size={10} color={originInfo.color} />
+                          <Text style={[styles.originBadgeText, { color: originInfo.color }]}>
+                            {originInfo.label}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {Boolean(perm.description) && (
                       <Text style={styles.permissionDesc}>{perm.description}</Text>

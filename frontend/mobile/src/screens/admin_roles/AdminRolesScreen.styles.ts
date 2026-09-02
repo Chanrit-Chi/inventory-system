@@ -300,6 +300,19 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: tokens.colors.secondary,
   },
+  originBadgeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  originBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
   permissionDesc: {
     fontSize: 11,
     color: tokens.colors.secondary,

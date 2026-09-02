@@ -1,7 +1,7 @@
-import React from 'react'
 import {
   View,
   Text,
+  TouchableOpacity,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
@@ -15,6 +15,7 @@ export interface RoleHeaderSummaryCardProps {
   activePermissions: string[]
   isDirty: boolean
   saveSuccessMessage: string | null
+  onResetToDefaults?: () => void
 }
 
 export const RoleHeaderSummaryCard: React.FC<RoleHeaderSummaryCardProps> = ({
@@ -80,6 +81,21 @@ export const RoleHeaderSummaryCard: React.FC<RoleHeaderSummaryCardProps> = ({
               {isDirty ? 'Unsaved Changes' : 'Synced'}
             </Text>
           </View>
+          {Boolean(onResetToDefaults) && (
+            <>
+              <View style={styles.statDivider} />
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 6 }}
+                onPress={onResetToDefaults}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh-circle-outline" size={16} color={tokens.colors.primaryContainer} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: tokens.colors.primaryContainer }}>
+                  Reset Defaults
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       )}
 
