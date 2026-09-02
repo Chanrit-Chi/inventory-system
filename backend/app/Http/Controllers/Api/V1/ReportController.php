@@ -127,7 +127,7 @@ class ReportController extends BaseApiController
             ->whereRaw("UPPER(TRIM(orders.status)) = 'COMPLETED'")
             ->groupBy('products.name', 'product_variants.name')
             ->select([
-                DB::raw('COALESCE(products.name, product_variants.name, "Product") as name'),
+                DB::raw("COALESCE(products.name, product_variants.name, 'Product') as name"),
                 DB::raw('SUM(order_items.quantity) as sales'),
                 DB::raw('SUM(order_items.quantity * order_items.unit_price) as revenue')
             ])
@@ -155,7 +155,7 @@ class ReportController extends BaseApiController
             ->where('orders.created_at', '<=', $endDate)
             ->whereRaw("UPPER(TRIM(orders.status)) = 'COMPLETED'")
             ->select([
-                DB::raw('COALESCE(payments.payment_method, "Cash") as method'),
+                DB::raw("COALESCE(payments.payment_method, 'Cash') as method"),
                 DB::raw('COUNT(payments.id) as count'),
                 DB::raw('SUM(payments.amount) as total')
             ])

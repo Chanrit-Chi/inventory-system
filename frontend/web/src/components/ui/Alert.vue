@@ -71,7 +71,7 @@ const iconComponent = computed(() => {
     <button
       v-if="dismissable"
       type="button"
-      class="rounded-md p-1 opacity-70 hover:opacity-100 hover:bg-black/5 transition-opacity"
+      class="rounded-md p-1 opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
       aria-label="Dismiss alert"
       @click="$emit('dismiss')"
     >

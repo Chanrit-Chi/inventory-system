@@ -1013,9 +1013,12 @@ onMounted(async () => {
 
                 <!-- Period -->
                 <TableCell class="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                  <span class="font-medium text-foreground">
-                    {{ MONTH_NAMES[(p.period_month || 1) - 1] }} {{ p.period_year }}
-                  </span>
+                  <div class="font-medium text-foreground">
+                    {{ (p.period_month && p.period_year) ? `${MONTH_NAMES[p.period_month - 1]} ${p.period_year}` : (p.period_start ? `${p.period_start} → ${p.period_end}` : '—') }}
+                  </div>
+                  <div v-if="p.period_start && p.period_end" class="text-3xs text-muted-foreground opacity-80">
+                    {{ p.period_start }} → {{ p.period_end }}
+                  </div>
                 </TableCell>
 
                 <!-- Status -->

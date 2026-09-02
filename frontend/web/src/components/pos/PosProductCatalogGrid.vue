@@ -293,33 +293,56 @@ const formatMoney = (amount: number | string | undefined): string => {
 
 .stock-badge {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 4px 8px;
+  top: 10px;
+  right: 10px;
+  padding: 3px 8px;
   border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.04em;
   border: 1px solid transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+  transition: all var(--transition-smooth, 200ms ease);
 }
 
 .stock-badge.out-of-stock {
-  background: var(--color-error-bg);
+  background: rgba(254, 242, 242, 0.92);
   color: var(--color-error-text);
   border-color: var(--color-error-border);
 }
 
+.dark .stock-badge.out-of-stock {
+  background: rgba(45, 15, 15, 0.85);
+  color: #FCA5A5;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
 .stock-badge.low-stock {
-  background: var(--color-warning-bg);
+  background: rgba(255, 251, 235, 0.92);
   color: var(--color-warning-text);
   border-color: var(--color-warning-border);
 }
 
+.dark .stock-badge.low-stock {
+  background: rgba(45, 30, 10, 0.85);
+  color: #FCD34D;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
 .stock-badge.in-stock {
-  background: var(--color-success-bg);
+  background: rgba(236, 253, 245, 0.92);
   color: var(--color-success-text);
   border-color: var(--color-success-border);
+}
+
+.dark .stock-badge.in-stock {
+  background: rgba(10, 40, 25, 0.85);
+  color: #6EE7B7;
+  border-color: rgba(52, 211, 153, 0.4);
 }
 
 .product-info {

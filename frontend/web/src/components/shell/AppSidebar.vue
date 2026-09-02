@@ -699,15 +699,21 @@ function handleLogout() {
   color: var(--color-cta-foreground, #FFFFFF);
 }
 
+.sidebar-nav-badge--success {
+  background-color: var(--color-success-bg, #ECFDF5);
+  color: var(--color-success-text, #065F46);
+  border: 1px solid var(--color-success-border, #A7F3D0);
+}
+
 .sidebar-nav-badge--warning {
   background-color: var(--color-warning-bg, #FFFBEB);
-  color: var(--color-warning, #92400E);
+  color: var(--color-warning-text, #92400E);
   border: 1px solid var(--color-warning-border, #FDE68A);
 }
 
 .sidebar-nav-badge--info {
   background-color: var(--color-info-bg, #E0F2FE);
-  color: var(--color-info-foreground, #0369A1);
+  color: var(--color-info-text, #0369A1);
   border: 1px solid var(--color-info-border, #BAE6FD);
 }
 

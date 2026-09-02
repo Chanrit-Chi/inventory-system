@@ -60,12 +60,12 @@ const dotColorClass = computed(() => {
     case 'secondary':
     case 'neutral': return 'bg-muted-foreground'
     case 'amber': return 'bg-primary'
-    case 'success': return 'bg-success'
-    case 'warning': return 'bg-warning'
+    case 'success': return 'bg-emerald-500 dark:bg-emerald-400'
+    case 'warning': return 'bg-amber-500 dark:bg-amber-400'
     case 'error':
-    case 'destructive': return 'bg-destructive'
-    case 'info': return 'bg-info'
-    case 'purple': return 'bg-purple'
+    case 'destructive': return 'bg-red-500 dark:bg-red-400'
+    case 'info': return 'bg-sky-500 dark:bg-sky-400'
+    case 'purple': return 'bg-purple-500 dark:bg-purple-400'
     default: return 'bg-muted-foreground'
   }
 })
@@ -74,13 +74,13 @@ const dotColorClass = computed(() => {
 <template>
   <span
     :class="cn(
-      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors shadow-2xs',
+      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors shadow-2xs select-none',
       variantClass,
       props.class,
       $attrs.class as string,
     )"
   >
-    <span v-if="dot" :class="cn('w-1.5 h-1.5 rounded-full', dotColorClass)" />
+    <span v-if="dot" aria-hidden="true" :class="cn('w-1.5 h-1.5 rounded-full shrink-0', dotColorClass)" />
     <slot />
   </span>
 </template>

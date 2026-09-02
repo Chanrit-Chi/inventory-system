@@ -278,32 +278,32 @@
 
   --color-success:                    #34D399;
   --color-success-foreground:         #A7F3D0;
-  --color-success-bg:                 #064E3B;
-  --color-success-border:             #065F46;
+  --color-success-bg:                 rgba(52, 211, 153, 0.16);
+  --color-success-border:             rgba(52, 211, 153, 0.32);
   --color-success-text:               #6EE7B7;
 
   --color-warning:                    #FBBF24;
   --color-warning-foreground:         #FDE68A;
-  --color-warning-bg:                 #451A03;
-  --color-warning-border:             #78350F;
+  --color-warning-bg:                 rgba(251, 191, 36, 0.16);
+  --color-warning-border:             rgba(251, 191, 36, 0.32);
   --color-warning-text:               #FCD34D;
 
   --color-error:                      #F87171;
   --color-error-foreground:           #FECACA;
-  --color-error-bg:                   #450A0A;
-  --color-error-border:               #7F1D1D;
+  --color-error-bg:                   rgba(248, 113, 113, 0.16);
+  --color-error-border:               rgba(248, 113, 113, 0.32);
   --color-error-text:                 #FCA5A5;
 
   --color-info:                       #38BDF8;
   --color-info-foreground:            #BAE6FD;
-  --color-info-bg:                    #082F49;
-  --color-info-border:                #075985;
+  --color-info-bg:                    rgba(56, 189, 248, 0.16);
+  --color-info-border:                rgba(56, 189, 248, 0.32);
   --color-info-text:                  #7DD3FC;
 
   --color-purple:                     #C084FC;
   --color-purple-foreground:          #DDD6FE;
-  --color-purple-bg:                  #3B0764;
-  --color-purple-border:              #581C87;
+  --color-purple-bg:                  rgba(192, 132, 252, 0.16);
+  --color-purple-border:              rgba(192, 132, 252, 0.32);
   --color-purple-text:                #D8B4FE;
 
   /* Legacy & View Component Compatibility Aliases */
@@ -1515,12 +1515,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 3px 9px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
+  letter-spacing: 0.01em;
+  transition: background-color var(--transition-smooth), border-color var(--transition-smooth), color var(--transition-smooth);
 }
 
 .badge--green, .badge--success {
@@ -1565,10 +1567,18 @@
   border: 1px solid rgba(255, 136, 0, 0.3);
 }
 
+.dark .badge--primary, .dark .badge--orange {
+  border-color: rgba(255, 148, 26, 0.35);
+}
+
 .badge--admin {
   background-color: var(--color-accent);
   color: var(--color-primary);
   border: 1px solid rgba(146, 76, 0, 0.25);
+}
+
+.dark .badge--admin {
+  border-color: rgba(255, 183, 129, 0.35);
 }
 
 .badge--manager {

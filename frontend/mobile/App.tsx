@@ -13,6 +13,10 @@ import { Image } from 'expo-image'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import * as NavigationBar from 'expo-navigation-bar'
+import * as ExpoSplashScreen from 'expo-splash-screen'
+import { SplashScreen } from './src/components/SplashScreen'
+
+ExpoSplashScreen.preventAutoHideAsync().catch(() => {})
 import {
   useFonts,
   DMSans_400Regular,
@@ -629,40 +633,19 @@ function AppShell() {
     ]
   )
 
+  useEffect(() => {
+    if (!isRestoring && fontsLoaded) {
+      ExpoSplashScreen.hideAsync().catch(() => {})
+    }
+  }, [isRestoring, fontsLoaded])
+
   if (isRestoring || !fontsLoaded) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView
-          style={[styles.safeArea, { alignItems: 'center', justifyContent: 'center' }]}
-        >
-          <StatusBar style="dark" backgroundColor={tokens.colors.background} />
-          <View style={{ alignItems: 'center', gap: 16 }}>
-            {branding.logo_url ? (
-              <Image
-                source={{ uri: branding.logo_url }}
-                style={{ width: 80, height: 80 }}
-                contentFit="contain"
-              />
-            ) : (
-              <Image
-                source={require('./assets/KC SHOP-No BG.png')}
-                style={{ width: 80, height: 80 }}
-                contentFit="contain"
-              />
-            )}
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: '800',
-                color: tokens.colors.onBackground,
-                letterSpacing: -0.5,
-              }}
-            >
-              {branding.store_name || 'KC Shop'}
-            </Text>
-            <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
-          </View>
-        </SafeAreaView>
+        <SplashScreen
+          storeName={branding.store_name}
+          logoUrl={branding.logo_url}
+        />
       </SafeAreaProvider>
     )
   }

@@ -932,6 +932,10 @@ onUnmounted(() => {
   border: 1px solid var(--color-border, #FFDCC4);
 }
 
+.dark .command-palette-item-badge {
+  border-color: rgba(255, 148, 26, 0.35);
+}
+
 .command-palette-item-desc {
   font-size: 11.5px;
   color: var(--color-muted-foreground, #6B6358);

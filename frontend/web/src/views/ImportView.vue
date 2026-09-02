@@ -474,7 +474,7 @@ const currentColumns = computed(() => (activeTab.value === 'products' ? productC
                     <TableRow
                       v-for="(err, idx) in importStore.result.errors"
                       :key="idx"
-                      class="hover:bg-white transition-colors"
+                      class="hover:bg-surface-subtle transition-colors"
                     >
                       <TableCell class="font-mono text-xs font-bold text-muted-foreground">
                         #{{ err.row }}

@@ -74,7 +74,7 @@ const bankType = computed<'custom' | 'cash' | 'aba' | 'acleda' | 'wing' | 'canad
   <!-- 0. Custom Logo from DB / Cache / Upload -->
   <div
     v-if="bankType === 'custom' && resolvedLogoUrl"
-    class="rounded-lg bg-white border border-[#E8E2D9] flex items-center justify-center shrink-0 shadow-2xs overflow-hidden p-0.5"
+    class="rounded-lg bg-white border border-border flex items-center justify-center shrink-0 shadow-2xs overflow-hidden p-0.5"
     :style="{ width: `${size + 10}px`, height: `${size + 10}px` }"
   >
     <img :src="resolvedLogoUrl" :alt="bankName || 'Bank Logo'" class="w-full h-full object-contain" />

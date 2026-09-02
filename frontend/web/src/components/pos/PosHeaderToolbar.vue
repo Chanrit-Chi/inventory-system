@@ -418,12 +418,13 @@ const formatMoney = (amount: number): string => {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  background: var(--color-surface);
-  color: var(--color-primary);
+  background: #FFFFFF;
+  color: #924C00;
   border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 800;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  line-height: 1;
 }
 
 .seller-btn {

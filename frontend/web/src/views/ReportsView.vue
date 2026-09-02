@@ -884,18 +884,18 @@ onMounted(() => {
                   <TableCell class="font-bold text-xs text-foreground">
                     {{ cat.category }}
                   </TableCell>
-                  <TableCell class="font-mono text-xs text-center font-bold tabular-nums">
+                  <TableCell class="font-mono text-xs text-center font-bold tabular-nums text-foreground">
                     {{ cat.items_count }}
                   </TableCell>
                   <TableCell class="font-mono text-xs text-center font-bold tabular-nums">
-                    <span class="px-2 py-0.5 rounded-md bg-card border border-border text-foreground">
+                    <span class="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-foreground">
                       {{ cat.total_units }} units
                     </span>
                   </TableCell>
                   <TableCell class="font-mono text-xs font-semibold text-foreground text-right tabular-nums">
                     {{ formatMoney(cat.cost_value) }}
                   </TableCell>
-                  <TableCell class="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 text-right tabular-nums">
+                  <TableCell class="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400 text-right tabular-nums">
                     {{ formatMoney(cat.retail_value) }}
                   </TableCell>
                 </TableRow>
@@ -905,13 +905,15 @@ onMounted(() => {
         </div>
 
         <!-- Dead Stock / Slow Movers Alert Section -->
-        <div v-if="inventory.dead_stock_items?.length" class="rounded-xl border border-amber-500/30 bg-amber-500/10 shadow-xs overflow-hidden">
-          <div class="p-4 border-b border-amber-500/30 bg-amber-500/15 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Archive class="w-4 h-4 text-amber-700 dark:text-amber-300" />
+        <div v-if="inventory.dead_stock_items?.length" class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+          <div class="p-4 border-b border-border bg-amber-500/5 dark:bg-amber-500/10 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Archive class="w-4 h-4" />
+              </div>
               <div>
-                <h3 class="font-display font-bold text-sm text-amber-900 dark:text-amber-100">Slow Moving & Dead Stock Watchlist</h3>
-                <p class="text-[11px] text-amber-800 dark:text-amber-300">SKUs with positive inventory count but zero sales recorded over the last 30 days.</p>
+                <h3 class="font-display font-bold text-sm text-foreground">Slow Moving & Dead Stock Watchlist</h3>
+                <p class="text-[11px] text-muted-foreground">SKUs with positive inventory count but zero sales recorded over the last 30 days.</p>
               </div>
             </div>
             <Badge variant="warning" class="text-xs font-bold">
@@ -922,31 +924,33 @@ onMounted(() => {
           <div class="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow class="bg-amber-500/10 text-amber-900 dark:text-amber-200 border-b border-amber-500/20">
+                <TableRow class="bg-surface-subtle text-muted-foreground border-b border-border">
                   <TableHead>SKU</TableHead>
                   <TableHead>Product Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead class="font-mono text-center w-28">Stock on Hand</TableHead>
+                  <TableHead class="font-mono text-center w-32">Stock on Hand</TableHead>
                   <TableHead class="font-mono text-right w-36">Tied Capital Cost</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody class="divide-y divide-amber-500/20">
-                <TableRow v-for="d in inventory.dead_stock_items" :key="d.sku" class="hover:bg-amber-500/15 transition-colors">
-                  <TableCell class="font-mono text-xs font-semibold text-amber-900 dark:text-amber-100">
-                    <span class="px-2 py-0.5 rounded-md bg-card border border-border text-foreground">
+              <TableBody class="divide-y divide-border/70">
+                <TableRow v-for="d in inventory.dead_stock_items" :key="d.sku" class="hover:bg-surface-subtle/60 transition-colors">
+                  <TableCell class="font-mono text-xs font-semibold">
+                    <span class="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-foreground">
                       {{ d.sku }}
                     </span>
                   </TableCell>
-                  <TableCell class="font-bold text-xs text-amber-900 dark:text-amber-100">
+                  <TableCell class="font-bold text-xs text-foreground">
                     {{ d.name }}
                   </TableCell>
-                  <TableCell class="text-xs text-amber-800 dark:text-amber-300">
-                    {{ d.category }}
+                  <TableCell>
+                    <Badge variant="neutral" class="text-3xs font-medium">
+                      {{ d.category }}
+                    </Badge>
                   </TableCell>
-                  <TableCell class="font-mono text-xs text-center font-bold text-amber-900 dark:text-amber-100">
+                  <TableCell class="font-mono text-xs text-center font-bold text-foreground">
                     {{ d.quantity }} units
                   </TableCell>
-                  <TableCell class="font-mono text-xs font-bold text-rose-600 dark:text-rose-400 text-right">
+                  <TableCell class="font-mono text-xs font-bold text-destructive text-right tabular-nums">
                     {{ formatMoney(d.cost_value) }}
                   </TableCell>
                 </TableRow>
