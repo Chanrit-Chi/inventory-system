@@ -239,11 +239,11 @@ export const PayrollFilterBar: React.FC<PayrollFilterBarProps> = ({
 
 const filterStyles = StyleSheet.create({
   container: {
-    paddingHorizontal: tokens.spacing.md,
-    paddingTop: tokens.spacing.xs,
+    paddingHorizontal: 0,
+    paddingTop: 0,
     paddingBottom: tokens.spacing.sm,
-    backgroundColor: tokens.colors.background,
-    gap: 8,
+    gap: 10,
+    marginBottom: 2,
   },
   /* Summary KPI Card */
   kpiCard: {

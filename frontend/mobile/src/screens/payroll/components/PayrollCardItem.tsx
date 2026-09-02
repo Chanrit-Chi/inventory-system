@@ -72,24 +72,29 @@ export const PayrollCardItem: React.FC<PayrollCardItemProps> = React.memo(({
           <Text style={cardStyles.avatarText}>{initial}</Text>
         </View>
 
-        {/* Staff Name & Period */}
+        {/* Staff Name & Metadata */}
         <View style={cardStyles.identityCol}>
-          <View style={cardStyles.nameRow}>
-            <Text style={cardStyles.userName} numberOfLines={1}>
-              {staffName}
-            </Text>
+          <Text style={cardStyles.userName} numberOfLines={1}>
+            {staffName}
+          </Text>
+          <View style={cardStyles.metaRow}>
+            <View style={cardStyles.deptBadge}>
+              <Ionicons name="business-outline" size={9.5} color={tokens.colors.secondary} />
+              <Text style={cardStyles.deptBadgeText} numberOfLines={1}>
+                {item.user?.department || 'General'}
+              </Text>
+            </View>
             {item.user?.role && (
               <View style={cardStyles.roleBadge}>
-                <Text style={cardStyles.roleBadgeText}>{item.user.role}</Text>
+                <Text style={cardStyles.roleBadgeText} numberOfLines={1}>
+                  {item.user.role}
+                </Text>
               </View>
             )}
-          </View>
-
-          <View style={cardStyles.metaRow}>
             <View style={cardStyles.periodBadge}>
               <Ionicons name="calendar-outline" size={9.5} color={tokens.colors.secondary} />
               <Text style={cardStyles.periodText}>
-                {monthName} {item.period_year} • {item.working_days ?? 26}d
+                {monthName} {item.period_year}
               </Text>
             </View>
           </View>
@@ -238,7 +243,7 @@ const cardStyles = StyleSheet.create({
     padding: 13,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
-    marginBottom: 10,
+    marginBottom: 12,
     ...tokens.shadows.card,
   },
   cardSelected: {
@@ -273,15 +278,31 @@ const cardStyles = StyleSheet.create({
     marginLeft: 10,
     marginRight: 6,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
   userName: {
     fontSize: 13.5,
     fontWeight: '800',
     color: tokens.colors.onSurface,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  deptBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    maxWidth: 95,
+  },
+  deptBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: tokens.colors.secondary,
   },
   roleBadge: {
     backgroundColor: '#EDE9FE',
@@ -294,19 +315,19 @@ const cardStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#5B21B6',
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
   periodBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#E2E8F0',
   },
   periodText: {
-    fontSize: 10.5,
+    fontSize: 9.5,
     fontWeight: '600',
     color: tokens.colors.secondary,
   },
