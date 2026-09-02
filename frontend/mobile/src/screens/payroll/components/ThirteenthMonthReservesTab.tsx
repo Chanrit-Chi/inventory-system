@@ -250,6 +250,14 @@ export const ThirteenthMonthReservesTab: React.FC<ThirteenthMonthReservesTabProp
                       <View style={styles.roleBadge}>
                         <Text style={styles.roleBadgeText} numberOfLines={1}>{staff.role}</Text>
                       </View>
+                      {Boolean(staff.is_on_probation) && (
+                        <View style={styles.probationBadge}>
+                          <Ionicons name="shield-outline" size={9} color="#B45309" />
+                          <Text style={styles.probationBadgeText} numberOfLines={1}>
+                            Probation (Mo {Math.min(3, (staff.seniority_months ?? 0) + 1)}/3)
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -272,10 +280,13 @@ export const ThirteenthMonthReservesTab: React.FC<ThirteenthMonthReservesTabProp
                   <Text style={styles.accrualRateText}>
                     Base: <Text style={{ fontWeight: '700', color: tokens.colors.onSurface }}>{formatCurrency(staff.base_salary)}</Text>
                     {' • '}
-                    Rate: <Text style={{ fontWeight: '700', color: tokens.colors.statusSuccess }}>+{formatCurrency(staff.monthly_accrual)}/mo</Text>
+                    Rate:{' '}
+                    <Text style={{ fontWeight: '700', color: staff.is_on_probation ? '#B45309' : tokens.colors.statusSuccess }}>
+                      {staff.is_on_probation ? '$0.00/mo (Probation)' : `+${formatCurrency(staff.monthly_accrual)}/mo`}
+                    </Text>
                   </Text>
                   <Text style={styles.accrualMonthsText}>
-                    {staff.months_accrued}/12 mos ({progressPct}%)
+                    {staff.is_on_probation ? '3-mo review pending' : `${staff.months_accrued}/12 mos (${progressPct}%)`}
                   </Text>
                 </View>
 
@@ -715,6 +726,22 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '700',
     color: '#5B21B6',
+  },
+  probationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#FCD34D',
+  },
+  probationBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#B45309',
   },
   balanceBadge: {
     alignItems: 'flex-end',

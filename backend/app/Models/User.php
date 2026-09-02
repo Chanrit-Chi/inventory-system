@@ -38,6 +38,21 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'is_on_probation',
+        'seniority_months',
+    ];
+
+    public function getIsOnProbationAttribute(): bool
+    {
+        return $this->isOnProbation();
+    }
+
+    public function getSeniorityMonthsAttribute(): int
+    {
+        return $this->getSeniorityMonths();
+    }
+
     protected function casts(): array
     {
         return [
@@ -249,5 +264,58 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return in_array($this->role, ['SUPER_ADMIN', 'ADMIN'], true);
+    }
+
+    /**
+     * Calculate employment seniority in full months as of a given date (defaulting to today).
+     */
+    public function getSeniorityMonths(?\Carbon\Carbon $asOfDate = null): int
+    {
+        if (!array_key_exists('hire_date', $this->attributes) || empty($this->attributes['hire_date'])) {
+            return 12; // Senior / legacy staff default
+        }
+
+        $targetDate = $asOfDate ?? now();
+        $startDate = \Carbon\Carbon::parse($this->attributes['hire_date']);
+
+        return (int) $startDate->diffInMonths($targetDate);
+    }
+
+    /**
+     * Determine if staff member is currently in the 3-month probation / performance review period.
+     * New staff in probation are restricted to base salary only (no bonuses/benefits/13th month).
+     */
+    public function isOnProbation(?\Carbon\Carbon $asOfDate = null): bool
+    {
+        if (!array_key_exists('hire_date', $this->attributes) || empty($this->attributes['hire_date'])) {
+            return false;
+        }
+
+        $targetDate = $asOfDate ?? now();
+        $startDate = \Carbon\Carbon::parse($this->attributes['hire_date']);
+
+        return $startDate->copy()->addMonths(3)->isAfter($targetDate);
+    }
+
+    /**
+     * Return comprehensive probation and seniority status metadata.
+     */
+    public function getProbationStatus(?\Carbon\Carbon $asOfDate = null): array
+    {
+        $targetDate = $asOfDate ?? now();
+        $hireDateVal = array_key_exists('hire_date', $this->attributes) ? $this->attributes['hire_date'] : null;
+        $startDate = $hireDateVal ? \Carbon\Carbon::parse($hireDateVal) : null;
+        $seniorityMonths = $this->getSeniorityMonths($targetDate);
+        $onProbation = $this->isOnProbation($targetDate);
+        $probationEnd = $startDate ? $startDate->copy()->addMonths(3) : null;
+
+        return [
+            'hire_date' => $startDate?->toDateString(),
+            'seniority_months' => $seniorityMonths,
+            'is_on_probation' => $onProbation,
+            'probation_ends_at' => $probationEnd?->toDateString(),
+            'months_remaining' => $onProbation ? max(1, 3 - $seniorityMonths) : 0,
+            'benefits_eligible' => !$onProbation,
+        ];
     }
 }

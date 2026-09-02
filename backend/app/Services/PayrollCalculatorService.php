@@ -55,6 +55,10 @@ class PayrollCalculatorService
     {
         $baseSalary = $this->resolveBaseSalary($user->id, $month, $year);
 
+        // Period cutoff: last day of the payroll month
+        $periodDate = Carbon::create($year, $month, 1)->endOfMonth();
+        $isOnProbation = $user->isOnProbation($periodDate);
+
         // Find existing draft or create new
         $payroll = Payroll::firstOrNew([
             'user_id' => $user->id,
@@ -71,10 +75,13 @@ class PayrollCalculatorService
             $payroll->working_days = self::STANDARD_WORKING_DAYS; // Default 26
         }
 
-        // Calculate Incentive: manual override wins; otherwise auto-calc from completed orders
+        // Calculate Incentive:
+        // New staff within their 3-month probation/review only receive base salary (no bonuses or incentives).
         $incentiveOverride = $payroll->incentive_override;
         if ($incentiveOverride !== null) {
             $incentiveAmount = round((float) $incentiveOverride, 2);
+        } elseif ($isOnProbation) {
+            $incentiveAmount = 0.0;
         } else {
             // Incentive window: matches sales completed in this period (completed_at with created_at fallback)
             $orders = Order::where(function ($q) use ($user) {
@@ -100,8 +107,17 @@ class PayrollCalculatorService
             $incentiveAmount = $this->calculateIncentiveForOrders($orders);
         }
 
-        // Calculate 13th month monthly accrual
-        $thirteenthMonth = round($baseSalary / 12, 2);
+        // Calculate 13th month monthly accrual:
+        // New staff on probation do not accrue 13th month bonus
+        $thirteenthMonth = $isOnProbation ? 0.0 : round($baseSalary / 12, 2);
+
+        // For new drafts on probation, zero out all optional benefits
+        if ($isOnProbation && !$payroll->exists) {
+            $payroll->performance_benefit = 0.0;
+            $payroll->delivery_benefit = 0.0;
+            $payroll->collective_benefit = 0.0;
+            $payroll->other_benefits = 0.0;
+        }
 
         // Daily Rate based on configurable working days
         $workingDays = max((int) $payroll->working_days, 1);
@@ -127,11 +143,11 @@ class PayrollCalculatorService
         $payroll->total_net_pay = round(
             $baseSalary +
             $incentiveAmount +
-            (float) $payroll->performance_benefit +
-            (float) $payroll->delivery_benefit +
+            (float) ($payroll->performance_benefit ?? 0) +
+            (float) ($payroll->delivery_benefit ?? 0) +
             $overtimeAmount +
-            (float) $payroll->collective_benefit +
-            (float) $payroll->other_benefits +
+            (float) ($payroll->collective_benefit ?? 0) +
+            (float) ($payroll->other_benefits ?? 0) +
             $thirteenthPayout -
             $unpaidLeaveDeduction,
             2
@@ -326,12 +342,21 @@ class PayrollCalculatorService
             $companyTotalDisbursed += $totalDisbursed;
             $companyTotalAvailable += $availableBalance;
 
+            $asOfDate = $month !== null ? Carbon::create($year ?? (int) now()->format('Y'), $month, 1)->endOfMonth() : now();
+            $probationStatus = $user->getProbationStatus($asOfDate);
+
             $staffReserves[] = [
                 'user_id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
                 'department' => $user->department ?? 'General Operations',
+                'hire_date' => $probationStatus['hire_date'],
+                'seniority_months' => $probationStatus['seniority_months'],
+                'is_on_probation' => $probationStatus['is_on_probation'],
+                'probation_ends_at' => $probationStatus['probation_ends_at'],
+                'months_remaining' => $probationStatus['months_remaining'],
+                'benefits_eligible' => $probationStatus['benefits_eligible'],
                 'base_salary' => $baseSalary,
                 'monthly_accrual' => $monthlyAccrual,
                 'months_accrued' => $monthsAccrued,

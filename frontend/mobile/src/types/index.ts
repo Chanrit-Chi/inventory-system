@@ -418,6 +418,10 @@ export interface UserAccount {
   phone?: string
   hire_date?: string
   department?: string
+  is_on_probation?: boolean
+  seniority_months?: number
+  probation_ends_at?: string
+  benefits_eligible?: boolean
   notes?: string
   lastActive?: string
   permissionGroup?: string
@@ -843,6 +847,12 @@ export interface StaffThirteenthMonthReserve {
   email: string
   role: string
   department: string
+  hire_date?: string
+  seniority_months?: number
+  is_on_probation?: boolean
+  probation_ends_at?: string
+  months_remaining?: number
+  benefits_eligible?: boolean
   base_salary: number
   monthly_accrual: number
   months_accrued: number

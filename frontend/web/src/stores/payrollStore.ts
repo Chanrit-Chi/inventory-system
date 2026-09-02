@@ -9,6 +9,11 @@ export interface PayrollUser {
   role: string
   department?: string
   avatar_url?: string
+  hire_date?: string
+  is_on_probation?: boolean
+  seniority_months?: number
+  probation_ends_at?: string
+  benefits_eligible?: boolean
 }
 
 export interface Payroll {
@@ -59,6 +64,12 @@ export interface StaffThirteenthMonthReserve {
   email: string
   role: string
   department: string
+  hire_date?: string
+  seniority_months?: number
+  is_on_probation?: boolean
+  probation_ends_at?: string
+  months_remaining?: number
+  benefits_eligible?: boolean
   base_salary: number
   monthly_accrual: number
   months_accrued: number

@@ -91,6 +91,12 @@ export const PayrollCardItem: React.FC<PayrollCardItemProps> = React.memo(({
                 </Text>
               </View>
             )}
+            {Boolean(item.user?.is_on_probation) && (
+              <View style={cardStyles.probationBadge}>
+                <Ionicons name="shield-outline" size={9} color="#B45309" />
+                <Text style={cardStyles.probationBadgeText}>Probation</Text>
+              </View>
+            )}
             <View style={cardStyles.periodBadge}>
               <Ionicons name="calendar-outline" size={9.5} color={tokens.colors.secondary} />
               <Text style={cardStyles.periodText}>
@@ -314,6 +320,22 @@ const cardStyles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '700',
     color: '#5B21B6',
+  },
+  probationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#FCD34D',
+  },
+  probationBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#B45309',
   },
   periodBadge: {
     flexDirection: 'row',

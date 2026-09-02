@@ -995,7 +995,12 @@ onMounted(async () => {
                       {{ getStaffName(p).slice(0, 2).toUpperCase() }}
                     </div>
                     <div>
-                      <div class="font-semibold text-xs text-foreground">{{ getStaffName(p) }}</div>
+                      <div class="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                        <span>{{ getStaffName(p) }}</span>
+                        <span v-if="p.user?.is_on_probation" class="inline-flex items-center px-1.5 py-0.5 rounded text-4xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                          Probation
+                        </span>
+                      </div>
                       <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
                         <span>{{ getStaffRole(p) }}</span>
                         <span>•</span>
@@ -1311,7 +1316,12 @@ onMounted(async () => {
                       {{ (s.name || 'S').slice(0, 2).toUpperCase() }}
                     </div>
                     <div>
-                      <div class="font-semibold text-xs text-foreground">{{ s.name }}</div>
+                      <div class="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                        <span>{{ s.name }}</span>
+                        <span v-if="s.is_on_probation" class="inline-flex items-center px-1.5 py-0.5 rounded text-4xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                          Probation (Mo {{ Math.min(3, (s.seniority_months ?? 0) + 1) }}/3)
+                        </span>
+                      </div>
                       <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
                         <span class="font-medium text-primary">{{ s.role }}</span>
                         <span>•</span>
@@ -1325,7 +1335,8 @@ onMounted(async () => {
                 <TableCell class="font-mono text-xs">
                   <div class="font-semibold text-foreground">{{ formatMoney(s.base_salary) }}</div>
                   <div class="text-[11px] text-muted-foreground flex items-center gap-1 font-normal">
-                    <span class="text-primary font-medium">+{{ formatMoney(s.monthly_accrual) }}</span>/mo
+                    <span v-if="s.is_on_probation" class="text-amber-600 font-medium">$0.00/mo (Probation)</span>
+                    <span v-else class="text-primary font-medium">+{{ formatMoney(s.monthly_accrual) }}</span>/mo
                   </div>
                 </TableCell>
 
@@ -1380,13 +1391,13 @@ onMounted(async () => {
                 <TableCell class="font-mono text-right">
                   <span
                     v-if="s.available_balance > 0"
-                    class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                    class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-emerald-700 text-white dark:bg-emerald-600 dark:text-white shadow-2xs"
                   >
                     {{ formatMoney(s.available_balance) }}
                   </span>
                   <span
                     v-else
-                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono text-muted-foreground bg-muted/50"
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono text-muted-foreground/70 bg-muted/60"
                   >
                     $0.00
                   </span>
