@@ -46,6 +46,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(true)
   const formPassword = useWatch({ control, name: 'password' }) || ''
+  const formProbationExempt = useWatch({ control, name: 'probation_exempt' }) ?? false
 
   const handleRegeneratePassword = () => {
     const newPass = generateSecureTemporaryPassword(10)
@@ -231,6 +232,26 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               label="Hire Date (YYYY-MM-DD)"
               placeholder="2026-08-01"
             />
+
+            {/* WAIVE PROBATION TOGGLE */}
+            <View style={{ backgroundColor: '#FEF3C7', borderColor: '#FDE68A', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#92400E' }}>
+                    Waive 3-Month Probation
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#B45309', marginTop: 2 }}>
+                    Grant immediate full benefits (sales incentives, bonuses & 13th-month accruals from Day 1).
+                  </Text>
+                </View>
+                <Switch
+                  value={formProbationExempt}
+                  onValueChange={(val) => setValue('probation_exempt', val, { shouldValidate: true, shouldDirty: true })}
+                  trackColor={{ false: '#D1D5DB', true: '#F59E0B' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
 
             <Text style={styles.formLabel}>Assigned Access Role *</Text>
             <View style={styles.rolePickerRow}>

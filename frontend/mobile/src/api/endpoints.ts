@@ -116,6 +116,7 @@ export async function createUser(payload: {
   password: string
   department?: string
   hire_date?: string
+  probation_exempt?: boolean
   notes?: string
   base_salary?: number
   salary_reason?: string
@@ -136,6 +137,7 @@ export async function updateUser(id: string, payload: Partial<{
   role: string
   department: string
   hire_date: string
+  probation_exempt: boolean
   notes: string
   base_salary: number
   salary_reason: string

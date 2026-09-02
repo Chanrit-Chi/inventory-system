@@ -54,6 +54,7 @@ export const adminUserSchema = z.object({
       'Base salary must be a valid non-negative amount ($0.00+)'
     ),
   salary_reason: z.string().optional().or(z.literal('')),
+  probation_exempt: z.boolean().default(false),
   isActive: z.boolean().default(true),
   is_test_account: z.boolean().default(false),
 })

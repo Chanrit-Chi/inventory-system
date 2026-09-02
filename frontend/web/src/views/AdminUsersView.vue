@@ -70,6 +70,7 @@ interface UserAccount {
   role: UserRole
   department?: string | null
   hire_date?: string | null
+  probation_exempt?: boolean
   notes?: string | null
   base_salary?: number | string | null
   salary_reason?: string | null
@@ -170,6 +171,7 @@ const emptyForm = () => ({
   role: 'SELLER' as UserRole,
   department: 'Main Counter',
   hire_date: new Date().toISOString().slice(0, 10),
+  probation_exempt: false,
   base_salary: '',
   salary_reason: '',
   notes: '',
@@ -557,6 +559,7 @@ function openEditModal(user: UserAccount) {
     hire_date: user.hire_date
       ? user.hire_date.slice(0, 10)
       : new Date().toISOString().slice(0, 10),
+    probation_exempt: Boolean(user.probation_exempt),
     base_salary:
       user.base_salary !== undefined && user.base_salary !== null && Number(user.base_salary) > 0
         ? String(user.base_salary)
@@ -620,6 +623,7 @@ async function submitUserForm() {
         role: userForm.role,
         department: userForm.department.trim() || null,
         hire_date: userForm.hire_date || null,
+        probation_exempt: Boolean(userForm.probation_exempt),
         base_salary: parsedSalary,
         salary_reason: userForm.salary_reason.trim() || undefined,
         notes: userForm.notes.trim() || null,
@@ -646,6 +650,7 @@ async function submitUserForm() {
         role: userForm.role,
         department: userForm.department.trim() || null,
         hire_date: userForm.hire_date || new Date().toISOString().slice(0, 10),
+        probation_exempt: Boolean(userForm.probation_exempt),
         base_salary: parsedSalary,
         salary_reason: userForm.salary_reason.trim() || 'Initial Starting Salary Package',
         notes: userForm.notes.trim() || null,
@@ -1733,6 +1738,24 @@ onMounted(() => {
                   placeholder="Select hire date"
                   class="h-9 w-full bg-surface text-xs"
                 />
+              </div>
+            </div>
+
+            <!-- Waive Probation / Seniority Waiver -->
+            <div class="rounded-lg border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 flex items-start gap-2.5">
+              <input
+                id="form-user-probation-exempt"
+                v-model="userForm.probation_exempt"
+                type="checkbox"
+                class="mt-0.5 rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+              />
+              <div class="text-xs">
+                <label for="form-user-probation-exempt" class="font-semibold text-foreground cursor-pointer select-none">
+                  Waive 3-Month Probation (Grant Full Benefits Immediately)
+                </label>
+                <p class="text-3xs text-muted-foreground mt-0.5">
+                  Enable for special or senior hires to immediately unlock sales incentives, commissions, and 13th-month reserve accruals from Day 1 without waiting 3 months.
+                </p>
               </div>
             </div>
 
