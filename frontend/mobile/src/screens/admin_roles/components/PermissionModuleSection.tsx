@@ -27,6 +27,7 @@ export const PermissionModuleSection: React.FC<PermissionModuleSectionProps> = (
   group,
   isExpanded,
   isSuperAdminRole,
+  selectedRoleSlug,
   saving,
   onToggleExpanded,
   onToggleModuleAll,

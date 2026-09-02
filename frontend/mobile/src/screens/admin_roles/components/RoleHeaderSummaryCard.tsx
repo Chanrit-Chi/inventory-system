@@ -25,6 +25,7 @@ export const RoleHeaderSummaryCard: React.FC<RoleHeaderSummaryCardProps> = ({
   activePermissions,
   isDirty,
   saveSuccessMessage,
+  onResetToDefaults,
 }) => {
   return (
     <View style={styles.roleSummaryCard}>
