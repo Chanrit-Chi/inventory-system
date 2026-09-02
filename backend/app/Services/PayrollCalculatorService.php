@@ -240,9 +240,14 @@ class PayrollCalculatorService
     {
         $users = \App\Models\User::where('is_active', true)
             ->where(function ($q) {
-                $q->whereNull('is_test_account')->orWhere('is_test_account', false);
+                if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'is_test_account')) {
+                    $q->whereNull('is_test_account')->orWhere('is_test_account', false);
+                }
             })
-            ->whereNotIn('role', ['SUPER_ADMIN', 'SUPERADMIN'])
+            ->where(function ($q) {
+                $q->whereNull('role')
+                  ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
+            })
             ->orderBy('name')
             ->get();
 
@@ -269,7 +274,10 @@ class PayrollCalculatorService
 
             if ($year !== null) {
                 $accrualQuery->where('period_year', $year);
-                $payoutQuery->whereYear('payout_date', $year);
+                $payoutQuery->where(function ($q) use ($year) {
+                    $q->whereYear('payout_date', $year)
+                      ->orWhere('payout_date', 'like', "{$year}-%");
+                });
             }
 
             $allPayrolls = $accrualQuery->orderBy('period_month')->get([

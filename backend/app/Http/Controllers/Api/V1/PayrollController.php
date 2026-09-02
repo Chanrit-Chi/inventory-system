@@ -505,11 +505,20 @@ class PayrollController extends BaseApiController
      */
     public function getCompanyThirteenthMonthReserves(Request $request, PayrollCalculatorService $service): JsonResponse
     {
-        $year = $request->has('year') && $request->input('year') !== 'ALL' && $request->input('year') !== '' ? (int) $request->input('year') : null;
-        $month = $request->has('month') && $request->input('month') !== 'ALL' && $request->input('month') !== '' ? (int) $request->input('month') : null;
-        $data = $service->getCompanyThirteenthMonthReserves($year, $month);
+        try {
+            $year = $request->filled('year') && $request->input('year') !== 'ALL' ? (int) $request->input('year') : null;
+            $month = $request->filled('month') && $request->input('month') !== 'ALL' ? (int) $request->input('month') : null;
+            $data = $service->getCompanyThirteenthMonthReserves($year, $month);
 
-        return $this->successResponse($data);
+            return $this->successResponse($data);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to get company 13th month reserves: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all(),
+            ]);
+
+            return $this->errorResponse('Failed to calculate 13th month reserves: ' . $e->getMessage(), null, 500);
+        }
     }
 
     /**

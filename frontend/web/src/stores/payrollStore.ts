@@ -62,6 +62,16 @@ export interface StaffThirteenthMonthReserve {
   base_salary: number
   monthly_accrual: number
   months_accrued: number
+  accrued_months?: number[]
+  monthly_breakdown?: Array<{
+    payroll_id?: string
+    month?: number
+    year?: number
+    amount?: number
+    status?: string
+    [key: string]: any
+  }>
+  month_specific_accrual?: number | null
   total_accrued: number
   total_disbursed: number
   available_balance: number

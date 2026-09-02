@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 type Variant =
   | 'default'
   | 'primary'
+  | 'secondary'
   | 'amber'
   | 'success'
   | 'warning'
@@ -30,6 +31,9 @@ const variantClass = computed(() => {
   switch (props.variant) {
     case 'primary':
       return 'bg-cta-muted text-primary border-cta/30 dark:border-cta/40'
+    case 'secondary':
+    case 'neutral':
+      return 'bg-muted text-muted-foreground border-border'
     case 'amber':
       return 'bg-accent text-primary border-border-strong'
     case 'success':
@@ -45,7 +49,6 @@ const variantClass = computed(() => {
       return 'bg-purple-bg text-purple-text border-purple-border'
     case 'outline':
       return 'bg-transparent text-foreground border-border'
-    case 'neutral':
     default:
       return 'bg-muted text-muted-foreground border-border'
   }
@@ -54,6 +57,8 @@ const variantClass = computed(() => {
 const dotColorClass = computed(() => {
   switch (props.variant) {
     case 'primary': return 'bg-cta'
+    case 'secondary':
+    case 'neutral': return 'bg-muted-foreground'
     case 'amber': return 'bg-primary'
     case 'success': return 'bg-success'
     case 'warning': return 'bg-warning'
