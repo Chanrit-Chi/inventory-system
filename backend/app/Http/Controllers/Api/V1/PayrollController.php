@@ -60,6 +60,16 @@ class PayrollController extends BaseApiController
         return $this->successResponse($query->get());
     }
 
+    public function show(string $id): JsonResponse
+    {
+        $payroll = Payroll::with('user')->find($id);
+        if (!$payroll) {
+            return $this->errorResponse('Payroll not found.', null, 404);
+        }
+
+        return $this->successResponse($payroll);
+    }
+
     public function generate(Request $request, PayrollCalculatorService $service, PayrollAuditService $audit): JsonResponse
     {
         $request->validate([
@@ -75,9 +85,9 @@ class PayrollController extends BaseApiController
         $month = (int) $request->month;
         $year = (int) $request->year;
 
-        // Determine target users
+        // Determine target users (filter to real operational staff for batch/all_staff)
         if ($request->boolean('all_staff') || $request->boolean('batch')) {
-            $users = User::all();
+            $users = User::operational()->get();
         } elseif ($request->has('user_ids') && is_array($request->user_ids) && count($request->user_ids) > 0) {
             $users = User::whereIn('id', $request->user_ids)->get();
         } elseif ($request->filled('user_id')) {
@@ -488,6 +498,18 @@ class PayrollController extends BaseApiController
         $summary = $service->getThirteenthMonthSummary($userId, $year);
 
         return $this->successResponse($summary);
+    }
+
+    /**
+     * Get company-wide 13th month / seniority reserves overview for all staff.
+     */
+    public function getCompanyThirteenthMonthReserves(Request $request, PayrollCalculatorService $service): JsonResponse
+    {
+        $year = $request->has('year') && $request->input('year') !== 'ALL' && $request->input('year') !== '' ? (int) $request->input('year') : null;
+        $month = $request->has('month') && $request->input('month') !== 'ALL' && $request->input('month') !== '' ? (int) $request->input('month') : null;
+        $data = $service->getCompanyThirteenthMonthReserves($year, $month);
+
+        return $this->successResponse($data);
     }
 
     /**

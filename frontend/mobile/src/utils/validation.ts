@@ -55,6 +55,7 @@ export const adminUserSchema = z.object({
     ),
   salary_reason: z.string().optional().or(z.literal('')),
   isActive: z.boolean().default(true),
+  is_test_account: z.boolean().default(false),
 })
 export type AdminUserFormValues = z.infer<typeof adminUserSchema>
 

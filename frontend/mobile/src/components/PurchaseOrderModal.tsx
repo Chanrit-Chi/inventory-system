@@ -679,7 +679,7 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
         />
 
       {/* Expected Delivery Date Native Date Picker (Android Native Dialog / iOS Bottom Sheet) */}
-      {showDatePicker && Platform.OS === 'android' && (
+      {Boolean(showDatePicker && Platform.OS === 'android') && (
         <DateTimePicker
           value={pickerDate}
           mode="date"
@@ -695,7 +695,7 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
         />
       )}
 
-      {showDatePicker && Platform.OS === 'ios' && (
+      {Boolean(showDatePicker && Platform.OS === 'ios') && (
         <Modal
           visible={showDatePicker}
           transparent

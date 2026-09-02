@@ -71,6 +71,7 @@ const dotColorClass = computed(() => {
     :class="cn(
       'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors shadow-2xs',
       variantClass,
+      props.class,
       $attrs.class as string,
     )"
   >

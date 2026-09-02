@@ -75,6 +75,8 @@ interface UserAccount {
   salary_reason?: string | null
   is_active: boolean
   isActive?: boolean
+  is_test_account?: boolean
+  isTestAccount?: boolean
   status?: 'ACTIVE' | 'INACTIVE' | string
   stats?: UserStats
   created_at?: string
@@ -166,13 +168,14 @@ const emptyForm = () => ({
   email: '',
   phone: '',
   role: 'SELLER' as UserRole,
-  department: '',
+  department: 'Main Counter',
   hire_date: new Date().toISOString().slice(0, 10),
   base_salary: '',
   salary_reason: '',
   notes: '',
   password: '',
   is_active: true,
+  is_test_account: false,
 })
 
 const userForm = reactive<ReturnType<typeof emptyForm>>(emptyForm())
@@ -351,11 +354,38 @@ const groupsWithCounts = computed<PermissionGroup[]>(() =>
   }))
 )
 
+// --- Staff Filtering State ---
+const staffTypeFilter = ref<'ALL' | 'OPERATIONAL' | 'TEST'>('ALL')
+
+const operationalStaffCount = computed(() =>
+  users.value.filter(u => {
+    const isSuper = u.role === 'SUPER_ADMIN'
+    const isTest = Boolean(u.is_test_account || u.isTestAccount)
+    return !isSuper && !isTest
+  }).length
+)
+
+const testStaffCount = computed(() =>
+  users.value.filter(u => Boolean(u.is_test_account || u.isTestAccount)).length
+)
+
 // --- Computed: filtered staff ---
 const filteredUsers = computed(() => {
+  let list = users.value
+
+  if (staffTypeFilter.value === 'OPERATIONAL') {
+    list = list.filter(u => {
+      const isSuper = u.role === 'SUPER_ADMIN'
+      const isTest = Boolean(u.is_test_account || u.isTestAccount)
+      return !isSuper && !isTest
+    })
+  } else if (staffTypeFilter.value === 'TEST') {
+    list = list.filter(u => Boolean(u.is_test_account || u.isTestAccount))
+  }
+
   const q = userSearch.value.trim().toLowerCase()
-  if (!q) return users.value
-  return users.value.filter(u => {
+  if (!q) return list
+  return list.filter(u => {
     return (
       (u.name || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
@@ -523,7 +553,7 @@ function openEditModal(user: UserAccount) {
     email: user.email || '',
     phone: user.phone || '',
     role: canonicalRole,
-    department: user.department || '',
+    department: user.department || 'Main Counter',
     hire_date: user.hire_date
       ? user.hire_date.slice(0, 10)
       : new Date().toISOString().slice(0, 10),
@@ -535,6 +565,7 @@ function openEditModal(user: UserAccount) {
     notes: user.notes || '',
     password: '',
     is_active: active,
+    is_test_account: Boolean(user.is_test_account ?? user.isTestAccount),
   })
   showPassword.value = false
   clearFieldErrors()
@@ -594,6 +625,7 @@ async function submitUserForm() {
         notes: userForm.notes.trim() || null,
         is_active: Boolean(userForm.is_active),
         isActive: Boolean(userForm.is_active),
+        is_test_account: Boolean(userForm.is_test_account),
       }
       if (userForm.password && userForm.password.length >= 8) {
         payload.password = userForm.password
@@ -618,6 +650,7 @@ async function submitUserForm() {
         salary_reason: userForm.salary_reason.trim() || 'Initial Starting Salary Package',
         notes: userForm.notes.trim() || null,
         password: userForm.password,
+        is_test_account: Boolean(userForm.is_test_account),
       }
       const res = await api.post('/users', payload)
       const created: UserAccount | undefined = res.data?.data
@@ -1069,7 +1102,7 @@ onMounted(() => {
 
     <!-- ============ STAFF TAB ============ -->
     <template v-if="activeTab === 'staff'">
-      <!-- Staff Search Filter -->
+      <!-- Staff Search & Role Type Filter -->
       <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div class="flex-1 max-w-md">
           <Input
@@ -1084,13 +1117,32 @@ onMounted(() => {
             </template>
           </Input>
         </div>
-        <div class="flex items-center gap-2 text-xs">
-          <Badge variant="success" class="font-mono text-xs px-2.5 py-0.5">
-            {{ activeUsersCount }} Active
-          </Badge>
-          <Badge variant="neutral" class="font-mono text-xs px-2.5 py-0.5">
-            {{ users.length - activeUsersCount }} Inactive
-          </Badge>
+
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            class="px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer select-none"
+            :class="staffTypeFilter === 'ALL' ? 'bg-cta-muted border-cta text-primary font-bold' : 'bg-surface border-border text-muted-foreground hover:text-foreground'"
+            @click="staffTypeFilter = 'ALL'"
+          >
+            All ({{ users.length }})
+          </button>
+          <button
+            type="button"
+            class="px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer select-none"
+            :class="staffTypeFilter === 'OPERATIONAL' ? 'bg-cta-muted border-cta text-primary font-bold' : 'bg-surface border-border text-muted-foreground hover:text-foreground'"
+            @click="staffTypeFilter = 'OPERATIONAL'"
+          >
+            👥 Operational ({{ operationalStaffCount }})
+          </button>
+          <button
+            type="button"
+            class="px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer select-none"
+            :class="staffTypeFilter === 'TEST' ? 'bg-cta-muted border-cta text-primary font-bold' : 'bg-surface border-border text-muted-foreground hover:text-foreground'"
+            @click="staffTypeFilter = 'TEST'"
+          >
+            🧪 Test ({{ testStaffCount }})
+          </button>
         </div>
       </div>
 
@@ -1154,12 +1206,18 @@ onMounted(() => {
                   <div v-else class="text-[11px] text-muted-foreground">—</div>
                 </TableCell>
                 <TableCell>
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1.5 flex-wrap">
                     <Badge :variant="getRoleVariant(u.role)" class="text-[11px] px-2.5 py-0.5 font-mono font-bold flex items-center gap-1">
                       <span v-if="u.role === 'SUPER_ADMIN'">👑 Super Admin</span>
                       <span v-else-if="u.role === 'ADMIN'">🛡️ Admin</span>
                       <span v-else-if="u.role === 'MANAGER'">👔 Manager</span>
                       <span v-else>💳 Cashier</span>
+                    </Badge>
+                    <Badge v-if="u.is_test_account || u.isTestAccount" variant="warning" class="text-[10px] px-1.5 py-0.5 font-bold font-mono">
+                      🧪 Test
+                    </Badge>
+                    <Badge v-if="u.role === 'SUPER_ADMIN'" variant="purple" class="text-[10px] px-1.5 py-0.5 font-bold font-mono">
+                      ⚙️ Root
                     </Badge>
                   </div>
                 </TableCell>
@@ -1611,6 +1669,26 @@ onMounted(() => {
                 />
               </div>
             </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-border/50">
+              <div>
+                <span class="text-xs font-semibold text-foreground block">🧪 Mark as Test / QA Account</span>
+                <span class="text-[11px] text-muted-foreground">Used for role testing. Excluded from live operational payroll, daily settlements, and business KPIs</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
+                  :class="userForm.is_test_account ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-muted text-muted-foreground border border-border'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="userForm.is_test_account ? 'bg-amber-500' : 'bg-muted-foreground'"></span>
+                  <span>{{ userForm.is_test_account ? 'TEST' : 'REAL' }}</span>
+                </span>
+                <Switch
+                  :checked="userForm.is_test_account"
+                  @update:checked="(val) => userForm.is_test_account = val"
+                />
+              </div>
+            </div>
           </div>
 
           <!-- SECTION 2: EMPLOYMENT & STORE ASSIGNMENT -->
@@ -1618,6 +1696,22 @@ onMounted(() => {
             <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary border-b border-border/60 pb-2">
               <Briefcase :size="15" class="text-primary" />
               <span>2. Employment & Store Assignment</span>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Quick Select Department Preset</label>
+              <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                <button
+                  v-for="d in ['Main Counter', 'Sales Floor', 'Inventory & Warehouse', 'Delivery & Logistics', 'Management']"
+                  :key="d"
+                  type="button"
+                  class="px-2 py-1 text-[11px] font-medium rounded-md border transition-all cursor-pointer select-none"
+                  :class="userForm.department === d ? 'bg-cta-muted border-cta text-primary font-bold shadow-2xs' : 'bg-surface border-border text-muted-foreground hover:bg-surface-subtle hover:text-foreground'"
+                  @click="userForm.department = d"
+                >
+                  {{ d }}
+                </button>
+              </div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">

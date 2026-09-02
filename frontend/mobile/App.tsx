@@ -235,7 +235,7 @@ const GlobalHeader = ({
       </View>
 
       <View style={styles.headerRight}>
-        {pendingCount > 0 && (
+        {Boolean(pendingCount > 0) && (
           <TouchableOpacity
             testID="btn-global-sync-queue"
             style={styles.offlineQueueBtn}
@@ -295,7 +295,7 @@ const RootNavigator = React.memo(
           isCheckoutActive={isCheckoutActive}
           currentRoute={currentRoute}
         />
-        {networkStatus && (
+        {Boolean(networkStatus) && (
           <NetworkStatusBanner
             connectionState={networkStatus.connectionState}
             isChecking={networkStatus.isChecking}
@@ -731,71 +731,81 @@ function AppShell() {
             </NavigationContainer>
           </AppProvider>
 
-          {/* Global Barcode / Receipt Camera Scanner Modal */}
-          <CameraScannerModal
-            visible={scannerOpen}
-            onClose={() => setScannerOpen(false)}
-            onScanCode={async (code) => {
-              await handleScanCode(code)
-            }}
-            isLoading={scanLoading}
-            scannedItems={cartContext.cart.map((item) => ({
-              id: item.variantId,
-              name: item.productName,
-              sku: item.sku,
-              quantity: item.quantity,
-              priceOrCost: item.unitPrice,
-              imageUrl: item.imageUrl,
-            }))}
-            totalCount={cartContext.totalItemCount}
-            totalValue={cartContext.cartTotal}
-            onUpdateItemQuantity={(id, delta) => cartContext.updateQuantity(id, delta)}
-            onRemoveItem={(id) => cartContext.removeFromCart(id)}
-            primaryActionLabel="Go to Register"
-            onPrimaryAction={() => {
-              setScannerOpen(false)
-              setActiveTab('pos')
-            }}
-            feedback={scanFeedback}
-          />
+          {/* Global Continuous Barcode Scanner Modal */}
+          {Boolean(scannerOpen) && (
+            <CameraScannerModal
+              visible={scannerOpen}
+              onClose={() => setScannerOpen(false)}
+              onScanCode={async (code: string) => {
+                await handleScanCode(code)
+              }}
+              isLoading={scanLoading}
+              scannedItems={cartContext.cart.map((item) => ({
+                id: item.variantId,
+                name: item.productName,
+                sku: item.sku,
+                quantity: item.quantity,
+                priceOrCost: item.unitPrice,
+                imageUrl: item.imageUrl,
+              }))}
+              totalCount={cartContext.totalItemCount}
+              totalValue={cartContext.cartTotal}
+              onUpdateItemQuantity={(id, delta) => cartContext.updateQuantity(id, delta)}
+              onRemoveItem={(id) => cartContext.removeFromCart(id)}
+              primaryActionLabel="Go to Register"
+              onPrimaryAction={() => {
+                setScannerOpen(false)
+                setActiveTab('pos')
+              }}
+              feedback={scanFeedback}
+            />
+          )}
 
           {/* Global Stock Intake / Receiving Modal */}
-          <StockInModal
-            visible={modalManager.stockInOpen}
-            product={modalManager.stockInProduct}
-            variant={modalManager.stockInVariant}
-            onClose={modalManager.closeStockIn}
-            pendingPurchaseOrders={purchaseOrderContext.pendingPurchaseOrders}
-            onLinkPoReceived={purchaseOrderContext.markPoReceived}
-          />
+          {Boolean(modalManager.stockInOpen) && (
+            <StockInModal
+              visible={modalManager.stockInOpen}
+              product={modalManager.stockInProduct}
+              variant={modalManager.stockInVariant}
+              onClose={modalManager.closeStockIn}
+              pendingPurchaseOrders={purchaseOrderContext.pendingPurchaseOrders}
+              onLinkPoReceived={purchaseOrderContext.markPoReceived}
+            />
+          )}
 
           {/* Global Inventory Count Adjustment Modal */}
-          <StockAdjustmentModal
-            visible={modalManager.stockAdjOpen}
-            product={modalManager.stockAdjProduct}
-            variant={modalManager.stockAdjVariant}
-            onClose={modalManager.closeStockAdjustment}
-          />
+          {Boolean(modalManager.stockAdjOpen) && (
+            <StockAdjustmentModal
+              visible={modalManager.stockAdjOpen}
+              product={modalManager.stockAdjProduct}
+              variant={modalManager.stockAdjVariant}
+              onClose={modalManager.closeStockAdjustment}
+            />
+          )}
 
           {/* Global Purchase Orders Dialog Modal */}
-          <PurchaseOrderModal
-            visible={modalManager.purchaseOrderModalOpen}
-            onClose={modalManager.closePurchaseOrder}
-            purchaseOrders={purchaseOrderContext.purchaseOrders}
-            onAddPO={purchaseOrderContext.addPurchaseOrder}
-            onMarkPoReceived={purchaseOrderContext.markPoReceived}
-            onOpenStockIn={modalManager.openStockIn}
-            initialMode={modalManager.poModalConfig.mode || 'list'}
-            preSelectedSupplierId={modalManager.poModalConfig.supplierId}
-          />
+          {Boolean(modalManager.purchaseOrderModalOpen) && (
+            <PurchaseOrderModal
+              visible={modalManager.purchaseOrderModalOpen}
+              onClose={modalManager.closePurchaseOrder}
+              purchaseOrders={purchaseOrderContext.purchaseOrders}
+              onAddPO={purchaseOrderContext.addPurchaseOrder}
+              onMarkPoReceived={purchaseOrderContext.markPoReceived}
+              onOpenStockIn={modalManager.openStockIn}
+              initialMode={modalManager.poModalConfig.mode || 'list'}
+              preSelectedSupplierId={modalManager.poModalConfig.supplierId}
+            />
+          )}
 
           {/* Global Auth / Profile Modal */}
-          <AuthModal
-            visible={modalManager.authModalOpen}
-            currentUser={currentUser}
-            onClose={modalManager.closeAuthModal}
-            onUpdateProfile={updateProfile}
-          />
+          {Boolean(modalManager.authModalOpen) && (
+            <AuthModal
+              visible={modalManager.authModalOpen}
+              currentUser={currentUser}
+              onClose={modalManager.closeAuthModal}
+              onUpdateProfile={updateProfile}
+            />
+          )}
 
           {/* Mandatory First-Login Password Change Modal */}
           {Boolean(currentUser && (currentUser.mustChangePassword || currentUser.must_change_password)) && (
@@ -806,47 +816,51 @@ function AppShell() {
           )}
 
           {/* Global Variant Picker Modal */}
-          <VariantPickerModal
-            visible={pickerOpen}
-            product={pickerProduct}
-            variants={pickerVariants}
-            onSelectVariant={(variant) => {
-              if (pickerProduct) {
-                cartContext.addVariantToCart(variant, pickerProduct.name)
-                Alert.alert(
-                  'Variant Selected',
-                  `Added ${pickerProduct.name} (${variant.sku}) to cart.`,
-                  [
-                    {
-                      text: 'Open Register',
-                      onPress: () => {
-                        setPickerOpen(false)
-                        setActiveTab('pos')
+          {Boolean(pickerOpen) && (
+            <VariantPickerModal
+              visible={pickerOpen}
+              product={pickerProduct}
+              variants={pickerVariants}
+              onSelectVariant={(variant) => {
+                if (pickerProduct) {
+                  cartContext.addVariantToCart(variant, pickerProduct.name)
+                  Alert.alert(
+                    'Variant Selected',
+                    `Added ${pickerProduct.name} (${variant.sku}) to cart.`,
+                    [
+                      {
+                        text: 'Open Register',
+                        onPress: () => {
+                          setPickerOpen(false)
+                          setActiveTab('pos')
+                        },
                       },
-                    },
-                    {
-                      text: 'OK',
-                      onPress: () => setPickerOpen(false),
-                    },
-                  ]
-                )
-              } else {
-                setPickerOpen(false)
-              }
-            }}
-            onClose={closePicker}
-          />
+                      {
+                        text: 'OK',
+                        onPress: () => setPickerOpen(false),
+                      },
+                    ]
+                  )
+                } else {
+                  setPickerOpen(false)
+                }
+              }}
+              onClose={closePicker}
+            />
+          )}
 
           {/* Order Receipt Modal (for viewing historical or recent orders) */}
-          <OrderReceiptModal
-            visible={modalManager.receiptOpen}
-            order={modalManager.viewingOrder}
-            onClose={modalManager.closeReceipt}
-            onNewSale={handleNewSaleFromReceipt}
-            onNavigateSettings={() => handleNavigate('settings')}
-            onUpdateStatus={handleUpdateOrderStatus}
-            onUpdateOrder={handleUpdateOrder}
-          />
+          {Boolean(modalManager.receiptOpen) && (
+            <OrderReceiptModal
+              visible={modalManager.receiptOpen}
+              order={modalManager.viewingOrder}
+              onClose={modalManager.closeReceipt}
+              onNewSale={handleNewSaleFromReceipt}
+              onNavigateSettings={() => handleNavigate('settings')}
+              onUpdateStatus={handleUpdateOrderStatus}
+              onUpdateOrder={handleUpdateOrder}
+            />
+          )}
         </View>
       </SafeAreaView>
     </SafeAreaProvider>

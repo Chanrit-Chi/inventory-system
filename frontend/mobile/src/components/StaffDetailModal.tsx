@@ -537,7 +537,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                           <Text style={styles.kpiCardLabel}>SALES REVENUE</Text>
                         </View>
                         <Text style={[styles.kpiCardValue, { color: tokens.colors.primaryContainer }]}>
-                          {formatCurrency(perfData?.summary.total_revenue)}
+                          {formatCurrency(perfData?.summary?.total_revenue ?? perfData?.total_revenue)}
                         </Text>
                       </View>
 
@@ -546,7 +546,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                           <Ionicons name="receipt-outline" size={15} color={tokens.colors.onSurface} />
                           <Text style={styles.kpiCardLabel}>COMPLETED ORDERS</Text>
                         </View>
-                        <Text style={styles.kpiCardValue}>{perfData?.summary.total_orders ?? 0}</Text>
+                        <Text style={styles.kpiCardValue}>{perfData?.summary?.total_orders ?? perfData?.total_orders ?? 0}</Text>
                       </View>
                     </View>
 
@@ -557,7 +557,7 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                           <Text style={styles.kpiCardLabel}>AVG TICKET VALUE</Text>
                         </View>
                         <Text style={styles.kpiCardValue}>
-                          {formatCurrency(perfData?.summary.avg_order_value)}
+                          {formatCurrency(perfData?.summary?.avg_order_value ?? perfData?.avg_order_value)}
                         </Text>
                       </View>
 
@@ -567,15 +567,15 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                           <Text style={styles.kpiCardLabel}>COMMISSION EARNED</Text>
                         </View>
                         <Text style={[styles.kpiCardValue, { color: tokens.colors.statusSuccess }]}>
-                          +{formatCurrency(perfData?.summary.total_incentive)}
+                          +{formatCurrency(perfData?.summary?.total_incentive ?? perfData?.total_incentive ?? (perfData as any)?.total_commission)}
                         </Text>
                       </View>
                     </View>
 
-                    {perfData?.channel_breakdown && perfData.channel_breakdown.length > 0 && (
+                    {Boolean(perfData?.channel_breakdown && perfData.channel_breakdown.length > 0) && (
                       <View style={[styles.sectionCard, { marginTop: 14 }]}>
                         <Text style={styles.cardSectionTitle}>SALES BY CHANNEL</Text>
-                        {perfData.channel_breakdown.map((ch, idx) => (
+                        {perfData?.channel_breakdown?.map((ch, idx) => (
                           <View key={idx} style={{ marginVertical: 6 }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
                               <Text style={{ fontSize: 12.5, fontWeight: '700', color: tokens.colors.onSurface }}>
@@ -670,17 +670,17 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                   <>
                     <View style={styles.incentiveSummaryBanner}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.incentiveBannerLabel}>TOTAL COMMISSION EARNED</Text>
-                        <Text style={styles.incentiveBannerAmount}>
-                          +{formatCurrency(incData?.summary.total_incentive)}
+                         <Text style={styles.incentiveBannerLabel}>TOTAL COMMISSION EARNED</Text>
+                         <Text style={styles.incentiveBannerAmount}>
+                          +{formatCurrency(incData?.summary?.total_incentive ?? (incData as any)?.total_incentive)}
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={{ fontSize: 12, fontWeight: '700', color: tokens.colors.onSurface }}>
-                          {incData?.summary.total_orders ?? 0} Orders
+                          {incData?.summary?.total_orders ?? (incData as any)?.total_orders ?? 0} Orders
                         </Text>
                         <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
-                          Sales: {formatCurrency(incData?.summary.total_sales)}
+                          Sales: {formatCurrency(incData?.summary?.total_sales ?? (incData as any)?.total_sales)}
                         </Text>
                       </View>
                     </View>

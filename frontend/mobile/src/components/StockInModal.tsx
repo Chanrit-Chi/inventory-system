@@ -848,7 +848,7 @@ export const StockInModal: React.FC<StockInModalProps> = ({
             {/* Optional Delivery Metadata Inputs Card (Omitted by default unless PO is linked or manually opened) */}
             {Boolean(showManualNotes || selectedPoId || poNumber || supplierName) && (
               <View style={styles.metaCard}>
-                {suppliers.length > 0 && !selectedPoId && (
+                {Boolean(suppliers.length > 0 && !selectedPoId) && (
                   <View style={{ marginBottom: tokens.spacing.sm }}>
                     <Text style={styles.noteLabel}>QUICK SELECT REGISTERED SUPPLIER</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingTop: 4 }}>

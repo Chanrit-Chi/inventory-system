@@ -10,6 +10,8 @@ export interface User {
   role: string
   department?: string
   status: 'active' | 'inactive'
+  is_active?: boolean
+  is_test_account?: boolean
   avatar_url?: string
   created_at: string
   updated_at: string

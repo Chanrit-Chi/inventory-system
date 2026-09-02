@@ -36,10 +36,12 @@ backend/.phpunit.result.cache
 backend/storage/framework/cache/*
 backend/storage/framework/sessions/*
 backend/storage/framework/views/*
+backend/storage/framework/testing/*
 backend/storage/logs/*
 !backend/storage/framework/cache/.gitignore
 !backend/storage/framework/sessions/.gitignore
 !backend/storage/framework/views/.gitignore
+!backend/storage/framework/testing/.gitignore
 !backend/storage/logs/.gitignore
 
 # ─── Frontend (Web - Vite) ──────────────────────────────────────

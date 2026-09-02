@@ -410,6 +410,8 @@ export interface UserAccount {
   email: string
   role: UserRole
   isActive: boolean
+  is_test_account?: boolean
+  isTestAccount?: boolean
   must_change_password?: boolean
   mustChangePassword?: boolean
   avatarUrl?: string
@@ -825,6 +827,44 @@ export interface ThirteenthMonthSummary {
   total_disbursed: number
   available_balance: number
   payouts: ThirteenthMonthPayout[]
+}
+
+export interface MonthlyReserveBreakdown {
+  payroll_id: string
+  month: number
+  year: number
+  amount: number
+  status: string
+}
+
+export interface StaffThirteenthMonthReserve {
+  user_id: string
+  name: string
+  email: string
+  role: string
+  department: string
+  base_salary: number
+  monthly_accrual: number
+  months_accrued: number
+  accrued_months?: number[]
+  monthly_breakdown?: MonthlyReserveBreakdown[]
+  month_specific_accrual?: number | null
+  total_accrued: number
+  total_disbursed: number
+  available_balance: number
+  payouts: ThirteenthMonthPayout[]
+}
+
+export interface CompanyThirteenthMonthReservesData {
+  year?: number | null
+  month?: number | null
+  kpi: {
+    company_total_accrued: number
+    company_total_disbursed: number
+    company_total_available_balance: number
+    eligible_staff_count: number
+  }
+  staff: StaffThirteenthMonthReserve[]
 }
 
 export interface StaffPerformanceSummary {

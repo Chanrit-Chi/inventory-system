@@ -83,7 +83,7 @@ export const PermissionModuleSection: React.FC<PermissionModuleSectionProps> = (
       </TouchableOpacity>
 
       {/* Permission Items in this Module (only when expanded) */}
-      {isExpanded && (
+      {Boolean(isExpanded) && (
         <>
           <View style={styles.moduleDivider} />
           <View style={styles.permissionsList}>

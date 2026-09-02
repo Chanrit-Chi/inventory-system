@@ -213,7 +213,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       )}
 
       {/* Record Payment Form Modal */}
-      {paymentModalOpen && (
+      {Boolean(paymentModalOpen) && (
         <Modal visible={true} transparent animationType="slide" onRequestClose={onClosePaymentModal}>
           <View style={styles.modalOverlay}>
             <View style={styles.detailSheet}>

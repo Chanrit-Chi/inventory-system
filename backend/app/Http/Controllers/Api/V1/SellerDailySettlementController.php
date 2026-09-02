@@ -259,13 +259,8 @@ class SellerDailySettlementController extends BaseApiController
         $targetDate = $request->input('date', Carbon::today()->toDateString());
         $normalizedDate = Carbon::parse($targetDate)->toDateString();
 
-        // 1. Get all active non-superadmin staff members
-        $sellers = User::whereNull('deleted_at')
-            ->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('role')
-                  ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
-            })
+        // 1. Get all active operational staff members (non-superadmin, not test accounts)
+        $sellers = User::operational()
             ->orderBy('name')
             ->get();
 

@@ -101,11 +101,11 @@ export function GenericFilterBar<T extends string = string>({
             </TouchableOpacity>
           )}
         </View>
-        {rightSearchAction}
+        {Boolean(rightSearchAction) && rightSearchAction}
       </View>
 
       {/* Filter Chips Horizontal Carousel */}
-      {chips.length > 0 && (
+      {Boolean(chips.length > 0) && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -156,7 +156,7 @@ export function GenericFilterBar<T extends string = string>({
         </ScrollView>
       )}
 
-      {bottomContent}
+      {Boolean(bottomContent) && bottomContent}
     </ContainerComponent>
   )
 }

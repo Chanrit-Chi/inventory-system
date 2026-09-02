@@ -132,22 +132,22 @@ export const QuickOperationsGrid: React.FC<QuickOperationsGridProps> = ({
                 <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />
               </SpringScaleCard>
 
-              {/* Customers Directory for Sellers */}
+              {/* Invoices for Quick Operations */}
               <SpringScaleCard
-                testID="btn-quick-customers"
+                testID="btn-quick-invoices"
                 style={styles.actionCardSecondary}
                 touchStyle={styles.actionCardSecondaryTouch}
-                onPress={() => onNavigate('customers')}
+                onPress={() => onNavigate('invoices')}
                 activeOpacity={0.88}
-                accessibilityLabel="Customers Directory"
+                accessibilityLabel="Invoices and Billing"
               >
-                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#EDE9FE' }]}>
-                  <Ionicons name="people-outline" size={18} color="#7C3AED" />
+                <View style={[styles.actionIconWrapSecondary, { backgroundColor: '#E6F4EA' }]}>
+                  <Ionicons name="receipt-outline" size={18} color="#15803D" />
                 </View>
                 <View style={styles.actionSecondaryInfo}>
-                  <Text style={styles.actionTitleSecondary}>Customers</Text>
+                  <Text style={styles.actionTitleSecondary}>Invoices</Text>
                   <Text style={styles.actionSubSecondary} numberOfLines={1}>
-                    CRM & VIP list
+                    Payments & due
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={tokens.colors.secondaryFixedDim} />

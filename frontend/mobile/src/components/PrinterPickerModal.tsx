@@ -122,7 +122,7 @@ export const PrinterPickerModal: React.FC<PrinterPickerModalProps> = ({
             )}
 
             {/* Print to All Stations Option if 2+ printers */}
-            {devices.length > 1 && onPrintAll && (
+            {Boolean(devices.length > 1 && onPrintAll) && (
               <TouchableOpacity
                 style={styles.printAllButton}
                 onPress={onPrintAll}

@@ -109,7 +109,6 @@ export function ProductDetailModal({
                       )
                     })()}
                     {!detailProduct.barcode && !(detailProduct.variants && detailProduct.variants.length > 1) ? (
-                      /* Simple product without barcode yet - quick scan to assign when stock arrives */
                       <TouchableOpacity
                         style={{
                           flexDirection: 'row',

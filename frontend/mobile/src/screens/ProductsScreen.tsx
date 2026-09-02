@@ -635,152 +635,174 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       ) : null}
 
       {/* Product Creation / Edit Modal */}
-      <ProductFormModal
-        form={productForm}
-        managedCategories={managedCategories}
-        setNewCatModalOpen={setNewCatModalOpen}
-        managedAttributes={managedAttributes}
-        setNewAttrModalOpen={setNewAttrModalOpen}
-        handleOpenAddCustomValueModal={handleOpenAddCustomValueModal}
-      />
+      {Boolean(productForm.productModalOpen) && (
+        <ProductFormModal
+          form={productForm}
+          managedCategories={managedCategories}
+          setNewCatModalOpen={setNewCatModalOpen}
+          managedAttributes={managedAttributes}
+          setNewAttrModalOpen={setNewAttrModalOpen}
+          handleOpenAddCustomValueModal={handleOpenAddCustomValueModal}
+        />
+      )}
 
       {/* Inline creator dialogs: New Category / New Attribute / Custom Value */}
-      <InlineCreatorModals
-        newCatModalOpen={newCatModalOpen}
-        setNewCatModalOpen={setNewCatModalOpen}
-        inlineCatName={inlineCatName}
-        setInlineCatName={setInlineCatName}
-        inlineCatCode={inlineCatCode}
-        setInlineCatCode={setInlineCatCode}
-        handleSaveInlineCategory={handleSaveInlineCategory}
-        newAttrModalOpen={newAttrModalOpen}
-        setNewAttrModalOpen={setNewAttrModalOpen}
-        inlineAttrName={inlineAttrName}
-        setInlineAttrName={setInlineAttrName}
-        inlineAttrValues={inlineAttrValues}
-        setInlineAttrValues={setInlineAttrValues}
-        handleSaveInlineAttribute={handleSaveInlineAttribute}
-        customValueModalOpen={customValueModalOpen}
-        setCustomValueModalOpen={setCustomValueModalOpen}
-        targetAttrForCustomVal={targetAttrForCustomVal}
-        customValInput={customValInput}
-        setCustomValInput={setCustomValInput}
-        handleConfirmAddCustomValue={handleConfirmAddCustomValue}
-      />
+      {Boolean(newCatModalOpen || newAttrModalOpen || customValueModalOpen) && (
+        <InlineCreatorModals
+          newCatModalOpen={newCatModalOpen}
+          setNewCatModalOpen={setNewCatModalOpen}
+          inlineCatName={inlineCatName}
+          setInlineCatName={setInlineCatName}
+          inlineCatCode={inlineCatCode}
+          setInlineCatCode={setInlineCatCode}
+          handleSaveInlineCategory={handleSaveInlineCategory}
+          newAttrModalOpen={newAttrModalOpen}
+          setNewAttrModalOpen={setNewAttrModalOpen}
+          inlineAttrName={inlineAttrName}
+          setInlineAttrName={setInlineAttrName}
+          inlineAttrValues={inlineAttrValues}
+          setInlineAttrValues={setInlineAttrValues}
+          handleSaveInlineAttribute={handleSaveInlineAttribute}
+          customValueModalOpen={customValueModalOpen}
+          setCustomValueModalOpen={setCustomValueModalOpen}
+          targetAttrForCustomVal={targetAttrForCustomVal}
+          customValInput={customValInput}
+          setCustomValInput={setCustomValInput}
+          handleConfirmAddCustomValue={handleConfirmAddCustomValue}
+        />
+      )}
 
       {/* Camera Barcode Scanner for Purchase Order */}
-      <CameraScannerModal
-        visible={poScannerOpen}
-        onClose={() => setPoScannerOpen(false)}
-        onScanCode={handleScanCodeForPO}
-        isLoading={poScanLoading}
-      />
+      {Boolean(poScannerOpen) && (
+        <CameraScannerModal
+          visible={poScannerOpen}
+          onClose={() => setPoScannerOpen(false)}
+          onScanCode={handleScanCodeForPO}
+          isLoading={poScanLoading}
+        />
+      )}
 
       {/* Product Catalog Modal for Purchase Order */}
-      <ProductPickerModal
-        visible={poCatalogOpen}
-        title="Select Products for Purchase Order"
-        subtitle="Grouped by product catalog with live stock & purchase costs"
-        priceType="cost"
-        products={products}
-        existingItems={poExistingItems}
-        onClose={() => setPoCatalogOpen(false)}
-        onSelect={handleSelectProductForPO}
-        onSelectMultiple={handleSelectMultipleProductsForPO}
-        onRefreshCatalog={loadProducts}
-      />
+      {Boolean(poCatalogOpen) && (
+        <ProductPickerModal
+          visible={poCatalogOpen}
+          title="Select Products for Purchase Order"
+          subtitle="Grouped by product catalog with live stock & purchase costs"
+          priceType="cost"
+          products={products}
+          existingItems={poExistingItems}
+          onClose={() => setPoCatalogOpen(false)}
+          onSelect={handleSelectProductForPO}
+          onSelectMultiple={handleSelectMultipleProductsForPO}
+          onRefreshCatalog={loadProducts}
+        />
+      )}
 
       {/* Restructured Purchase Order Modal */}
-      <PurchaseOrderModal
-        poModalOpen={poModalOpen}
-        setPoModalOpen={setPoModalOpen}
-        suppliers={suppliers}
-        selectedSupplierId={selectedSupplierId}
-        setSelectedSupplierId={setSelectedSupplierId}
-        poNotes={poNotes}
-        setPoNotes={setPoNotes}
-        poDeliveryDays={poDeliveryDays}
-        setPoDeliveryDays={setPoDeliveryDays}
-        poItems={poItems}
-        setPoCatalogOpen={setPoCatalogOpen}
-        setPoScannerOpen={setPoScannerOpen}
-        handleUpdatePoItemQty={handleUpdatePoItemQty}
-        handleUpdatePoItemCost={handleUpdatePoItemCost}
-        handleRemovePoItem={handleRemovePoItem}
-        handleCreatePO={handleCreatePO}
-      />
+      {Boolean(poModalOpen) && (
+        <PurchaseOrderModal
+          poModalOpen={poModalOpen}
+          setPoModalOpen={setPoModalOpen}
+          suppliers={suppliers}
+          selectedSupplierId={selectedSupplierId}
+          setSelectedSupplierId={setSelectedSupplierId}
+          poNotes={poNotes}
+          setPoNotes={setPoNotes}
+          poDeliveryDays={poDeliveryDays}
+          setPoDeliveryDays={setPoDeliveryDays}
+          poItems={poItems}
+          setPoCatalogOpen={setPoCatalogOpen}
+          setPoScannerOpen={setPoScannerOpen}
+          handleUpdatePoItemQty={handleUpdatePoItemQty}
+          handleUpdatePoItemCost={handleUpdatePoItemCost}
+          handleRemovePoItem={handleRemovePoItem}
+          handleCreatePO={handleCreatePO}
+        />
+      )}
 
       {/* Supplier / Vendor Registration Modal */}
-      <SupplierFormModal
-        newSupModalOpen={newSupModalOpen}
-        setNewSupModalOpen={setNewSupModalOpen}
-        newSupName={newSupName}
-        setNewSupName={setNewSupName}
-        newSupContact={newSupContact}
-        setNewSupContact={setNewSupContact}
-        newSupPhone={newSupPhone}
-        setNewSupPhone={setNewSupPhone}
-        newSupEmail={newSupEmail}
-        setNewSupEmail={setNewSupEmail}
-        newSupAddress={newSupAddress}
-        setNewSupAddress={setNewSupAddress}
-        newSupLeadTime={newSupLeadTime}
-        setNewSupLeadTime={setNewSupLeadTime}
-        handleCreateSupplier={handleCreateSupplier}
-      />
+      {Boolean(newSupModalOpen) && (
+        <SupplierFormModal
+          newSupModalOpen={newSupModalOpen}
+          setNewSupModalOpen={setNewSupModalOpen}
+          newSupName={newSupName}
+          setNewSupName={setNewSupName}
+          newSupContact={newSupContact}
+          setNewSupContact={setNewSupContact}
+          newSupPhone={newSupPhone}
+          setNewSupPhone={setNewSupPhone}
+          newSupEmail={newSupEmail}
+          setNewSupEmail={setNewSupEmail}
+          newSupAddress={newSupAddress}
+          setNewSupAddress={setNewSupAddress}
+          newSupLeadTime={newSupLeadTime}
+          setNewSupLeadTime={setNewSupLeadTime}
+          handleCreateSupplier={handleCreateSupplier}
+        />
+      )}
 
       {/* Purchase Order Detail Sheet */}
-      <PurchaseOrderDetailModal
-        poDetailModalOpen={poDetailModalOpen}
-        setPoDetailModalOpen={setPoDetailModalOpen}
-        selectedPoDetail={selectedPoDetail}
-        handleMarkPoReceived={handleMarkPoReceived}
-      />
+      {Boolean(poDetailModalOpen) && (
+        <PurchaseOrderDetailModal
+          poDetailModalOpen={poDetailModalOpen}
+          setPoDetailModalOpen={setPoDetailModalOpen}
+          selectedPoDetail={selectedPoDetail}
+          handleMarkPoReceived={handleMarkPoReceived}
+        />
+      )}
 
       {/* Read-Only Product Detail Sheet Modal */}
-      <ProductDetailModal
-        detailModalOpen={detailModalOpen}
-        setDetailModalOpen={setDetailModalOpen}
-        detailProduct={detailProduct}
-        handleOpenEditProduct={handleOpenEditProduct}
-        handleDeleteProductRequest={handleDeleteProductRequest}
-        handleToggleProductActive={handleToggleProductActive}
-        handleToggleVariantActive={handleToggleVariantActive}
-        setOverviewScannerOpen={setOverviewScannerOpen}
-        setOverviewScanTarget={setOverviewScanTarget}
-        onOpenStockIn={onOpenStockIn}
-        onOpenStockAdjustment={onOpenStockAdjustment}
-      />
+      {Boolean(detailModalOpen) && (
+        <ProductDetailModal
+          detailModalOpen={detailModalOpen}
+          setDetailModalOpen={setDetailModalOpen}
+          detailProduct={detailProduct}
+          handleOpenEditProduct={handleOpenEditProduct}
+          handleDeleteProductRequest={handleDeleteProductRequest}
+          handleToggleProductActive={handleToggleProductActive}
+          handleToggleVariantActive={handleToggleVariantActive}
+          setOverviewScannerOpen={setOverviewScannerOpen}
+          setOverviewScanTarget={setOverviewScanTarget}
+          onOpenStockIn={onOpenStockIn}
+          onOpenStockAdjustment={onOpenStockAdjustment}
+        />
+      )}
 
       {/* Variant Barcode Camera Scanner */}
-      <CameraScannerModal
-        visible={variantScannerOpen}
-        isLoading={false}
-        onClose={() => {
-          setVariantScannerOpen(false)
-          setActiveScanVariantIndex(null)
-        }}
-        onScanCode={handleScanCodeForVariant}
-      />
+      {Boolean(variantScannerOpen) && (
+        <CameraScannerModal
+          visible={variantScannerOpen}
+          isLoading={false}
+          onClose={() => {
+            setVariantScannerOpen(false)
+            setActiveScanVariantIndex(null)
+          }}
+          onScanCode={handleScanCodeForVariant}
+        />
+      )}
 
       {/* Simple Product Barcode Camera Scanner */}
-      <CameraScannerModal
-        visible={simpleBarcodeScannerOpen}
-        isLoading={false}
-        onClose={() => setSimpleBarcodeScannerOpen(false)}
-        onScanCode={handleScanCodeForSimpleProduct}
-      />
+      {Boolean(simpleBarcodeScannerOpen) && (
+        <CameraScannerModal
+          visible={simpleBarcodeScannerOpen}
+          isLoading={false}
+          onClose={() => setSimpleBarcodeScannerOpen(false)}
+          onScanCode={handleScanCodeForSimpleProduct}
+        />
+      )}
 
       {/* Overview Quick Barcode Assignment Scanner */}
-      <CameraScannerModal
-        visible={overviewScannerOpen}
-        isLoading={false}
-        onClose={() => {
-          setOverviewScannerOpen(false)
-          setOverviewScanTarget(null)
-        }}
-        onScanCode={handleScanCodeForOverview}
-      />
+      {Boolean(overviewScannerOpen) && (
+        <CameraScannerModal
+          visible={overviewScannerOpen}
+          isLoading={false}
+          onClose={() => {
+            setOverviewScannerOpen(false)
+            setOverviewScanTarget(null)
+          }}
+          onScanCode={handleScanCodeForOverview}
+        />
+      )}
     </View>
   )
 }

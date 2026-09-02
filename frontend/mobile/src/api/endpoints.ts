@@ -119,6 +119,7 @@ export async function createUser(payload: {
   notes?: string
   base_salary?: number
   salary_reason?: string
+  is_test_account?: boolean
 }): Promise<UserAccount> {
   const response = await apiClient.post<ApiResponse<UserAccount>>('/users', payload)
   return response.data.data
@@ -139,6 +140,7 @@ export async function updateUser(id: string, payload: Partial<{
   base_salary: number
   salary_reason: string
   isActive: boolean
+  is_test_account: boolean
 }>): Promise<UserAccount> {
   const response = await apiClient.patch<ApiResponse<UserAccount>>(`/users/${id}`, payload)
   return response.data.data
@@ -1277,6 +1279,45 @@ export async function fetchMy13thMonthSavings(year?: number): Promise<ApiRespons
 export async function fetch13thMonthSavings(userId: string, year?: number): Promise<ApiResponse<import('../types').ThirteenthMonthSummary>> {
   const response = await apiClient.get<ApiResponse<import('../types').ThirteenthMonthSummary>>(`/users/${userId}/savings`, { params: { year } })
   return response.data
+}
+
+/**
+ * Fetch company-wide 13th month / seniority reserves overview for all staff
+ * GET /api/v1/payrolls/13th-month-reserves
+ */
+export async function fetchCompany13thMonthReserves(
+  year?: number | 'ALL',
+  month?: number | 'ALL'
+): Promise<ApiResponse<import('../types').CompanyThirteenthMonthReservesData>> {
+  const params = {
+    year: year && year !== 'ALL' ? year : undefined,
+    month: month && month !== 'ALL' ? month : undefined,
+  }
+  try {
+    const response = await apiClient.get<ApiResponse<import('../types').CompanyThirteenthMonthReservesData>>(
+      '/payrolls/13th-month-reserves',
+      { params }
+    )
+    return response.data
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 405 || status === 404) {
+      try {
+        const response = await apiClient.get<ApiResponse<import('../types').CompanyThirteenthMonthReservesData>>(
+          '/payrolls/company-thirteenth-month-reserves',
+          { params }
+        )
+        return response.data
+      } catch {
+        const response = await apiClient.get<ApiResponse<import('../types').CompanyThirteenthMonthReservesData>>(
+          '/payrolls/reserves',
+          { params }
+        )
+        return response.data
+      }
+    }
+    throw err
+  }
 }
 
 /**

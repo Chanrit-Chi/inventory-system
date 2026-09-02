@@ -269,4 +269,71 @@ class PayrollTest extends TestCase
             'amount' => 10.00,
         ]);
     }
+
+    public function test_company_thirteenth_month_reserves_overview(): void
+    {
+        $admin = User::create([
+            'name' => 'Admin Payroll Tester',
+            'email' => 'admin_payroll_res_test@pos.local',
+            'password' => bcrypt('Password123!'),
+            'role' => 'ADMIN',
+            'is_active' => true,
+        ]);
+        $staff = User::create([
+            'name' => 'Staff 13th Tester',
+            'email' => 'staff_13th_res_test@pos.local',
+            'password' => bcrypt('Password123!'),
+            'role' => 'SELLER',
+            'is_active' => true,
+        ]);
+
+        // Give staff a base salary of 600
+        \App\Models\UserSalary::create([
+            'user_id' => $staff->id,
+            'base_salary' => 600.00,
+            'effective_from' => now()->startOfYear()->toDateString(),
+            'created_by' => $admin->id,
+        ]);
+
+        // Create a payroll with 13th month contribution
+        $this->actingAs($admin)->postJson('/api/v1/payrolls/generate', [
+            'period_month' => 1,
+            'period_year' => (int) now()->format('Y'),
+            'user_ids' => [$staff->id],
+        ]);
+
+        $response = $this->actingAs($admin)->getJson('/api/v1/payrolls/13th-month-reserves?year=' . now()->format('Y'));
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'success',
+                'data' => [
+                    'year',
+                    'kpi' => [
+                        'company_total_accrued',
+                        'company_total_disbursed',
+                        'company_total_available_balance',
+                        'eligible_staff_count',
+                    ],
+                    'staff' => [
+                        '*' => [
+                            'user_id',
+                            'name',
+                            'email',
+                            'role',
+                            'department',
+                            'base_salary',
+                            'monthly_accrual',
+                            'months_accrued',
+                            'total_accrued',
+                            'total_disbursed',
+                            'available_balance',
+                            'payouts',
+                        ]
+                    ]
+                ]
+            ]);
+
+        $this->assertGreaterThan(0, $response->json('data.kpi.eligible_staff_count'));
+    }
 }

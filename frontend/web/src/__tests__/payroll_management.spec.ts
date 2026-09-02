@@ -352,12 +352,62 @@ describe('Staff Payroll Management System', () => {
       })
       expect(vm.showStandaloneModal).toBe(false)
     })
+
+    it('switches to 13th-Month Reserves tab and displays company reserves', async () => {
+      ;(api.get as any).mockImplementation((url: string) => {
+        if (url.includes('/13th-month-reserves')) {
+          return Promise.resolve({
+            data: {
+              data: {
+                kpi: {
+                  company_total_accrued: 1200,
+                  company_total_disbursed: 200,
+                  company_total_available_balance: 1000,
+                  eligible_staff_count: 2,
+                },
+                staff: [
+                  {
+                    user_id: 'u-1',
+                    name: 'Alice Seller',
+                    email: 'alice@pos.local',
+                    role: 'SELLER',
+                    department: 'Floor Sales',
+                    base_salary: 500,
+                    monthly_accrual: 41.67,
+                    months_accrued: 10,
+                    total_accrued: 416.7,
+                    total_disbursed: 0,
+                    available_balance: 416.7,
+                    payouts: [],
+                  },
+                ],
+              },
+            },
+          })
+        }
+        return Promise.resolve({ data: { data: [] } })
+      })
+
+      const wrapper = mount(PayrollView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true, teleport: true },
+        },
+      })
+      await flushPromises()
+
+      const vm = wrapper.vm as any
+      await vm.switchTabToReserves()
+      expect(vm.activeMainTab).toBe('RESERVES')
+      expect(vm.filteredCompanyStaffReserves.length).toBe(1)
+      expect(vm.filteredCompanyStaffReserves[0].name).toBe('Alice Seller')
+    })
   })
 
   describe('5. Bulk Operations & Payslip Printing', () => {
-    it('selects multiple payroll rows and executes bulk status transition to PAID', async () => {
+    it('selects multiple payroll rows and executes bulk status transition to PAID for eligible finalized rows', async () => {
       ;(api.post as any).mockResolvedValueOnce({
-        data: { data: {}, message: 'Updated 2 payroll runs' },
+        data: { data: {}, message: 'Updated 1 payroll runs' },
       })
 
       const wrapper = mount(PayrollView, {
@@ -371,10 +421,13 @@ describe('Staff Payroll Management System', () => {
       const vm = wrapper.vm as any
       vm.toggleSelectAll()
       expect(vm.selectedIds.size).toBe(2)
+      expect(vm.selectedDraftCount).toBe(1)
+      expect(vm.selectedFinalizedCount).toBe(1)
 
+      // Bulk Mark Paid should only send finalized rows (pay-2), not drafts (pay-1)
       await vm.handleBulkStatus('PAID')
       expect(api.post).toHaveBeenCalledWith('/payrolls/bulk-status', {
-        ids: ['pay-1', 'pay-2'],
+        ids: ['pay-2'],
         status: 'PAID',
       })
       expect(vm.selectedIds.size).toBe(0)
@@ -398,6 +451,109 @@ describe('Staff Payroll Management System', () => {
       // Switch to thermal slip
       vm.payslipFormat = 'THERMAL'
       expect(vm.payslipFormat).toBe('THERMAL')
+    })
+  })
+
+  describe('6. Edge Cases, Dynamic Month End & Reopen Guards', () => {
+    it('normalizes backend incentive_amount, overtime_amount, and thirteenth_month_contribution', async () => {
+      ;(api.get as any).mockImplementation((url: string) => {
+        if (url === '/payrolls') {
+          return Promise.resolve({
+            data: {
+              data: [
+                {
+                  id: 'pay-raw-1',
+                  user_id: 'u-1',
+                  period_month: 2,
+                  period_year: 2024, // leap year
+                  status: 'DRAFT',
+                  base_salary: '1000.00',
+                  working_days: 26,
+                  incentive_amount: '85.50',
+                  overtime_amount: '45.00',
+                  thirteenth_month_contribution: '83.33',
+                  total_net_pay: '1130.50',
+                },
+              ],
+            },
+          })
+        }
+        return Promise.resolve({ data: { data: [] } })
+      })
+
+      const wrapper = mount(PayrollView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true, teleport: true },
+        },
+      })
+      await flushPromises()
+
+      const vm = wrapper.vm as any
+      const record = vm.filteredPayrolls[0]
+      expect(record.sales_commission).toBe(85.50)
+      expect(record.overtime_pay).toBe(45.00)
+      expect(record.thirteenth_month_accrual).toBe(83.33)
+      expect(record.period_end).toBe('2024-02-29') // Leap year Feb ends on 29
+    })
+
+    it('calculates correct month end date for various months (28, 29, 30, 31 days)', async () => {
+      const wrapper = mount(PayrollView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true, teleport: true },
+        },
+      })
+      await flushPromises()
+
+      const vm = wrapper.vm as any
+      expect(vm.getPeriodRange(2026, 1).end).toBe('2026-01-31') // Jan 31
+      expect(vm.getPeriodRange(2026, 2).end).toBe('2026-02-28') // Feb 2026: 28
+      expect(vm.getPeriodRange(2024, 2).end).toBe('2024-02-29') // Feb 2024: 29 (leap)
+      expect(vm.getPeriodRange(2026, 4).end).toBe('2026-04-30') // Apr 30
+      expect(vm.getPeriodRange(2026, 8).end).toBe('2026-08-31') // Aug 31
+    })
+
+    it('blocks reopening or editing when status is PAID', async () => {
+      const wrapper = mount(PayrollView, {
+        global: {
+          plugins: [router],
+          stubs: { RouterLink: true, teleport: true },
+        },
+      })
+      await flushPromises()
+
+      const vm = wrapper.vm as any
+      const paidPayroll: Payroll = {
+        id: 'pay-paid-1',
+        user_id: 'u-1',
+        period_month: 7,
+        period_year: 2026,
+        status: 'PAID',
+        base_salary: 500,
+        working_days: 26,
+        performance_benefit: 0,
+        delivery_benefit: 0,
+        overtime_days: 0,
+        overtime_pay: 0,
+        unpaid_leave_days: 0,
+        unpaid_leave_deduction: 0,
+        collective_benefit: 0,
+        other_benefits: 0,
+        sales_commission: 0,
+        gross_salary: 500,
+        tax_deduction: 0,
+        total_net_pay: 500,
+      }
+
+      // Quick transition on PAID should be blocked
+      await vm.quickTransition(paidPayroll, 'DRAFT')
+      expect(api.put).not.toHaveBeenCalledWith('/payrolls/pay-paid-1', expect.anything())
+
+      // handleSaveDetail on PAID should also be blocked
+      vm.editingPayroll = paidPayroll
+      await vm.handleSaveDetail('DRAFT')
+      expect(api.put).not.toHaveBeenCalledWith('/payrolls/pay-paid-1', expect.anything())
     })
   })
 })

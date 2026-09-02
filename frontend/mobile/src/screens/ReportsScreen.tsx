@@ -202,7 +202,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         }
       >
         {/* Loading Indicator */}
-        {loading && !refreshing && (
+        {Boolean(loading && !refreshing) && (
           <View style={{ paddingVertical: 12, alignItems: 'center' }}>
             <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
           </View>

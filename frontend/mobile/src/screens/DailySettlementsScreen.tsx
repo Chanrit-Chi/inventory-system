@@ -314,7 +314,6 @@ export const DailySettlementsScreen: React.FC<DailySettlementsScreenProps> = ({
             <Text style={styles.loadingText}>Fetching team settlement records...</Text>
           </View>
         ) : filteredSellers.length > 0 ? (
-          /* List of Detailed Seller Settlement Cards */
           <View style={styles.sellerCardsList}>
             {filteredSellers.map((item) => (
               <SellerSettlementCard
@@ -335,7 +334,6 @@ export const DailySettlementsScreen: React.FC<DailySettlementsScreenProps> = ({
             ))}
           </View>
         ) : (
-          /* Empty State */
           <View style={styles.emptyContainer}>
             <Ionicons name="documents-outline" size={40} color={tokens.colors.secondary} />
             <Text style={styles.emptyTitle}>No settlements found</Text>
@@ -501,7 +499,7 @@ const SellerSettlementCard: React.FC<SellerSettlementCardProps> = ({ item, onOpe
           >
             {isConfirmed ? 'View Slip' : hasSales ? 'Sign Off Sales' : 'No Sales'}
           </Text>
-          {(isConfirmed || hasSales) && (
+          {Boolean(isConfirmed || hasSales) && (
             <Ionicons name="chevron-forward" size={13} color={tokens.colors.primary} />
           )}
         </TouchableOpacity>

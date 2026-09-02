@@ -47,7 +47,7 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
   const displaySubtitle = subtitle || `${periodLabel} • Sales, Orders & Commission`
 
   const salesRevenue = performance
-    ? (performance.summary?.total_revenue ?? performance.total_revenue ?? 0)
+    ? (performance.summary?.total_revenue ?? performance.total_revenue ?? (performance as any)?.total_sales ?? 0)
     : 0
 
   const ordersCount = performance
@@ -55,7 +55,11 @@ export const StaffPerformanceCard: React.FC<StaffPerformanceCardProps> = ({
     : 0
 
   const incentiveAmount = performance
-    ? (performance.summary?.total_incentive ?? performance.total_incentive ?? 0)
+    ? (performance.summary?.total_incentive ??
+        performance.total_incentive ??
+        (performance as any)?.total_commission ??
+        (performance as any)?.incentive_amount ??
+        0)
     : 0
 
   return (

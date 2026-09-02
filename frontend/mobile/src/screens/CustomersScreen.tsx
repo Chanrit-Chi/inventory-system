@@ -382,7 +382,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                 {/* Order History & Ordered Products */}
                 <View style={styles.orderSectionHeaderRow}>
                   <Text style={[styles.sectionHeader, { marginBottom: 0 }]}>Order History & Products</Text>
-                  {detailsLoading && (
+                  {Boolean(detailsLoading) && (
                     <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
                   )}
                 </View>
@@ -442,7 +442,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                         </TouchableOpacity>
 
                         {/* Product Items Breakdown */}
-                        {isExpanded && (
+                        {Boolean(isExpanded) && (
                           <View style={styles.orderItemsContainer}>
                             <View style={styles.orderItemsHeader}>
                               <Text style={styles.orderItemsHeaderText}>ORDERED PRODUCTS</Text>

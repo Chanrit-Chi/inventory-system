@@ -27,11 +27,14 @@ export interface Payroll {
   overtime_pay: number
   unpaid_leave_days: number
   unpaid_leave_deduction: number
-  collective_benefit: number
-  other_benefits: number
+  collective_benefit?: number
+  other_benefits?: number
   incentive_override?: number | null
+  incentive_amount?: number
   sales_commission?: number
+  overtime_amount?: number
   thirteenth_month_accrual?: number
+  thirteenth_month_contribution?: number
   thirteenth_month_payout?: number
   gross_salary: number
   tax_deduction: number
@@ -48,6 +51,39 @@ export interface Payroll {
   total_deductions?: number
   total_net?: number
   employee_count?: number
+}
+
+export interface StaffThirteenthMonthReserve {
+  user_id: string
+  name: string
+  email: string
+  role: string
+  department: string
+  base_salary: number
+  monthly_accrual: number
+  months_accrued: number
+  total_accrued: number
+  total_disbursed: number
+  available_balance: number
+  payouts: Array<{
+    id: string
+    user_id: string
+    amount: number
+    payout_date: string
+    payment_method: string
+    notes?: string
+  }>
+}
+
+export interface CompanyThirteenthMonthReservesData {
+  year?: number | null
+  kpi: {
+    company_total_accrued: number
+    company_total_disbursed: number
+    company_total_available_balance: number
+    eligible_staff_count: number
+  }
+  staff: StaffThirteenthMonthReserve[]
 }
 
 // Alias for backwards compatibility
@@ -125,12 +161,20 @@ export const usePayrollStore = defineStore('payroll', () => {
   // Alias for compatibility
   const payrollRuns = computed(() => payrolls.value)
 
+  function getLastDayOfMonth(year: number, month: number): number {
+    return new Date(year, month, 0).getDate()
+  }
+
   function normalizePayroll(p: any): Payroll {
-    const periodMonth = p.period_month ?? (p.period_start ? new Date(p.period_start).getMonth() + 1 : new Date().getMonth() + 1)
-    const periodYear = p.period_year ?? (p.period_start ? new Date(p.period_start).getFullYear() : new Date().getFullYear())
+    const periodMonth = parseInt(String(p.period_month ?? (p.period_start ? new Date(p.period_start).getMonth() + 1 : new Date().getMonth() + 1)), 10)
+    const periodYear = parseInt(String(p.period_year ?? (p.period_start ? new Date(p.period_start).getFullYear() : new Date().getFullYear())), 10)
     const net = p.total_net_pay ?? p.total_net ?? 0
     const gross = p.gross_salary ?? p.total_gross ?? 0
     const deductions = (p.unpaid_leave_deduction ?? 0) + (p.tax_deduction ?? 0) || (p.total_deductions ?? 0)
+    const commission = p.incentive_amount ?? p.sales_commission ?? 0
+    const otPay = p.overtime_amount ?? p.overtime_pay ?? 0
+    const thirteenthAccrual = p.thirteenth_month_contribution ?? p.thirteenth_month_accrual ?? 0
+    const lastDay = getLastDayOfMonth(periodYear, periodMonth)
 
     return {
       ...p,
@@ -142,21 +186,24 @@ export const usePayrollStore = defineStore('payroll', () => {
       performance_benefit: parseFloat(String(p.performance_benefit ?? 0)) || 0,
       delivery_benefit: parseFloat(String(p.delivery_benefit ?? 0)) || 0,
       overtime_days: parseFloat(String(p.overtime_days ?? 0)) || 0,
-      overtime_pay: parseFloat(String(p.overtime_pay ?? 0)) || 0,
+      overtime_pay: parseFloat(String(otPay)) || 0,
+      overtime_amount: parseFloat(String(otPay)) || 0,
       unpaid_leave_days: parseFloat(String(p.unpaid_leave_days ?? 0)) || 0,
       unpaid_leave_deduction: parseFloat(String(p.unpaid_leave_deduction ?? 0)) || 0,
       collective_benefit: parseFloat(String(p.collective_benefit ?? 0)) || 0,
       other_benefits: parseFloat(String(p.other_benefits ?? 0)) || 0,
+      incentive_amount: parseFloat(String(commission)) || 0,
       incentive_override: p.incentive_override !== null && p.incentive_override !== undefined ? parseFloat(String(p.incentive_override)) : null,
-      sales_commission: parseFloat(String(p.sales_commission ?? 0)) || 0,
-      thirteenth_month_accrual: parseFloat(String(p.thirteenth_month_accrual ?? 0)) || 0,
+      sales_commission: parseFloat(String(commission)) || 0,
+      thirteenth_month_contribution: parseFloat(String(thirteenthAccrual)) || 0,
+      thirteenth_month_accrual: parseFloat(String(thirteenthAccrual)) || 0,
       thirteenth_month_payout: parseFloat(String(p.thirteenth_month_payout ?? 0)) || 0,
       gross_salary: parseFloat(String(gross)) || 0,
       tax_deduction: parseFloat(String(p.tax_deduction ?? 0)) || 0,
       total_net_pay: parseFloat(String(net)) || 0,
-      // Legacy aliases
+      // Dynamic period range
       period_start: p.period_start || `${periodYear}-${String(periodMonth).padStart(2, '0')}-01`,
-      period_end: p.period_end || `${periodYear}-${String(periodMonth).padStart(2, '0')}-28`,
+      period_end: p.period_end || `${periodYear}-${String(periodMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
       total_gross: parseFloat(String(gross)) || 0,
       total_deductions: parseFloat(String(deductions)) || 0,
       total_net: parseFloat(String(net)) || 0,
@@ -350,6 +397,42 @@ export const usePayrollStore = defineStore('payroll', () => {
     }
   }
 
+  const companyReserves = ref<CompanyThirteenthMonthReservesData | null>(null)
+  const loadingReserves = ref(false)
+
+  async function fetchCompanyReserves(year?: number | 'ALL', month?: number | 'ALL') {
+    loadingReserves.value = true
+    try {
+      const params = {
+        year: year && year !== 'ALL' ? year : undefined,
+        month: month && month !== 'ALL' ? month : undefined,
+      }
+      let res
+      try {
+        res = await api.get('/payrolls/13th-month-reserves', { params })
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status
+        if (status === 405 || status === 404) {
+          try {
+            res = await api.get('/payrolls/company-thirteenth-month-reserves', { params })
+          } catch {
+            res = await api.get('/payrolls/reserves', { params })
+          }
+        } else {
+          throw err
+        }
+      }
+      const data = res.data?.data ?? res.data
+      companyReserves.value = data
+      return data
+    } catch (e: unknown) {
+      console.warn('Could not fetch company 13th month reserves:', e)
+      return null
+    } finally {
+      loadingReserves.value = false
+    }
+  }
+
   const isLoading = computed(() => loading.value || mutating.value)
 
   return {
@@ -358,6 +441,8 @@ export const usePayrollStore = defineStore('payroll', () => {
     currentPayroll,
     userSalaries,
     thirteenthMonthSummaries,
+    companyReserves,
+    loadingReserves,
     meta,
     loading,
     mutating,
@@ -374,6 +459,7 @@ export const usePayrollStore = defineStore('payroll', () => {
     setUserSalary,
     fetchThirteenthMonthSavings,
     recordStandalonePayout,
+    fetchCompanyReserves,
   }
 })
 

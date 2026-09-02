@@ -234,19 +234,23 @@ Route::prefix('v1')->group(function () {
         //    (payroll:* satisfies both via wildcard permission resolution).
         // ============================================================
         Route::middleware('role:SUPER_ADMIN,ADMIN,MANAGER,payroll:view,users:view')->group(function () {
-            Route::get('/payrolls',                       [\App\Http\Controllers\Api\V1\PayrollController::class, 'index']);
-            Route::get('/users/{userId}/salary',          [\App\Http\Controllers\Api\V1\PayrollController::class, 'getSalary']);
-            Route::get('/users/{userId}/salary-history',  [\App\Http\Controllers\Api\V1\PayrollController::class, 'getSalaryHistory']);
-            Route::get('/users/{userId}/savings',         [\App\Http\Controllers\Api\V1\PayrollController::class, 'getThirteenthMonthSavings']);
-            Route::get('/users/{userId}/performance',     [\App\Http\Controllers\Api\V1\StaffPerformanceController::class, 'show']);
-            Route::get('/users/{userId}/incentives',      [\App\Http\Controllers\Api\V1\StaffIncentiveController::class, 'show']);
+            Route::get('/payrolls',                                   [\App\Http\Controllers\Api\V1\PayrollController::class, 'index']);
+            Route::get('/payrolls/13th-month-reserves',               [\App\Http\Controllers\Api\V1\PayrollController::class, 'getCompanyThirteenthMonthReserves']);
+            Route::get('/payrolls/company-thirteenth-month-reserves', [\App\Http\Controllers\Api\V1\PayrollController::class, 'getCompanyThirteenthMonthReserves']);
+            Route::get('/payrolls/reserves',                          [\App\Http\Controllers\Api\V1\PayrollController::class, 'getCompanyThirteenthMonthReserves']);
+            Route::get('/payrolls/{id}',                              [\App\Http\Controllers\Api\V1\PayrollController::class, 'show'])->whereUuid('id');
+            Route::get('/users/{userId}/salary',                      [\App\Http\Controllers\Api\V1\PayrollController::class, 'getSalary']);
+            Route::get('/users/{userId}/salary-history',              [\App\Http\Controllers\Api\V1\PayrollController::class, 'getSalaryHistory']);
+            Route::get('/users/{userId}/savings',                     [\App\Http\Controllers\Api\V1\PayrollController::class, 'getThirteenthMonthSavings']);
+            Route::get('/users/{userId}/performance',                 [\App\Http\Controllers\Api\V1\StaffPerformanceController::class, 'show']);
+            Route::get('/users/{userId}/incentives',                  [\App\Http\Controllers\Api\V1\StaffIncentiveController::class, 'show']);
         });
 
         Route::middleware('role:SUPER_ADMIN,ADMIN,MANAGER,payroll:manage')->group(function () {
             Route::post('/payrolls/generate',             [\App\Http\Controllers\Api\V1\PayrollController::class, 'generate']);
             Route::post('/payrolls/bulk-status',          [\App\Http\Controllers\Api\V1\PayrollController::class, 'bulkUpdateStatus']);
-            Route::match(['put', 'patch'], '/payrolls/{id}', [\App\Http\Controllers\Api\V1\PayrollController::class, 'update']);
-            Route::delete('/payrolls/{id}',              [\App\Http\Controllers\Api\V1\PayrollController::class, 'destroy']);
+            Route::match(['put', 'patch'], '/payrolls/{id}', [\App\Http\Controllers\Api\V1\PayrollController::class, 'update'])->whereUuid('id');
+            Route::delete('/payrolls/{id}',              [\App\Http\Controllers\Api\V1\PayrollController::class, 'destroy'])->whereUuid('id');
             Route::match(['post', 'put', 'patch'], '/users/{userId}/salary', [\App\Http\Controllers\Api\V1\PayrollController::class, 'setSalary']);
             Route::post('/users/{userId}/savings/payout',  [\App\Http\Controllers\Api\V1\PayrollController::class, 'recordStandalonePayout']);
         });

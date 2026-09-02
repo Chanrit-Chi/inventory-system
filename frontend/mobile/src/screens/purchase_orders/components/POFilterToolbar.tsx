@@ -60,7 +60,7 @@ export const POFilterToolbar: React.FC<POFilterToolbarProps> = ({
             <Text style={styles.catalogLinkText}>Products</Text>
           </TouchableOpacity>
 
-          {canCreatePO && (
+          {Boolean(canCreatePO) && (
             <TouchableOpacity
               style={styles.newPoBtn}
               onPress={onOpenNewPO}

@@ -1294,7 +1294,7 @@ defineExpose({
               <Badge
                 v-if="product.variants && product.variants.length > 1"
                 variant="neutral"
-                class="absolute top-2 left-2 z-10 text-xs font-bold shadow-xs backdrop-blur-md gap-1"
+                class="absolute top-2 left-2 z-20 text-xs font-bold shadow-xs backdrop-blur-md gap-1"
               >
                 <Layers class="w-3.5 h-3.5 text-primary stroke-[2.2]" />
                 <span class="font-mono font-bold text-primary">{{ product.variants.length }}</span>
@@ -1304,7 +1304,7 @@ defineExpose({
               <!-- Top Right: In-Cart Counter Pill (Cleanly inside thumbnail top-right) -->
               <div
                 v-if="getProductCartCount(product.id) > 0"
-                class="absolute top-2 right-2 z-10 px-2.5 py-0.5 rounded-full bg-cta text-cta-foreground font-black text-xs shadow-sm font-mono flex items-center gap-1 animate-in zoom-in-50"
+                class="absolute top-2 right-2 z-20 px-2.5 py-0.5 rounded-full bg-cta text-cta-foreground font-black text-xs shadow-sm font-mono flex items-center gap-1 animate-in zoom-in-50"
               >
                 <ShoppingBag :size="11" />
                 <span>{{ getProductCartCount(product.id) }}</span>
@@ -1313,7 +1313,7 @@ defineExpose({
               <!-- Bottom Left: High Contrast Stock Status Badge (Overlaid on thumbnail with backdrop-blur) -->
               <Badge
                 :variant="getProductStock(product) <= 0 ? 'destructive' : getProductStock(product) <= 5 ? 'warning' : 'success'"
-                class="absolute bottom-2 left-2 z-10 text-xs font-mono font-semibold shadow-xs backdrop-blur-md"
+                class="absolute bottom-2 left-2 z-20 text-xs font-mono font-semibold shadow-xs backdrop-blur-md"
               >
                 <span>{{ getProductStock(product) <= 0 ? 'Out of Stock' : `${getProductStock(product)} in stock` }}</span>
               </Badge>

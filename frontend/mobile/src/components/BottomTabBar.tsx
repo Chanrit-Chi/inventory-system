@@ -93,7 +93,7 @@ const AnimatedTabButton: React.FC<AnimatedTabButtonProps> = ({ tab, isActive, on
             size={19}
             color={isActive ? tokens.colors.onPrimary : tokens.colors.secondary}
           />
-          {tab.badgeCount !== undefined && tab.badgeCount > 0 && (
+          {tab.badgeCount !== undefined && tab.badgeCount > 0 ? (
             <View
               style={[
                 styles.badge,
@@ -109,7 +109,7 @@ const AnimatedTabButton: React.FC<AnimatedTabButtonProps> = ({ tab, isActive, on
                 {tab.badgeCount > 99 ? '99+' : tab.badgeCount}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         <Text

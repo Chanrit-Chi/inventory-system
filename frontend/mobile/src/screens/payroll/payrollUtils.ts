@@ -22,6 +22,21 @@ export const formatCurrency = (val: number | string | undefined | null) => {
 
 export const round2 = (n: number) => Math.round(n * 100) / 100
 
+export const getLastDayOfMonth = (year: number, month: number): number => {
+  return new Date(year, month, 0).getDate()
+}
+
+export const getPeriodDateRange = (year: number, month: number) => {
+  const y = Number(year) || new Date().getFullYear()
+  const m = Number(month) || new Date().getMonth() + 1
+  const lastDay = getLastDayOfMonth(y, m)
+  const mStr = String(m).padStart(2, '0')
+  const start = `${y}-${mStr}-01`
+  const end = `${y}-${mStr}-${String(lastDay).padStart(2, '0')}`
+  const monthName = MONTH_NAMES[m - 1] || `Month ${m}`
+  return { start, end, lastDay, label: `${monthName} ${y}`, formatted: `${start} → ${end}` }
+}
+
 export const getStatusColor = (status: string) => {
   if (status === 'PAID') return tokens.colors.statusSuccess
   if (status === 'FINALIZED') return tokens.colors.statusWarning
@@ -53,10 +68,19 @@ export interface PayrollSummaryInput {
 
 export function calculatePayrollSummary(input: PayrollSummaryInput) {
   const base = Number(input.editingPayroll?.base_salary || 0)
-  const incentive =
+  const rawIncentive =
     input.incentiveMode === 'MANUAL'
       ? parseFloat(input.manualIncentive) || 0
-      : Number(input.editingPayroll?.incentive_amount || 0)
+      : input.editingPayroll?.incentive_override !== null &&
+        input.editingPayroll?.incentive_override !== undefined &&
+        input.editingPayroll?.incentive_override !== ''
+      ? Number(input.editingPayroll.incentive_override)
+      : Number(
+          input.editingPayroll?.incentive_amount ??
+          (input.editingPayroll as any)?.sales_commission ??
+          0
+        )
+  const incentive = isNaN(rawIncentive) ? 0 : rawIncentive
   const thirteenth = round2(base / 12)
   const wd = Math.max(parseInt(input.workingDays, 10) || 26, 1)
   const dailyRate = base / wd

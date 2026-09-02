@@ -885,7 +885,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
           )}
 
           {/* Sticky Bottom Multiple Selection Confirmation Bar */}
-          {selectedCount > 0 && (
+          {Boolean(selectedCount > 0) && (
             <View style={styles.floatingActionBar}>
               <View style={styles.floatingSummaryCol}>
                 <Text style={styles.floatingItemsLabel}>

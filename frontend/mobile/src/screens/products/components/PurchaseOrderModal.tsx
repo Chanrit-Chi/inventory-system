@@ -105,7 +105,7 @@ export function PurchaseOrderModal({
                 <Text style={[styles.formLabel, { marginBottom: 0 }]}>
                   Order Line Items ({poItems.length})
                 </Text>
-                {poItems.length > 0 && (
+                {Boolean(poItems.length > 0) && (
                   <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
                     {poItems.reduce((sum, i) => sum + i.quantity, 0)} total units
                   </Text>
@@ -238,7 +238,7 @@ export function PurchaseOrderModal({
               </View>
 
               {/* PO Summary Card */}
-              {poItems.length > 0 && (
+              {Boolean(poItems.length > 0) && (
                 <View style={{ backgroundColor: tokens.colors.actionPrimaryBg, borderRadius: 10, padding: 12, marginBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View>
                     <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>Total PO Investment</Text>

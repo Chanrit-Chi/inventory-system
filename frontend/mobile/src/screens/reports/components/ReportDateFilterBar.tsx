@@ -38,7 +38,7 @@ export const ReportDateFilterBar: React.FC<ReportDateFilterBarProps> = ({
           <Text style={styles.title}>Reports & Analytics</Text>
           <Text style={styles.subtitle}>Financial performance & sales data</Text>
         </View>
-        {canExport && (
+        {Boolean(canExport) && (
           <TouchableOpacity
             style={styles.exportTopBtn}
             onPress={() => onExport('PDF')}

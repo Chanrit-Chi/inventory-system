@@ -41,7 +41,7 @@ export const RoleHeaderSummaryCard: React.FC<RoleHeaderSummaryCardProps> = ({
           </View>
           <Text style={styles.roleSummaryDesc}>{selectedRole.description}</Text>
         </View>
-        {isSuperAdminRole && (
+        {Boolean(isSuperAdminRole) && (
           <View style={styles.lockBadge}>
             <Ionicons name="lock-closed" size={16} color="#5B21B6" />
             <Text style={styles.lockBadgeText}>Root Lock</Text>

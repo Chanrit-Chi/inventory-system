@@ -432,7 +432,7 @@ export const PayrollDetailModal: React.FC<PayrollDetailModalProps> = ({
                 <View style={{ marginTop: 10 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={styles.modalLabel}>Disbursement Amount ($)</Text>
-                    {summary.availableReservePool > 0 && isEditable && (
+                    {Boolean(summary.availableReservePool > 0 && isEditable) && (
                       <TouchableOpacity
                         onPress={() => setThirteenthPayoutAmount(String(summary.availableReservePool))}
                       >

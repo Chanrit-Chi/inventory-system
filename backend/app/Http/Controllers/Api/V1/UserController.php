@@ -19,8 +19,24 @@ class UserController extends BaseApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $users = User::whereNull('deleted_at')
-            ->orderBy('name')
+        $query = User::whereNull('deleted_at');
+
+        if ($request->has('type')) {
+            $type = strtolower(trim($request->query('type')));
+            if ($type === 'operational') {
+                $query->where('is_test_account', false)
+                    ->where(function ($q) {
+                        $q->whereNull('role')
+                          ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
+                    });
+            } elseif ($type === 'test') {
+                $query->where('is_test_account', true);
+            }
+        } elseif ($request->has('is_test_account')) {
+            $query->where('is_test_account', filter_var($request->query('is_test_account'), FILTER_VALIDATE_BOOLEAN));
+        }
+
+        $users = $query->orderBy('name')
             ->get()
             ->map(fn (User $u) => $this->formatUser($u, true));
 
@@ -33,21 +49,17 @@ class UserController extends BaseApiController
      */
     public function staffList(Request $request): JsonResponse
     {
-        $users = User::whereNull('deleted_at')
-            ->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('role')
-                  ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
-            })
+        $users = User::operational()
             ->orderBy('name')
             ->get()
             ->map(fn (User $u) => [
-                'id'         => $u->id,
-                'name'       => $u->name,
-                'email'      => $u->email,
-                'role'       => $u->role,
-                'department' => $u->department,
-                'is_active'  => (bool) $u->is_active,
+                'id'              => $u->id,
+                'name'            => $u->name,
+                'email'           => $u->email,
+                'role'            => $u->role,
+                'department'      => $u->department,
+                'is_active'       => (bool) $u->is_active,
+                'is_test_account' => (bool) $u->is_test_account,
             ]);
 
         return $this->successResponse($users);
@@ -121,12 +133,18 @@ class UserController extends BaseApiController
      */
     public function store(Request $request): JsonResponse
     {
+        $validRoles = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER', 'CASHIER', 'SALES', 'STAFF', 'INVENTORY'];
+        try {
+            $dbRoles = \App\Models\Role::pluck('slug')->map(fn($s) => strtoupper($s))->toArray();
+            $validRoles = array_unique(array_merge($validRoles, $dbRoles));
+        } catch (\Throwable $e) {}
+
         if ($request->has('role') || $request->has('role_id')) {
             [$resolvedRole, $resolvedRoleId] = $this->normalizeRoleAndId(
                 $request->input('role'),
                 $request->input('role_id')
             );
-            if ($resolvedRole) {
+            if ($resolvedRole && in_array($resolvedRole, $validRoles, true)) {
                 $request->merge(['role' => $resolvedRole]);
             }
             if ($resolvedRoleId) {
@@ -140,11 +158,13 @@ class UserController extends BaseApiController
             'phone'            => ['nullable', 'string', 'max:30'],
             'hire_date'        => ['nullable', 'date'],
             'department'       => ['nullable', 'string', 'max:50'],
-            'role'             => ['required', 'string', 'max:50'],
+            'role'             => ['required', 'string', Rule::in($validRoles)],
             'role_id'          => ['nullable', 'string'],
             'password'         => ['nullable', 'string', 'min:8'],
             'permission_group' => ['nullable', 'string'],
             'notes'            => ['nullable', 'string'],
+            'is_test_account'  => ['nullable', 'boolean'],
+            'isTestAccount'    => ['nullable', 'boolean'],
             'base_salary'      => ['nullable', 'numeric', 'min:0'],
             'salary_reason'    => ['nullable', 'string', 'max:255'],
         ]);
@@ -153,6 +173,7 @@ class UserController extends BaseApiController
         $finalRole = $finalRole ?: 'SELLER';
 
         $plainPassword = !empty($data['password']) ? $data['password'] : Str::random(10);
+        $isTestAccount = filter_var($request->input('is_test_account', $request->input('isTestAccount', false)), FILTER_VALIDATE_BOOLEAN);
 
         $user = User::create([
             'name'                 => $data['name'],
@@ -164,6 +185,7 @@ class UserController extends BaseApiController
             'role_id'              => $finalRoleId,
             'password'             => Hash::make($plainPassword),
             'is_active'            => true,
+            'is_test_account'      => $isTestAccount,
             'must_change_password' => true,
             'permission_group'     => $data['permission_group'] ?? null,
             'notes'                => $data['notes'] ?? null,
@@ -202,12 +224,18 @@ class UserController extends BaseApiController
     {
         $user = User::findOrFail($id);
 
+        $validRoles = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER', 'CASHIER', 'SALES', 'STAFF', 'INVENTORY'];
+        try {
+            $dbRoles = \App\Models\Role::pluck('slug')->map(fn($s) => strtoupper($s))->toArray();
+            $validRoles = array_unique(array_merge($validRoles, $dbRoles));
+        } catch (\Throwable $e) {}
+
         if ($request->has('role') || $request->has('role_id')) {
             [$resolvedRole, $resolvedRoleId] = $this->normalizeRoleAndId(
                 $request->input('role'),
                 $request->input('role_id')
             );
-            if ($resolvedRole) {
+            if ($resolvedRole && in_array($resolvedRole, $validRoles, true)) {
                 $request->merge(['role' => $resolvedRole]);
             }
             if ($resolvedRoleId) {
@@ -221,13 +249,15 @@ class UserController extends BaseApiController
             'phone'            => ['sometimes', 'nullable', 'string', 'max:30'],
             'hire_date'        => ['sometimes', 'nullable', 'date'],
             'department'       => ['sometimes', 'nullable', 'string', 'max:50'],
-            'role'             => ['sometimes', 'string', 'max:50'],
+            'role'             => ['sometimes', 'string', Rule::in($validRoles)],
             'role_id'          => ['sometimes', 'nullable', 'string'],
             'isActive'         => ['sometimes', 'boolean'],
             'is_active'        => ['sometimes', 'boolean'],
             'password'         => ['sometimes', 'nullable', 'string', 'min:8'],
             'permission_group' => ['sometimes', 'nullable', 'string'],
             'notes'            => ['sometimes', 'nullable', 'string'],
+            'is_test_account'  => ['sometimes', 'boolean'],
+            'isTestAccount'    => ['sometimes', 'boolean'],
             'base_salary'      => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'salary_reason'    => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
@@ -256,6 +286,11 @@ class UserController extends BaseApiController
             $updateData['is_active'] = (bool) $request->input('is_active');
         } elseif ($request->has('isActive')) {
             $updateData['is_active'] = (bool) $request->input('isActive');
+        }
+        if ($request->has('is_test_account')) {
+            $updateData['is_test_account'] = (bool) $request->input('is_test_account');
+        } elseif ($request->has('isTestAccount')) {
+            $updateData['is_test_account'] = (bool) $request->input('isTestAccount');
         }
         if ($request->has('password') && !empty($data['password'])) {
             $updateData['password'] = Hash::make($data['password']);
@@ -352,6 +387,8 @@ class UserController extends BaseApiController
             'is_active'            => $isActive,
             'isActive'             => $isActive,
             'status'               => $isActive ? 'ACTIVE' : 'INACTIVE',
+            'is_test_account'      => (bool) ($user->is_test_account ?? false),
+            'isTestAccount'        => (bool) ($user->is_test_account ?? false),
             'must_change_password' => $mustChange,
             'mustChangePassword'   => $mustChange,
             'base_salary'          => $latestSalary ? (float) $latestSalary->base_salary : 0,

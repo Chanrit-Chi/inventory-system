@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
-import { usePayrollStore, type Payroll } from '@/stores/payrollStore'
+import { onMounted, ref, computed, watch } from 'vue'
+import { usePayrollStore, type Payroll, type StaffThirteenthMonthReserve } from '@/stores/payrollStore'
 import { useUserStore } from '@/stores/userStore'
 import { useToast } from '@/composables/useToast'
 import {
@@ -28,6 +28,7 @@ import {
   PlusCircle,
   Receipt,
   Banknote,
+  History,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -64,6 +65,14 @@ const MONTH_NAMES = [
 // Current date defaults
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth() + 1
+
+// Sub-Tab Navigation
+const activeMainTab = ref<'MONTHLY' | 'RESERVES'>('MONTHLY')
+const reservesSearch = ref('')
+const reservesYear = ref<number | 'ALL'>(currentYear)
+const reservesMonth = ref<number | 'ALL'>('ALL')
+const historyStaff = ref<StaffThirteenthMonthReserve | null>(null)
+const showHistoryModal = ref(false)
 
 // Modals
 const showGenerateModal = ref(false)
@@ -127,11 +136,24 @@ const isSavingStandalone = ref(false)
 const payslipPayroll = ref<Payroll | null>(null)
 const payslipFormat = ref<'THERMAL' | 'A4'>('A4')
 
-// Available years
+// Available years (dynamically computed from current date, history, and reserves)
 const availableYears = computed(() => {
-  const years = new Set<number>([currentYear, currentYear - 1, currentYear + 1])
+  const curr = new Date().getFullYear()
+  const years = new Set<number>([curr + 1, curr, curr - 1, curr - 2, curr - 3])
   for (const p of store.payrolls) {
-    if (p.period_year) years.add(p.period_year)
+    if (p.period_year) years.add(Number(p.period_year))
+  }
+  const staff = store.companyReserves?.staff || []
+  for (const s of staff) {
+    for (const b of (s.monthly_breakdown || [])) {
+      if (b.year) years.add(Number(b.year))
+    }
+    for (const p of (s.payouts || [])) {
+      if (p.payout_date) {
+        const y = new Date(p.payout_date).getFullYear()
+        if (!isNaN(y)) years.add(y)
+      }
+    }
   }
   return Array.from(years).sort((a, b) => b - a)
 })
@@ -170,10 +192,10 @@ const totalNetDisbursed = computed(() =>
   filteredPayrolls.value.reduce((sum, p) => sum + (parseFloat(String(p.total_net_pay || p.total_net || 0)) || 0), 0)
 )
 const totalCommissions = computed(() =>
-  filteredPayrolls.value.reduce((sum, p) => sum + (parseFloat(String(p.sales_commission || p.incentive_override || 0)) || 0), 0)
+  filteredPayrolls.value.reduce((sum, p) => sum + (parseFloat(String(p.incentive_override ?? p.sales_commission ?? p.incentive_amount ?? 0)) || 0), 0)
 )
 const totalThirteenthAccrual = computed(() =>
-  filteredPayrolls.value.reduce((sum, p) => sum + (parseFloat(String(p.thirteenth_month_accrual || 0)) || 0), 0)
+  filteredPayrolls.value.reduce((sum, p) => sum + (parseFloat(String(p.thirteenth_month_contribution ?? p.thirteenth_month_accrual ?? 0)) || 0), 0)
 )
 
 // Active staff members
@@ -183,13 +205,25 @@ const activeStaffUsers = computed(() => {
     const isActive = (u as any).is_active === true
       || String(u.status).toUpperCase() === 'ACTIVE'
       || (!u.status && !(u as any).is_active === false)
-    // Exclude super_admin from payroll
+    // Exclude super_admin and test accounts from payroll
     const role = String(u.role || '').toUpperCase().replace(/[-\s]/g, '_')
     const notAdmin = role !== 'SUPER_ADMIN' && role !== 'SUPERADMIN'
-    return isActive && notAdmin
+    const notTest = !(u as any).is_test_account && !(u as any).isTestAccount
+    return isActive && notAdmin && notTest
   })
 })
 
+// Period Date Calculation (accurately calculates last day of each month)
+function getPeriodRange(year: number | string, month: number | string) {
+  const y = Number(year) || currentYear
+  const m = Number(month) || currentMonth
+  const lastDay = new Date(y, m, 0).getDate()
+  const mStr = String(m).padStart(2, '0')
+  const start = `${y}-${mStr}-01`
+  const end = `${y}-${mStr}-${String(lastDay).padStart(2, '0')}`
+  const monthName = MONTH_NAMES[m - 1] || `Month ${m}`
+  return { start, end, lastDay, label: `${monthName} ${y}`, formatted: `${start} → ${end}` }
+}
 
 // Map of staff who already have payroll generated for the modal month/year
 const existingPayrollStaffMap = computed(() => {
@@ -257,7 +291,9 @@ const liveCalculations = computed(() => {
   if (incentiveMode.value === 'MANUAL') {
     commission = manualIncentive.value || 0
   } else {
-    commission = editingPayroll.value.sales_commission || 0
+    commission = editingPayroll.value.incentive_override !== null && editingPayroll.value.incentive_override !== undefined
+      ? (editingPayroll.value.incentive_override || 0)
+      : (editingPayroll.value.sales_commission ?? editingPayroll.value.incentive_amount ?? 0)
   }
 
   const thirteenthPayout = includeThirteenthPayout.value ? (thirteenthPayoutAmount.value || 0) : 0
@@ -326,6 +362,22 @@ async function loadData() {
 }
 
 // Multi Selection Handlers
+const selectedPayrolls = computed(() => {
+  return (filteredPayrolls.value || []).filter(p => selectedIds.value.has(p.id))
+})
+
+const selectedDraftCount = computed(() => {
+  return selectedPayrolls.value.filter(p => p.status === 'DRAFT').length
+})
+
+const selectedFinalizedCount = computed(() => {
+  return selectedPayrolls.value.filter(p => p.status === 'FINALIZED').length
+})
+
+const selectedPaidCount = computed(() => {
+  return selectedPayrolls.value.filter(p => p.status === 'PAID').length
+})
+
 function toggleSelectAll() {
   if (selectedIds.value.size === filteredPayrolls.value.length) {
     selectedIds.value.clear()
@@ -343,15 +395,34 @@ function toggleSelectRow(id: string) {
 }
 
 // Bulk Actions
-async function handleBulkStatus(status: 'FINALIZED' | 'PAID') {
-  const ids = Array.from(selectedIds.value)
-  if (!ids.length) {
-    toast.info('Please select at least one payroll row')
-    return
+async function handleBulkStatus(targetStatus: 'FINALIZED' | 'PAID' | 'DRAFT') {
+  let eligibleIds: string[] = []
+  if (targetStatus === 'FINALIZED') {
+    // Only DRAFT rows can be finalized
+    eligibleIds = selectedPayrolls.value.filter(p => p.status === 'DRAFT').map(p => p.id)
+    if (!eligibleIds.length) {
+      toast.info('No draft payrolls selected to finalize.')
+      return
+    }
+  } else if (targetStatus === 'PAID') {
+    // Only FINALIZED rows can be marked paid
+    eligibleIds = selectedPayrolls.value.filter(p => p.status === 'FINALIZED').map(p => p.id)
+    if (!eligibleIds.length) {
+      toast.info('No finalized payrolls selected to mark as paid.')
+      return
+    }
+  } else if (targetStatus === 'DRAFT') {
+    // Only FINALIZED rows can be reopened to draft
+    eligibleIds = selectedPayrolls.value.filter(p => p.status === 'FINALIZED').map(p => p.id)
+    if (!eligibleIds.length) {
+      toast.info('No finalized payrolls selected to reopen.')
+      return
+    }
   }
+
   try {
-    await store.bulkUpdateStatus(ids, status)
-    toast.success(`Updated ${ids.length} payroll(s) to ${status}`)
+    await store.bulkUpdateStatus(eligibleIds, targetStatus)
+    toast.success(`Updated ${eligibleIds.length} payroll(s) to ${targetStatus}`)
     selectedIds.value.clear()
     await loadData()
   } catch (err) {
@@ -376,7 +447,7 @@ async function openDetail(p: Payroll) {
     manualIncentive.value = p.incentive_override
   } else {
     incentiveMode.value = 'AUTO'
-    manualIncentive.value = p.sales_commission || 0
+    manualIncentive.value = p.sales_commission || p.incentive_amount || 0
   }
 
   includeThirteenthPayout.value = (p.thirteenth_month_payout || 0) > 0
@@ -394,23 +465,34 @@ async function openDetail(p: Payroll) {
 // Save Detail
 async function handleSaveDetail(targetStatus: 'DRAFT' | 'FINALIZED' | 'PAID') {
   if (!editingPayroll.value) return
+  if (editingPayroll.value.status === 'PAID') {
+    toast.error('Paid payrolls are settled and cannot be modified or reopened.')
+    return
+  }
+
   isSavingDetail.value = true
   try {
-    const payload = {
-      working_days: workingDays.value,
-      performance_benefit: perfBenefit.value,
-      delivery_benefit: delivBenefit.value,
-      overtime_days: otDays.value,
-      unpaid_leave_days: unpaidDays.value,
-      collective_benefit: collecBenefit.value,
-      other_benefits: otherBenefit.value,
-      incentive_override: incentiveMode.value === 'MANUAL' ? manualIncentive.value : null,
-      thirteenth_month_payout: includeThirteenthPayout.value ? thirteenthPayoutAmount.value : 0,
-      status: targetStatus,
+    if (editingPayroll.value.status === 'FINALIZED') {
+      // Finalized payrolls only permit status transitions (e.g. reopen as DRAFT or mark as PAID)
+      await store.updatePayroll(editingPayroll.value.id, { status: targetStatus })
+      toast.success(`Payroll ${targetStatus === 'DRAFT' ? 'reopened as Draft' : 'marked as Paid'}`)
+    } else {
+      // Draft payrolls can update all calculation inputs and status
+      const payload = {
+        working_days: workingDays.value,
+        performance_benefit: perfBenefit.value,
+        delivery_benefit: delivBenefit.value,
+        overtime_days: otDays.value,
+        unpaid_leave_days: unpaidDays.value,
+        collective_benefit: collecBenefit.value,
+        other_benefits: otherBenefit.value,
+        incentive_override: incentiveMode.value === 'MANUAL' ? manualIncentive.value : null,
+        thirteenth_month_payout: includeThirteenthPayout.value ? thirteenthPayoutAmount.value : 0,
+        status: targetStatus,
+      }
+      await store.updatePayroll(editingPayroll.value.id, payload)
+      toast.success(`Payroll saved as ${targetStatus}`)
     }
-
-    await store.updatePayroll(editingPayroll.value.id, payload)
-    toast.success(`Payroll saved as ${targetStatus}`)
     showDetailModal.value = false
     await loadData()
   } catch (err) {
@@ -423,6 +505,10 @@ async function handleSaveDetail(targetStatus: 'DRAFT' | 'FINALIZED' | 'PAID') {
 
 // Quick Transition Button in Table
 async function quickTransition(p: Payroll, targetStatus: 'FINALIZED' | 'PAID' | 'DRAFT') {
+  if (p.status === 'PAID') {
+    toast.error('Paid payroll is settled and locked. It cannot be reopened.')
+    return
+  }
   try {
     await store.updatePayroll(p.id, { status: targetStatus })
     toast.success(`Payroll for ${getStaffName(p)} updated to ${targetStatus}`)
@@ -533,6 +619,29 @@ async function saveSalaryForUser(userId: string) {
   }
 }
 
+// 13th-Month Reserves Tab Handlers
+async function switchTabToReserves() {
+  activeMainTab.value = 'RESERVES'
+  await store.fetchCompanyReserves(reservesYear.value, reservesMonth.value)
+}
+
+function openStaffHistory(staff: StaffThirteenthMonthReserve) {
+  historyStaff.value = staff
+  showHistoryModal.value = true
+}
+
+const filteredCompanyStaffReserves = computed(() => {
+  const list = store.companyReserves?.staff || []
+  const q = reservesSearch.value.toLowerCase().trim()
+  if (!q) return list
+  return list.filter(s =>
+    (s.name || '').toLowerCase().includes(q) ||
+    (s.department || '').toLowerCase().includes(q) ||
+    (s.role || '').toLowerCase().includes(q) ||
+    (s.email || '').toLowerCase().includes(q)
+  )
+})
+
 // Open 13th-Month Reserve Modal
 function openThirteenthModal() {
   for (const u of activeStaffUsers.value) {
@@ -541,9 +650,15 @@ function openThirteenthModal() {
   showThirteenthModal.value = true
 }
 
-function openStandalonePayout(userId: string) {
+function openStandalonePayout(userId: string, customAmount?: number) {
   standaloneUserId.value = userId
-  standaloneAmount.value = store.thirteenthMonthSummaries[userId]?.available_balance || 0
+  if (customAmount !== undefined) {
+    standaloneAmount.value = customAmount
+  } else {
+    const summary = store.thirteenthMonthSummaries[userId]
+    const reserveStaff = store.companyReserves?.staff?.find(s => s.user_id === userId)
+    standaloneAmount.value = summary?.available_balance ?? reserveStaff?.available_balance ?? 0
+  }
   showStandaloneModal.value = true
 }
 
@@ -557,11 +672,15 @@ async function handleSaveStandalone() {
     await store.recordStandalonePayout(standaloneUserId.value, {
       amount: standaloneAmount.value,
       notes: standaloneNotes.value,
-      fiscal_year: filterYear.value !== 'ALL' ? Number(filterYear.value) : currentYear,
+      fiscal_year: reservesYear.value !== 'ALL' ? Number(reservesYear.value) : currentYear,
     })
     toast.success('Standalone bonus payout recorded')
     showStandaloneModal.value = false
-    await store.fetchThirteenthMonthSavings(standaloneUserId.value)
+    await Promise.allSettled([
+      store.fetchThirteenthMonthSavings(standaloneUserId.value),
+      store.fetchCompanyReserves(reservesYear.value, reservesMonth.value),
+      loadData(),
+    ])
   } catch (err) {
     const e = err as { message?: string }
     toast.error(e.message || 'Failed to record payout')
@@ -580,7 +699,14 @@ function triggerPrint() {
   window.print()
 }
 
-onMounted(loadData)
+watch([reservesYear, reservesMonth], ([newYear, newMonth]) => {
+  store.fetchCompanyReserves(newYear, newMonth)
+})
+
+onMounted(async () => {
+  await loadData()
+  store.fetchCompanyReserves(reservesYear.value, reservesMonth.value)
+})
 </script>
 
 <template>
@@ -615,83 +741,516 @@ onMounted(loadData)
       </div>
     </div>
 
-    <!-- Stat Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatCard
-        label="Total Payrolls"
-        :value="totalRuns"
-        sub="Current period cycles"
-        :icon="Calendar"
-        icon-variant="primary"
-      />
-      <StatCard
-        label="Net Payouts"
-        :value="formatMoney(totalNetDisbursed)"
-        sub="Net staff compensation"
-        :icon="DollarSign"
-        icon-variant="success"
-      />
-      <StatCard
-        label="Sales Commissions"
-        :value="formatMoney(totalCommissions)"
-        sub="POS sales incentives"
-        :icon="Sparkles"
-        icon-variant="warning"
-      />
-      <StatCard
-        label="13th-Month Accrual"
-        :value="formatMoney(totalThirteenthAccrual)"
-        sub="5% seniority reserve"
-        :icon="Gift"
-        icon-variant="primary"
-      />
+    <!-- Sub-Tab Segment Switcher -->
+    <div class="flex items-center gap-2 border-b border-border pb-2">
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all"
+        :class="activeMainTab === 'MONTHLY' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+        @click="activeMainTab = 'MONTHLY'"
+      >
+        <Calendar :size="16" />
+        <span>Monthly Payroll</span>
+      </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all"
+        :class="activeMainTab === 'RESERVES' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+        @click="switchTabToReserves"
+      >
+        <Gift :size="16" />
+        <span>13th-Month & Seniority Reserves</span>
+        <Badge v-if="store.companyReserves?.staff?.length" variant="secondary" class="ml-1 text-[10px] px-1.5 py-0">
+          {{ store.companyReserves.staff.length }}
+        </Badge>
+      </button>
     </div>
 
-    <!-- Filter & Selection Toolbar -->
-    <div class="rounded-xl border border-border bg-card p-4 shadow-xs flex flex-col gap-3">
-      <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        <!-- Month, Year & Status Pickers -->
+    <!-- VIEW 1: MONTHLY PAYROLL -->
+    <template v-if="activeMainTab === 'MONTHLY'">
+      <!-- Stat Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Payrolls"
+          :value="totalRuns"
+          sub="Current period cycles"
+          :icon="Calendar"
+          icon-variant="primary"
+        />
+        <StatCard
+          label="Net Payouts"
+          :value="formatMoney(totalNetDisbursed)"
+          sub="Net staff compensation"
+          :icon="DollarSign"
+          icon-variant="success"
+        />
+        <StatCard
+          label="Sales Commissions"
+          :value="formatMoney(totalCommissions)"
+          sub="POS sales incentives"
+          :icon="Sparkles"
+          icon-variant="warning"
+        />
+        <StatCard
+          label="13th-Month Accrual"
+          :value="formatMoney(totalThirteenthAccrual)"
+          sub="5% seniority reserve"
+          :icon="Gift"
+          icon-variant="primary"
+        />
+      </div>
+
+      <!-- Filter & Selection Toolbar -->
+      <div class="rounded-xl border border-border bg-card p-4 shadow-xs flex flex-col gap-3">
+        <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          <!-- Month, Year & Status Pickers -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-semibold text-muted-foreground mr-1">Period:</span>
+              <SelectField
+                v-model="filterMonth"
+                :options="filterMonthOptions"
+                placeholder="All Months"
+                class="h-8 w-32 bg-surface text-xs font-medium"
+                @change="loadData"
+              />
+
+              <SelectField
+                v-model="filterYear"
+                :options="filterYearOptions"
+                placeholder="All Years"
+                class="h-8 w-28 bg-surface text-xs font-medium font-mono"
+                @change="loadData"
+              />
+            </div>
+
+            <div class="h-4 w-[1px] bg-border mx-1 hidden sm:block"></div>
+
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-semibold text-muted-foreground mr-1">Status:</span>
+              <SelectField
+                v-model="filterStatus"
+                :options="filterStatusOptions"
+                placeholder="All Statuses"
+                class="h-8 w-32 bg-surface text-xs font-medium"
+                @change="loadData"
+              />
+            </div>
+          </div>
+
+          <!-- Search & Refresh -->
+          <div class="flex items-center gap-2">
+            <div class="min-w-[200px] sm:min-w-[240px]">
+              <Input
+                v-model="search"
+                type="text"
+                placeholder="Search staff name or role…"
+                class="h-8 text-xs bg-surface"
+              >
+                <template #prefix>
+                  <Search :size="13" />
+                </template>
+              </Input>
+            </div>
+
+            <Button variant="outline" size="sm" class="h-8 px-2.5 text-xs gap-1" :disabled="store.loading" @click="loadData">
+              <RefreshCw :size="13" :class="{ 'animate-spin': store.loading }" />
+              <span>Refresh</span>
+            </Button>
+          </div>
+        </div>
+
+        <!-- Bulk Action Bar when rows are selected -->
+        <div v-if="selectedIds.size > 0" class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border bg-primary/5 -mx-4 -mb-4 p-3 rounded-b-xl">
+          <div class="flex items-center gap-2 flex-wrap">
+            <Badge variant="primary" class="font-mono text-xs font-bold">{{ selectedIds.size }} Selected</Badge>
+            <div class="flex items-center gap-1.5 text-xs">
+              <span v-if="selectedDraftCount > 0" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[11px]">
+                {{ selectedDraftCount }} Draft
+              </span>
+              <span v-if="selectedFinalizedCount > 0" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-info-bg text-info-text border border-info-border font-mono text-[11px]">
+                {{ selectedFinalizedCount }} Finalized
+              </span>
+              <span v-if="selectedPaidCount > 0" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-success-bg text-success-text border border-success-border font-mono text-[11px]">
+                {{ selectedPaidCount }} Paid (Locked)
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Finalize Drafts Button -->
+            <Button
+              v-if="selectedDraftCount > 0"
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs text-primary border-primary/30 hover:bg-primary/10 gap-1 font-medium"
+              @click="handleBulkStatus('FINALIZED')"
+            >
+              <Check :size="12" />
+              <span>Finalize {{ selectedDraftCount }} Draft{{ selectedDraftCount > 1 ? 's' : '' }}</span>
+            </Button>
+
+            <!-- Reopen Finalized as Draft Button -->
+            <Button
+              v-if="selectedFinalizedCount > 0"
+              variant="outline"
+              size="sm"
+              class="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1 font-medium"
+              @click="handleBulkStatus('DRAFT')"
+            >
+              <RotateCcw :size="12" />
+              <span>Reopen {{ selectedFinalizedCount }} Finalized</span>
+            </Button>
+
+            <!-- Mark Paid Button -->
+            <Button
+              v-if="selectedFinalizedCount > 0"
+              variant="primary"
+              size="sm"
+              class="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-xs font-semibold"
+              @click="handleBulkStatus('PAID')"
+            >
+              <CheckCircle2 :size="12" />
+              <span>Mark {{ selectedFinalizedCount }} Paid</span>
+            </Button>
+
+            <!-- When all selected are PAID -->
+            <span v-if="selectedDraftCount === 0 && selectedFinalizedCount === 0 && selectedPaidCount > 0" class="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+              All selected records are already settled & locked
+            </span>
+
+            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground" @click="selectedIds.clear()">
+              Clear Selection
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payroll Records Table Container -->
+      <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+        <div v-if="store.loading && !filteredPayrolls.length" class="p-6 space-y-3">
+          <Skeleton v-for="i in 4" :key="i" class="h-12 w-full" />
+        </div>
+
+        <EmptyState
+          v-else-if="!filteredPayrolls.length"
+          :icon="Users"
+          title="No payroll records found"
+          description="No staff payroll entries found for the selected period or filter criteria."
+        >
+          <template #action>
+            <Button variant="primary" size="sm" class="gap-1.5 mt-2" @click="showGenerateModal = true">
+              <Plus :size="15" />
+              <span>Generate Payroll</span>
+            </Button>
+          </template>
+        </EmptyState>
+
+        <div v-else class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="bg-muted/40">
+                <TableHead class="w-10 text-center">
+                  <input
+                    type="checkbox"
+                    class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                    :checked="selectedIds.size > 0 && selectedIds.size === filteredPayrolls.length"
+                    @change="toggleSelectAll"
+                  />
+                </TableHead>
+                <TableHead>Staff Member</TableHead>
+                <TableHead>Period</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead class="font-mono">Base Salary</TableHead>
+                <TableHead class="font-mono">Commission / OT</TableHead>
+                <TableHead class="font-mono">Deductions</TableHead>
+                <TableHead class="font-mono text-right">Net Payout</TableHead>
+                <TableHead class="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="p in filteredPayrolls"
+                :key="p.id"
+                :class="[
+                  'hover:bg-surface-subtle/80 transition-colors',
+                  selectedIds.has(p.id) && 'bg-primary/5'
+                ]"
+              >
+                <!-- Checkbox -->
+                <TableCell class="text-center">
+                  <input
+                    type="checkbox"
+                    class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                    :checked="selectedIds.has(p.id)"
+                    @change="toggleSelectRow(p.id)"
+                  />
+                </TableCell>
+
+                <!-- Staff Info -->
+                <TableCell>
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                      {{ getStaffName(p).slice(0, 2).toUpperCase() }}
+                    </div>
+                    <div>
+                      <div class="font-semibold text-xs text-foreground">{{ getStaffName(p) }}</div>
+                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
+                        <span>{{ getStaffRole(p) }}</span>
+                        <span>•</span>
+                        <span>{{ getStaffDept(p) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </TableCell>
+
+                <!-- Period -->
+                <TableCell class="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  <span class="font-medium text-foreground">
+                    {{ MONTH_NAMES[(p.period_month || 1) - 1] }} {{ p.period_year }}
+                  </span>
+                </TableCell>
+
+                <!-- Status -->
+                <TableCell>
+                  <Badge :variant="statusBadge(p.status).variant" class="text-3xs font-semibold">
+                    {{ statusBadge(p.status).label }}
+                  </Badge>
+                </TableCell>
+
+                <!-- Base Salary -->
+                <TableCell class="font-mono text-xs font-medium text-foreground">
+                  {{ formatMoney(p.base_salary) }}
+                </TableCell>
+
+                <!-- Commission / OT -->
+                <TableCell class="font-mono text-xs">
+                  <div class="flex flex-col gap-0.5">
+                    <span v-if="p.incentive_override ?? p.sales_commission ?? p.incentive_amount" class="text-amber-600 dark:text-amber-400 font-medium">
+                      +{{ formatMoney(p.incentive_override ?? p.sales_commission ?? p.incentive_amount) }} comm
+                    </span>
+                    <span v-if="p.overtime_amount ?? p.overtime_pay" class="text-indigo-600 dark:text-indigo-400">
+                      +{{ formatMoney(p.overtime_amount ?? p.overtime_pay) }} OT
+                    </span>
+                    <span v-if="!(p.incentive_override ?? p.sales_commission ?? p.incentive_amount) && !(p.overtime_amount ?? p.overtime_pay)" class="text-muted-foreground">
+                      —
+                    </span>
+                  </div>
+                </TableCell>
+
+                <!-- Deductions -->
+                <TableCell class="font-mono text-xs">
+                  <div class="flex flex-col gap-0.5">
+                    <span v-if="p.unpaid_leave_deduction" class="text-rose-600 dark:text-rose-400">
+                      -{{ formatMoney(p.unpaid_leave_deduction) }} leave
+                    </span>
+                    <span v-if="p.tax_deduction" class="text-rose-600 dark:text-rose-400">
+                      -{{ formatMoney(p.tax_deduction) }} tax
+                    </span>
+                    <span v-if="!p.unpaid_leave_deduction && !p.tax_deduction" class="text-muted-foreground">
+                      $0.00
+                    </span>
+                  </div>
+                </TableCell>
+
+                <!-- Net Payout -->
+                <TableCell class="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 text-right">
+                  {{ formatMoney(p.total_net_pay || p.total_net) }}
+                </TableCell>
+
+                <!-- Row Actions -->
+                <TableCell class="text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <!-- DRAFT Row Actions: Finalize + Edit + Slip + Delete -->
+                    <template v-if="p.status === 'DRAFT'">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 px-2.5 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/10 font-medium"
+                        title="Finalize Payroll"
+                        @click="quickTransition(p, 'FINALIZED')"
+                      >
+                        <Check :size="12" />
+                        <span>Finalize</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        title="View / Edit Calculation"
+                        @click="openDetail(p)"
+                      >
+                        <Edit3 :size="12" />
+                        <span>Edit</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        title="Print Payslip"
+                        @click="openPayslip(p)"
+                      >
+                        <Printer :size="12" />
+                        <span>Slip</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                        title="Delete Draft"
+                        @click="confirmDelete(p.id)"
+                      >
+                        <Trash2 :size="13" />
+                      </Button>
+                    </template>
+
+                    <!-- FINALIZED Row Actions: Reopen + Pay + View + Slip -->
+                    <template v-else-if="p.status === 'FINALIZED'">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground font-medium"
+                        title="Reopen as Draft"
+                        @click="quickTransition(p, 'DRAFT')"
+                      >
+                        <RotateCcw :size="12" />
+                        <span>Reopen</span>
+                      </Button>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        class="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-xs font-semibold"
+                        title="Mark as Paid"
+                        @click="quickTransition(p, 'PAID')"
+                      >
+                        <CheckCircle2 :size="12" />
+                        <span>Pay</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        title="View Calculation"
+                        @click="openDetail(p)"
+                      >
+                        <Edit3 :size="12" />
+                        <span>View</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        title="Print Payslip"
+                        @click="openPayslip(p)"
+                      >
+                        <Printer :size="12" />
+                        <span>Slip</span>
+                      </Button>
+                    </template>
+
+                    <!-- PAID Row Actions: View + Payslip (No reopen, clean & easy to read) -->
+                    <template v-else-if="p.status === 'PAID'">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 px-2.5 text-xs gap-1 text-foreground border-border hover:bg-muted font-medium"
+                        title="View Details"
+                        @click="openDetail(p)"
+                      >
+                        <Edit3 :size="12" />
+                        <span>View</span>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 px-2.5 text-xs gap-1 text-primary border-primary/20 hover:bg-primary/10 font-medium"
+                        title="Print Payslip"
+                        @click="openPayslip(p)"
+                      >
+                        <Printer :size="12" />
+                        <span>Payslip</span>
+                      </Button>
+                    </template>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </template>
+
+    <!-- VIEW 2: 13TH-MONTH RESERVES DASHBOARD & TABLE -->
+    <template v-else-if="activeMainTab === 'RESERVES'">
+      <!-- 13th-Month KPI Stat Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Available Reserves"
+          :value="formatMoney(store.companyReserves?.kpi?.company_total_available_balance)"
+          sub="Company reserve liability pool"
+          :icon="Gift"
+          icon-variant="primary"
+        />
+        <StatCard
+          label="Total Accrued YTD"
+          :value="formatMoney(store.companyReserves?.kpi?.company_total_accrued)"
+          sub="Total accumulated from monthly payroll"
+          :icon="TrendingUp"
+          icon-variant="success"
+        />
+        <StatCard
+          label="Total Disbursed"
+          :value="formatMoney(store.companyReserves?.kpi?.company_total_disbursed)"
+          sub="Bonuses and payouts paid out"
+          :icon="DollarSign"
+          icon-variant="warning"
+        />
+        <StatCard
+          label="Active Personnel"
+          :value="store.companyReserves?.kpi?.eligible_staff_count || 0"
+          sub="Eligible operational staff"
+          :icon="Users"
+          icon-variant="primary"
+        />
+      </div>
+
+      <!-- 13th-Month Filter & Search Toolbar -->
+      <div class="rounded-xl border border-border bg-card p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div class="flex items-center gap-2 flex-wrap">
           <div class="flex items-center gap-1.5">
             <span class="text-xs font-semibold text-muted-foreground mr-1">Period:</span>
             <SelectField
-              v-model="filterMonth"
+              v-model="reservesMonth"
               :options="filterMonthOptions"
               placeholder="All Months"
               class="h-8 w-32 bg-surface text-xs font-medium"
-              @change="loadData"
+              @change="store.fetchCompanyReserves(reservesYear, reservesMonth)"
             />
 
             <SelectField
-              v-model="filterYear"
+              v-model="reservesYear"
               :options="filterYearOptions"
               placeholder="All Years"
               class="h-8 w-28 bg-surface text-xs font-medium font-mono"
-              @change="loadData"
-            />
-          </div>
-
-          <div class="h-4 w-[1px] bg-border mx-1 hidden sm:block"></div>
-
-          <div class="flex items-center gap-1.5">
-            <span class="text-xs font-semibold text-muted-foreground mr-1">Status:</span>
-            <SelectField
-              v-model="filterStatus"
-              :options="filterStatusOptions"
-              placeholder="All Statuses"
-              class="h-8 w-32 bg-surface text-xs font-medium"
-              @change="loadData"
+              @change="store.fetchCompanyReserves(reservesYear, reservesMonth)"
             />
           </div>
         </div>
 
-        <!-- Search & Refresh -->
         <div class="flex items-center gap-2">
-          <div class="min-w-[200px] sm:min-w-[240px]">
+          <div class="min-w-[220px] sm:min-w-[280px]">
             <Input
-              v-model="search"
+              v-model="reservesSearch"
               type="text"
-              placeholder="Search staff name or role…"
+              placeholder="Search staff name or department…"
               class="h-8 text-xs bg-surface"
             >
               <template #prefix>
@@ -700,211 +1259,159 @@ onMounted(loadData)
             </Input>
           </div>
 
-          <Button variant="outline" size="sm" class="h-8 px-2.5 text-xs gap-1" :disabled="store.loading" @click="loadData">
-            <RefreshCw :size="13" :class="{ 'animate-spin': store.loading }" />
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs gap-1"
+            :disabled="store.loadingReserves"
+            @click="store.fetchCompanyReserves(reservesYear, reservesMonth)"
+          >
+            <RefreshCw :size="13" :class="{ 'animate-spin': store.loadingReserves }" />
             <span>Refresh</span>
           </Button>
         </div>
       </div>
 
-      <!-- Bulk Action Bar when rows are selected -->
-      <div v-if="selectedIds.size > 0" class="flex items-center justify-between pt-2 border-t border-border bg-primary/5 -mx-4 -mb-4 p-3 rounded-b-xl">
-        <div class="flex items-center gap-2">
-          <Badge variant="primary" class="font-mono text-xs">{{ selectedIds.size }} Selected</Badge>
-          <span class="text-xs text-muted-foreground">Perform batch status operations on selected staff:</span>
+      <!-- 13th-Month Reserves Table -->
+      <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
+        <div v-if="store.loadingReserves && !filteredCompanyStaffReserves.length" class="p-6 space-y-3">
+          <Skeleton v-for="i in 4" :key="i" class="h-12 w-full" />
         </div>
-        <div class="flex items-center gap-2">
-          <Button variant="outline" size="sm" class="h-7 px-2.5 text-xs" @click="handleBulkStatus('FINALIZED')">
-            Finalize Selected
-          </Button>
-          <Button variant="primary" size="sm" class="h-7 px-2.5 text-xs gap-1" @click="handleBulkStatus('PAID')">
-            <CheckCircle2 :size="12" />
-            <span>Mark Paid</span>
-          </Button>
-          <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground" @click="selectedIds.clear()">
-            Clear
-          </Button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Payroll Records Table Container -->
-    <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-      <div v-if="store.loading && !filteredPayrolls.length" class="p-6 space-y-3">
-        <Skeleton v-for="i in 4" :key="i" class="h-12 w-full" />
-      </div>
+        <EmptyState
+          v-else-if="!filteredCompanyStaffReserves.length"
+          :icon="Gift"
+          title="No 13th-Month reserve records found"
+          description="No active operational personnel matching your search criteria."
+        />
 
-      <EmptyState
-        v-else-if="!filteredPayrolls.length"
-        :icon="Users"
-        title="No payroll records found"
-        description="No staff payroll entries found for the selected period or filter criteria."
-      >
-        <template #action>
-          <Button variant="primary" size="sm" class="gap-1.5 mt-2" @click="showGenerateModal = true">
-            <Plus :size="15" />
-            <span>Generate Payroll</span>
-          </Button>
-        </template>
-      </EmptyState>
-
-      <div v-else class="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow class="bg-muted/40">
-              <TableHead class="w-10 text-center">
-                <input
-                  type="checkbox"
-                  class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
-                  :checked="selectedIds.size > 0 && selectedIds.size === filteredPayrolls.length"
-                  @change="toggleSelectAll"
-                />
-              </TableHead>
-              <TableHead>Staff Member</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="font-mono">Base Salary</TableHead>
-              <TableHead class="font-mono">Commission / OT</TableHead>
-              <TableHead class="font-mono">Deductions</TableHead>
-              <TableHead class="font-mono text-right">Net Payout</TableHead>
-              <TableHead class="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="p in filteredPayrolls"
-              :key="p.id"
-              :class="[
-                'hover:bg-surface-subtle/80 transition-colors',
-                selectedIds.has(p.id) && 'bg-primary/5'
-              ]"
-            >
-              <!-- Checkbox -->
-              <TableCell class="text-center">
-                <input
-                  type="checkbox"
-                  class="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
-                  :checked="selectedIds.has(p.id)"
-                  @change="toggleSelectRow(p.id)"
-                />
-              </TableCell>
-
-              <!-- Staff Info -->
-              <TableCell>
-                <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
-                    {{ getStaffName(p).slice(0, 2).toUpperCase() }}
-                  </div>
-                  <div>
-                    <div class="font-semibold text-xs text-foreground">{{ getStaffName(p) }}</div>
-                    <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
-                      <span>{{ getStaffRole(p) }}</span>
-                      <span>•</span>
-                      <span>{{ getStaffDept(p) }}</span>
+        <div v-else class="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow class="bg-muted/40">
+                <TableHead>Staff Member</TableHead>
+                <TableHead class="font-mono">Base Salary & Rate</TableHead>
+                <TableHead>Accrual Progress & 12-Mo Schedule</TableHead>
+                <TableHead class="font-mono">Accrued YTD</TableHead>
+                <TableHead class="font-mono">Disbursed</TableHead>
+                <TableHead class="font-mono text-right">Available Reserve</TableHead>
+                <TableHead class="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="s in filteredCompanyStaffReserves"
+                :key="s.user_id"
+                class="hover:bg-surface-subtle/80 transition-colors"
+              >
+                <!-- Staff Info -->
+                <TableCell>
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                      {{ (s.name || 'S').slice(0, 2).toUpperCase() }}
+                    </div>
+                    <div>
+                      <div class="font-semibold text-xs text-foreground">{{ s.name }}</div>
+                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
+                        <span class="font-medium text-primary">{{ s.role }}</span>
+                        <span>•</span>
+                        <span>{{ s.department || 'General' }}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </TableCell>
+                </TableCell>
 
-              <!-- Period -->
-              <TableCell class="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                {{ p.period_start ? p.period_start : `${MONTH_NAMES[p.period_month - 1]} ${p.period_year}` }}
-                <span v-if="p.period_end" class="text-3xs text-muted-foreground/70 block">→ {{ p.period_end }}</span>
-              </TableCell>
+                <!-- Base Salary & Accrual Rate -->
+                <TableCell class="font-mono text-xs">
+                  <div class="font-medium text-foreground">{{ formatMoney(s.base_salary) }}</div>
+                  <div class="text-3xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                    +{{ formatMoney(s.monthly_accrual) }}/mo
+                  </div>
+                </TableCell>
 
-              <!-- Status Badge -->
-              <TableCell>
-                <Badge :variant="statusBadge(p.status).variant" class="text-[10px] px-2 py-0.5 font-bold">
-                  {{ statusBadge(p.status).label }}
-                </Badge>
-              </TableCell>
+                <!-- Accrual Progress & 12-Month Schedule -->
+                <TableCell class="w-64">
+                  <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between text-3xs font-semibold text-muted-foreground">
+                      <span>{{ s.months_accrued }} / 12 months</span>
+                      <span>{{ Math.min(100, Math.round((s.months_accrued / 12) * 100)) }}%</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :class="s.months_accrued >= 12 ? 'bg-emerald-500' : 'bg-primary'"
+                        :style="{ width: `${Math.min(100, Math.max(5, (s.months_accrued / 12) * 100))}%` }"
+                      ></div>
+                    </div>
+                    <!-- 12-Month Indicator Matrix -->
+                    <div class="flex items-center gap-0.5 pt-0.5">
+                      <span
+                        v-for="mIdx in 12"
+                        :key="mIdx"
+                        class="text-[9px] px-1 py-0.2 rounded font-mono font-bold"
+                        :class="s.accrued_months?.includes(mIdx)
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-muted text-muted-foreground/40'"
+                        :title="s.accrued_months?.includes(mIdx) ? `Month ${mIdx} Accrued` : `Month ${mIdx} Pending`"
+                      >
+                        {{ ['J','F','M','A','M','J','J','A','S','O','N','D'][mIdx - 1] }}
+                      </span>
+                    </div>
+                  </div>
+                </TableCell>
 
-              <!-- Base Salary -->
-              <TableCell class="font-mono text-xs tabular-nums text-foreground">
-                {{ formatMoney(p.base_salary) }}
-              </TableCell>
+                <!-- Accrued YTD -->
+                <TableCell class="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  +{{ formatMoney(s.total_accrued) }}
+                </TableCell>
 
-              <!-- Commission & OT -->
-              <TableCell class="font-mono text-xs tabular-nums text-muted-foreground">
-                <div class="flex items-center gap-1">
-                  <Sparkles v-if="(p.sales_commission || 0) > 0" :size="11" class="text-amber-500" />
-                  <span>{{ formatMoney((p.sales_commission || p.incentive_override || 0) + (p.overtime_pay || 0)) }}</span>
-                </div>
-              </TableCell>
+                <!-- Disbursed -->
+                <TableCell class="font-mono text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <span v-if="s.total_disbursed > 0">-{{ formatMoney(s.total_disbursed) }}</span>
+                  <span v-else class="text-muted-foreground font-normal">$0.00</span>
+                </TableCell>
 
-              <!-- Deductions -->
-              <TableCell class="font-mono text-xs tabular-nums text-destructive">
-                <span v-if="(p.unpaid_leave_deduction || 0) + (p.tax_deduction || 0) > 0">
-                  - {{ formatMoney((p.unpaid_leave_deduction || 0) + (p.tax_deduction || 0)) }}
-                </span>
-                <span v-else class="text-muted-foreground">$0.00</span>
-              </TableCell>
-
-              <!-- Net Payout -->
-              <TableCell class="font-mono text-sm font-bold text-primary text-right tabular-nums">
-                {{ formatMoney(p.total_net_pay || p.total_net) }}
-              </TableCell>
-
-              <!-- Actions -->
-              <TableCell class="text-right">
-                <div class="flex items-center justify-end gap-1">
-                  <!-- Quick status change buttons -->
-                  <Button
-                    v-if="p.status === 'DRAFT'"
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 px-2 text-xs text-primary hover:bg-primary/10"
-                    title="Finalize Payroll"
-                    @click="quickTransition(p, 'FINALIZED')"
+                <!-- Available Reserve Balance -->
+                <TableCell class="font-mono text-xs font-bold text-right">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs"
+                    :class="s.available_balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-muted text-muted-foreground'"
                   >
-                    <Check :size="13" />
-                  </Button>
-                  <Button
-                    v-else-if="p.status === 'FINALIZED'"
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 px-2 text-xs text-emerald-600 hover:bg-emerald-500/10"
-                    title="Mark as Paid"
-                    @click="quickTransition(p, 'PAID')"
-                  >
-                    <CheckCircle2 :size="13" />
-                  </Button>
-                  <Button
-                    v-else-if="p.status === 'PAID'"
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
-                    title="Reopen Draft"
-                    @click="quickTransition(p, 'DRAFT')"
-                  >
-                    <RotateCcw :size="12" />
-                  </Button>
+                    {{ formatMoney(s.available_balance) }}
+                  </span>
+                </TableCell>
 
-                  <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" title="View / Edit Calculation" @click="openDetail(p)">
-                    <Edit3 :size="13" />
-                  </Button>
+                <!-- Actions -->
+                <TableCell class="text-right">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      class="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                      :disabled="s.available_balance <= 0"
+                      @click="openStandalonePayout(s.user_id, s.available_balance)"
+                    >
+                      <DollarSign :size="12" />
+                      <span>Disburse Payout</span>
+                    </Button>
 
-                  <Button variant="ghost" size="sm" class="h-7 px-2 text-xs" title="Print Payslip" @click="openPayslip(p)">
-                    <Printer :size="13" />
-                  </Button>
-
-                  <Button
-                    v-if="p.status === 'DRAFT'"
-                    variant="ghost"
-                    size="sm"
-                    class="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
-                    title="Delete Draft"
-                    @click="confirmDelete(p.id)"
-                  >
-                    <Trash2 :size="13" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground font-medium"
+                      @click="openStaffHistory(s)"
+                    >
+                      <History :size="12" />
+                      <span>History ({{ s.payouts?.length || 0 }})</span>
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- ========================================================================= -->
     <!-- MODAL 1: GENERATE PAYROLL                                                 -->
@@ -939,6 +1446,12 @@ onMounted(loadData)
                 class="w-full h-9 bg-surface text-xs font-mono"
               />
             </div>
+          </div>
+
+          <!-- Target Period Range Banner -->
+          <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-subtle border border-border text-xs text-muted-foreground">
+            <Calendar :size="13" class="text-primary shrink-0" />
+            <span>Target Period: <strong class="font-mono text-foreground">{{ getPeriodRange(generateYear, generateMonth).start }} → {{ getPeriodRange(generateYear, generateMonth).end }}</strong> ({{ getPeriodRange(generateYear, generateMonth).lastDay }} days)</span>
           </div>
 
           <!-- Mode Selector Tabs -->
@@ -1066,7 +1579,7 @@ onMounted(loadData)
                 </Badge>
               </DialogTitle>
               <DialogDescription>
-                {{ editingPayroll ? `${MONTH_NAMES[editingPayroll.period_month - 1]} ${editingPayroll.period_year}` : '' }} • {{ editingPayroll ? getStaffRole(editingPayroll) : '' }}
+                {{ editingPayroll ? `${getPeriodRange(editingPayroll.period_year, editingPayroll.period_month).formatted} (${MONTH_NAMES[editingPayroll.period_month - 1]} ${editingPayroll.period_year})` : '' }} • {{ editingPayroll ? getStaffRole(editingPayroll) : '' }}
               </DialogDescription>
             </div>
           </div>
@@ -1214,7 +1727,7 @@ onMounted(loadData)
             <div v-if="incentiveMode === 'AUTO'" class="rounded-lg border border-border bg-surface-subtle p-3 space-y-1.5">
               <div class="flex items-center justify-between">
                 <span class="text-xs text-muted-foreground">Auto Calculated Commission:</span>
-                <span class="font-bold text-emerald-600 font-mono">+{{ formatMoney(editingPayroll.sales_commission || 0) }}</span>
+                <span class="font-bold text-emerald-600 font-mono">+{{ formatMoney(editingPayroll.sales_commission ?? editingPayroll.incentive_amount ?? 0) }}</span>
               </div>
               <p class="text-[10px] text-muted-foreground leading-relaxed">
                 Tier-based on completed orders: $1–30: $0.25 • $30–50: $0.50 • $50–60: $0.75 • $60–80: $1.00 • &gt;$80: $2.00
@@ -1706,7 +2219,7 @@ onMounted(loadData)
           <div class="text-center border-b border-slate-200 pb-3">
             <h2 class="font-bold text-base tracking-tight uppercase">Salary Payslip</h2>
             <div class="text-xs text-slate-500 font-medium">
-              Period: {{ MONTH_NAMES[payslipPayroll.period_month - 1] }} {{ payslipPayroll.period_year }}
+              Period: {{ getPeriodRange(payslipPayroll.period_year, payslipPayroll.period_month).formatted }} ({{ MONTH_NAMES[payslipPayroll.period_month - 1] }} {{ payslipPayroll.period_year }})
             </div>
           </div>
 
@@ -1726,20 +2239,36 @@ onMounted(loadData)
           <div class="space-y-1 text-xs">
             <div class="font-bold text-[11px] text-slate-700 uppercase tracking-wider">Earnings</div>
             <div class="flex justify-between py-0.5">
-              <span class="text-slate-600">Base Salary:</span>
-              <span class="font-mono font-semibold">{{ formatMoney(payslipPayroll.base_salary) }}</span>
+              <span class="text-slate-600">Base Salary ({{ payslipPayroll.working_days || 26 }} working days):</span>
+              <span class="font-mono font-semibold text-slate-900">{{ formatMoney(payslipPayroll.base_salary) }}</span>
             </div>
-            <div v-if="(payslipPayroll.overtime_pay || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Overtime Pay ({{ payslipPayroll.overtime_days }}d):</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.overtime_pay) }}</span>
+            <div v-if="(payslipPayroll.overtime_pay || payslipPayroll.overtime_amount || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Overtime Pay ({{ payslipPayroll.overtime_days || 0 }} days):</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.overtime_pay || payslipPayroll.overtime_amount) }}</span>
             </div>
-            <div v-if="(payslipPayroll.sales_commission || payslipPayroll.incentive_override || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Sales Commission:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.sales_commission || payslipPayroll.incentive_override) }}</span>
+            <div v-if="(payslipPayroll.incentive_override ?? payslipPayroll.sales_commission ?? payslipPayroll.incentive_amount ?? 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Sales Commission / Incentive:</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.incentive_override ?? payslipPayroll.sales_commission ?? payslipPayroll.incentive_amount) }}</span>
             </div>
-            <div v-if="(payslipPayroll.performance_benefit || 0) + (payslipPayroll.delivery_benefit || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Benefits & Allowances:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney((payslipPayroll.performance_benefit || 0) + (payslipPayroll.delivery_benefit || 0)) }}</span>
+            <div v-if="(payslipPayroll.performance_benefit || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Performance Benefit:</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.performance_benefit) }}</span>
+            </div>
+            <div v-if="(payslipPayroll.delivery_benefit || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Delivery Benefit:</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.delivery_benefit) }}</span>
+            </div>
+            <div v-if="(payslipPayroll.collective_benefit || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Collective Benefit:</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.collective_benefit) }}</span>
+            </div>
+            <div v-if="(payslipPayroll.other_benefits || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Other Benefits:</span>
+              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.other_benefits) }}</span>
+            </div>
+            <div v-if="(payslipPayroll.thirteenth_month_payout || 0) > 0" class="flex justify-between py-1 bg-emerald-50 px-2 rounded border border-emerald-200">
+              <span class="text-emerald-800 font-semibold">🎁 13th Month / Seniority Payout:</span>
+              <span class="font-mono font-bold text-emerald-700">+ {{ formatMoney(payslipPayroll.thirteenth_month_payout) }}</span>
             </div>
           </div>
 
@@ -1747,9 +2276,19 @@ onMounted(loadData)
           <div v-if="(payslipPayroll.unpaid_leave_deduction || 0) + (payslipPayroll.tax_deduction || 0) > 0" class="space-y-1 text-xs border-t border-slate-200 pt-2">
             <div class="font-bold text-[11px] text-slate-700 uppercase tracking-wider">Deductions</div>
             <div v-if="(payslipPayroll.unpaid_leave_deduction || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Unpaid Leave ({{ payslipPayroll.unpaid_leave_days }}d):</span>
+              <span class="text-slate-600">Unpaid Leave ({{ payslipPayroll.unpaid_leave_days || 0 }} days):</span>
               <span class="font-mono font-semibold text-rose-600">- {{ formatMoney(payslipPayroll.unpaid_leave_deduction) }}</span>
             </div>
+            <div v-if="(payslipPayroll.tax_deduction || 0) > 0" class="flex justify-between py-0.5">
+              <span class="text-slate-600">Tax Deduction:</span>
+              <span class="font-mono font-semibold text-rose-600">- {{ formatMoney(payslipPayroll.tax_deduction) }}</span>
+            </div>
+          </div>
+
+          <!-- Monthly Accrual Info -->
+          <div class="flex justify-between items-center py-1 border-t border-slate-100 text-[10px] text-slate-500 italic">
+            <span>Monthly Seniority Accrual into Reserve Fund:</span>
+            <span class="font-mono font-medium text-slate-600">+{{ formatMoney(payslipPayroll.thirteenth_month_contribution || payslipPayroll.thirteenth_month_accrual || Math.round((payslipPayroll.base_salary / 12) * 100) / 100) }}/mo</span>
           </div>
 
           <!-- Total Net -->
@@ -1797,6 +2336,76 @@ onMounted(loadData)
           <Button variant="destructive" :disabled="isDeleting" @click="executeDelete">
             <span v-if="isDeleting" class="animate-spin mr-1.5">⏳</span>
             <span>{{ isDeleting ? 'Deleting…' : 'Delete Payroll' }}</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 13th-Month Staff Payout History Dialog -->
+    <Dialog :open="showHistoryModal" @update:open="(val) => showHistoryModal = val">
+      <DialogContent class="sm:max-w-md max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle class="font-display flex items-center gap-2">
+            <History :size="18" class="text-primary" />
+            <span>13th-Month Payout History</span>
+          </DialogTitle>
+          <DialogDescription v-if="historyStaff">
+            Past disbursements for <span class="font-semibold text-foreground">{{ historyStaff.name }}</span> ({{ historyStaff.role }} • {{ historyStaff.department || 'General' }})
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="historyStaff" class="py-2 flex-1 overflow-y-auto space-y-3">
+          <!-- Summary Badge Box -->
+          <div class="grid grid-cols-3 gap-2 bg-muted/40 p-3 rounded-lg border border-border text-center">
+            <div>
+              <span class="text-3xs text-muted-foreground block">Total Accrued</span>
+              <span class="text-xs font-bold text-emerald-600 font-mono">+{{ formatMoney(historyStaff.total_accrued) }}</span>
+            </div>
+            <div>
+              <span class="text-3xs text-muted-foreground block">Disbursed</span>
+              <span class="text-xs font-bold text-amber-600 font-mono">-{{ formatMoney(historyStaff.total_disbursed) }}</span>
+            </div>
+            <div>
+              <span class="text-3xs text-muted-foreground block">Available</span>
+              <span class="text-xs font-bold text-primary font-mono">{{ formatMoney(historyStaff.available_balance) }}</span>
+            </div>
+          </div>
+
+          <!-- History List -->
+          <div v-if="historyStaff.payouts && historyStaff.payouts.length > 0" class="divide-y divide-border border border-border rounded-lg bg-surface overflow-hidden">
+            <div
+              v-for="payout in historyStaff.payouts"
+              :key="payout.id"
+              class="p-3 flex items-center justify-between gap-3 text-xs"
+            >
+              <div>
+                <div class="font-semibold text-foreground flex items-center gap-2">
+                  <span>{{ payout.payout_date ? new Date(payout.payout_date).toLocaleDateString() : 'N/A' }}</span>
+                  <Badge variant="outline" class="text-[10px] px-1.5 py-0">{{ payout.payment_method || 'Cash' }}</Badge>
+                </div>
+                <div class="text-muted-foreground text-3xs mt-0.5">{{ payout.notes || '13th Month / Seniority Payout' }}</div>
+              </div>
+              <div class="font-mono font-bold text-amber-600 text-sm text-right">
+                -{{ formatMoney(payout.amount) }}
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="text-center py-6 text-muted-foreground text-xs italic">
+            No past payout disbursements recorded for this employee yet.
+          </div>
+        </div>
+
+        <DialogFooter class="mt-2">
+          <Button variant="outline" @click="showHistoryModal = false">Close</Button>
+          <Button
+            v-if="historyStaff && historyStaff.available_balance > 0"
+            variant="primary"
+            class="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+            @click="() => { const uid = historyStaff?.user_id; const bal = historyStaff?.available_balance; showHistoryModal = false; if (uid) openStandalonePayout(uid, bal); }"
+          >
+            <DollarSign :size="14" />
+            <span>Disburse Payout</span>
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -27,6 +27,7 @@ class User extends Authenticatable
         'hire_date',
         'department',
         'is_active',
+        'is_test_account',
         'permission_group',
         'notes',
         'must_change_password',
@@ -43,9 +44,27 @@ class User extends Authenticatable
             'email_verified_at'    => 'datetime',
             'password'             => 'hashed',
             'is_active'            => 'boolean',
+            'is_test_account'      => 'boolean',
             'must_change_password' => 'boolean',
             'hire_date'            => 'date',
         ];
+    }
+
+    /**
+     * Scope query to real operational staff (non-super-admin, active, not test accounts).
+     */
+    public function scopeOperational($query)
+    {
+        return $query->whereNull('deleted_at')
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('is_test_account')
+                  ->orWhere('is_test_account', false);
+            })
+            ->where(function ($q) {
+                $q->whereNull('role')
+                  ->orWhereRaw("UPPER(TRIM(role)) NOT IN ('SUPER_ADMIN', 'SUPERADMIN')");
+            });
     }
 
     /**

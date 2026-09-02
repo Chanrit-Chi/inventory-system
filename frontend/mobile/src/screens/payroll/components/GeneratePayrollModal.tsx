@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
 import type { Payroll, UserAccount } from '../../../types'
 import { styles } from '../PayrollScreen.styles'
-import { MONTH_NAMES } from '../payrollUtils'
+import { MONTH_NAMES, getPeriodDateRange } from '../payrollUtils'
 
 export interface GeneratePayrollModalProps {
   visible: boolean
@@ -126,7 +126,7 @@ export const GeneratePayrollModal: React.FC<GeneratePayrollModalProps> = ({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 8 }}>
               <Ionicons name="calendar-outline" size={13} color={tokens.colors.secondary} />
               <Text style={{ fontSize: 11.5, color: tokens.colors.secondary, fontWeight: '600' }}>
-                Target Period: <Text style={{ color: tokens.colors.primaryContainer, fontWeight: '800' }}>{MONTH_NAMES[selectedMonth - 1] || `Month ${selectedMonth}`} {selectedYear}</Text>
+                Target Period: <Text style={{ color: tokens.colors.primaryContainer, fontWeight: '800' }}>{getPeriodDateRange(selectedYear, selectedMonth).formatted}</Text> ({getPeriodDateRange(selectedYear, selectedMonth).lastDay} days)
               </Text>
             </View>
 

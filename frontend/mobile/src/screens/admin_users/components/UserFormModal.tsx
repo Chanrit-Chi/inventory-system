@@ -162,16 +162,66 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               />
             </View>
 
+            <View style={[styles.switchRow, { marginTop: 8 }]}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.switchLabel}>🧪 Test / Demo Account</Text>
+                <Text style={{ fontSize: 11, color: tokens.colors.secondary, marginTop: 2 }}>
+                  Used for role QA testing. Excluded from live payroll, shift settlements, and business metrics.
+                </Text>
+              </View>
+              <Switch
+                value={Boolean(useWatch({ control, name: 'is_test_account' }))}
+                onValueChange={(val) => setValue('is_test_account', val, { shouldDirty: true })}
+                trackColor={{ false: tokens.colors.surfaceMuted, true: '#F59E0B' }}
+                thumbColor={useWatch({ control, name: 'is_test_account' }) ? '#B45309' : '#FFFFFF'}
+              />
+            </View>
+
             {/* SECTION 2: EMPLOYMENT & STORE ASSIGNMENT */}
             <View style={[styles.formSectionHeader, { marginTop: 14 }]}>
               <Ionicons name="business-outline" size={16} color={tokens.colors.primaryContainer} />
               <Text style={styles.formSectionTitle}>2. EMPLOYMENT & STORE ASSIGNMENT</Text>
             </View>
 
+            <Text style={styles.formLabel}>Department / Branch Preset</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {[
+                'Main Counter',
+                'Sales Floor',
+                'Warehouse / Stock',
+                'Delivery / Dispatch',
+                'Management Office',
+              ].map((preset) => {
+                const currentDept = useWatch({ control, name: 'department' })
+                const isSelected = currentDept === preset
+                return (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[
+                      styles.rolePickBtn,
+                      { paddingVertical: 5, paddingHorizontal: 10 },
+                      isSelected && styles.rolePickBtnActive,
+                    ]}
+                    onPress={() => setValue('department', preset, { shouldValidate: true, shouldDirty: true })}
+                  >
+                    <Text
+                      style={[
+                        styles.rolePickText,
+                        { fontSize: 11 },
+                        isSelected && styles.rolePickTextActive,
+                      ]}
+                    >
+                      {preset}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+
             <ControlledInput
               name="department"
               control={control}
-              label="Department / Branch"
+              label="Or Custom Department / Branch Name"
               placeholder="e.g. Main Counter / Warehouse"
             />
 

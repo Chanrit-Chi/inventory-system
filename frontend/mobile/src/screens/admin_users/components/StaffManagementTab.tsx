@@ -44,6 +44,34 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
   onToggleActive,
   onDeleteUser,
 }) => {
+  const [staffFilter, setStaffFilter] = React.useState<'ALL' | 'OPERATIONAL' | 'TEST'>('ALL')
+
+  const operationalCount = React.useMemo(() => {
+    return users.filter((u) => {
+      const isSuper = u.role === 'SUPER_ADMIN' || (u.role as string) === 'SUPERADMIN'
+      const isTest = u.is_test_account === true || u.isTestAccount === true
+      return !isSuper && !isTest
+    }).length
+  }, [users])
+
+  const testCount = React.useMemo(() => {
+    return users.filter((u) => u.is_test_account === true || u.isTestAccount === true).length
+  }, [users])
+
+  const displayedUsers = React.useMemo(() => {
+    if (staffFilter === 'OPERATIONAL') {
+      return users.filter((u) => {
+        const isSuper = u.role === 'SUPER_ADMIN' || (u.role as string) === 'SUPERADMIN'
+        const isTest = u.is_test_account === true || u.isTestAccount === true
+        return !isSuper && !isTest
+      })
+    }
+    if (staffFilter === 'TEST') {
+      return users.filter((u) => u.is_test_account === true || u.isTestAccount === true)
+    }
+    return users
+  }, [users, staffFilter])
+
   if (usersLoading && users.length === 0) {
     return (
       <View style={styles.centerLoading}>
@@ -55,9 +83,48 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
 
   return (
     <View>
-      {users.map((u) => {
+      {/* Account Type Filter Chips */}
+      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+        <TouchableOpacity
+          style={[styles.rolePickBtn, { flex: 1, paddingVertical: 6 }, staffFilter === 'ALL' && styles.rolePickBtnActive]}
+          onPress={() => setStaffFilter('ALL')}
+        >
+          <Text style={[styles.rolePickText, staffFilter === 'ALL' && styles.rolePickTextActive]}>
+            All ({users.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.rolePickBtn, { flex: 1.2, paddingVertical: 6 }, staffFilter === 'OPERATIONAL' && styles.rolePickBtnActive]}
+          onPress={() => setStaffFilter('OPERATIONAL')}
+        >
+          <Text style={[styles.rolePickText, staffFilter === 'OPERATIONAL' && styles.rolePickTextActive]}>
+            👥 Staff ({operationalCount})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.rolePickBtn, { flex: 1.2, paddingVertical: 6 }, staffFilter === 'TEST' && styles.rolePickBtnActive]}
+          onPress={() => setStaffFilter('TEST')}
+        >
+          <Text style={[styles.rolePickText, staffFilter === 'TEST' && styles.rolePickTextActive]}>
+            🧪 Test ({testCount})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {displayedUsers.length === 0 && (
+        <View style={{ padding: 24, alignItems: 'center' }}>
+          <Ionicons name="people-outline" size={32} color={tokens.colors.outline} />
+          <Text style={{ marginTop: 8, fontSize: 13, color: tokens.colors.secondary }}>
+            No accounts in this category.
+          </Text>
+        </View>
+      )}
+
+      {displayedUsers.map((u) => {
         const badge = getRoleBadge(u.role)
         const initial = u.name ? u.name.charAt(0).toUpperCase() : '?'
+        const isTest = u.is_test_account === true || u.isTestAccount === true
+        const isSuper = u.role === 'SUPER_ADMIN' || (u.role as string) === 'SUPERADMIN'
 
         return (
           <TouchableOpacity
@@ -91,6 +158,16 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
                     <Ionicons name="business-outline" size={11} color={tokens.colors.secondary} />
                     <Text style={styles.deptBadgeText} numberOfLines={1}>{u.department || 'Main Counter'}</Text>
                   </View>
+                  {Boolean(isTest) && (
+                    <View style={[styles.deptBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A', borderWidth: 1 }]}>
+                      <Text style={{ fontSize: 10, color: '#B45309', fontWeight: '700' }}>🧪 Test</Text>
+                    </View>
+                  )}
+                  {Boolean(isSuper) && (
+                    <View style={[styles.deptBadge, { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE', borderWidth: 1 }]}>
+                      <Text style={{ fontSize: 10, color: '#5B21B6', fontWeight: '700' }}>⚙️ Root</Text>
+                    </View>
+                  )}
                   <View
                     style={[
                       styles.statusDotPill,

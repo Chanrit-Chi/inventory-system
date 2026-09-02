@@ -149,7 +149,7 @@ export const SellerPickerModal: React.FC<SellerPickerModalProps> = ({
                       <Text style={styles.userNameText} numberOfLines={1}>
                         {item.name}
                       </Text>
-                      {isMe && (
+                      {Boolean(isMe) && (
                         <View style={styles.meBadge}>
                           <Text style={styles.meBadgeText}>Me</Text>
                         </View>

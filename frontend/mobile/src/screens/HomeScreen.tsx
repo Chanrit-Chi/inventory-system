@@ -130,19 +130,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, [summary?.net_revenue, dailyTarget])
 
   // Module items with permission gating
-  const allModules: ModuleItem[] = [
-    { tab: 'quotations', title: 'Quotations', sub: 'Estimates & Quotes', icon: 'document-text', color: '#0284C7', bg: '#E0F2FE' },
-    { tab: 'invoices', title: 'Invoices', sub: 'Payments & Due', icon: 'receipt', color: '#15803D', bg: '#E6F4EA' },
-    { tab: 'products', title: 'Products', sub: 'Catalog & POs', icon: 'cube', color: '#B45309', bg: '#FEF3C7' },
-    { tab: 'suppliers', title: 'Suppliers', sub: 'Vendors & Restock', icon: 'briefcase', color: '#65A30D', bg: '#ECFCCB' },
-    { tab: 'categories', title: 'Categories', sub: 'Attributes & Tax', icon: 'pricetags', color: '#EA580C', bg: '#FFEDD5' },
-    { tab: 'customers', title: 'Customers', sub: 'CRM & Profiles', icon: 'people', color: '#5B21B6', bg: '#EDE9FE' },
-    { tab: 'expenses', title: 'Expenses', sub: 'Costs & Utilities', icon: 'cash', color: '#93000A', bg: '#FFDAD6' },
-    { tab: 'reports', title: 'Reports', sub: 'Financial KPIs', icon: 'bar-chart', color: '#0D9488', bg: '#CCFBF1' },
-    { tab: 'admin', title: 'Admin', sub: 'Staff & Matrix', icon: 'shield-checkmark', color: '#4F46E5', bg: '#EEF2FF' },
-  ]
+  const allModules: ModuleItem[] = useMemo(
+    () => [
+      { tab: 'quotations', title: 'Quotations', sub: 'Estimates & Quotes', icon: 'document-text', color: '#0284C7', bg: '#E0F2FE' },
+      { tab: 'invoices', title: 'Invoices', sub: 'Payments & Due', icon: 'receipt', color: '#15803D', bg: '#E6F4EA' },
+      { tab: 'products', title: 'Products', sub: 'Catalog & POs', icon: 'cube', color: '#B45309', bg: '#FEF3C7' },
+      { tab: 'suppliers', title: 'Suppliers', sub: 'Vendors & Restock', icon: 'briefcase', color: '#65A30D', bg: '#ECFCCB' },
+      { tab: 'categories', title: 'Categories', sub: 'Attributes & Tax', icon: 'pricetags', color: '#EA580C', bg: '#FFEDD5' },
+      { tab: 'customers', title: 'Customers', sub: 'CRM & Profiles', icon: 'people', color: '#5B21B6', bg: '#EDE9FE' },
+      { tab: 'expenses', title: 'Expenses', sub: 'Costs & Utilities', icon: 'cash', color: '#93000A', bg: '#FFDAD6' },
+      { tab: 'reports', title: 'Reports', sub: 'Financial KPIs', icon: 'bar-chart', color: '#0D9488', bg: '#CCFBF1' },
+      { tab: 'admin', title: 'Admin', sub: 'Staff & Matrix', icon: 'shield-checkmark', color: '#4F46E5', bg: '#EEF2FF' },
+    ],
+    []
+  )
 
-  const visibleModules = allModules.filter((m) => canAccessTab(m.tab))
+  const hasInventoryControls = Boolean(can('inventory:restock') || can('inventory:adjust'))
+
+  // Exclude modules that are already prominently shown in Quick Operations to prevent redundancy
+  const quickOpTabs = useMemo<TabType[]>(() => {
+    if (hasInventoryControls) {
+      return ['pos']
+    }
+    return ['pos', 'quotations', 'invoices']
+  }, [hasInventoryControls])
+
+  const visibleModules = useMemo(() => {
+    return allModules.filter((m) => canAccessTab(m.tab) && !quickOpTabs.includes(m.tab))
+  }, [allModules, canAccessTab, quickOpTabs])
 
   // Fetch dashboard summary KPIs from backend
   const fetchDashboardData = useCallback(async () => {

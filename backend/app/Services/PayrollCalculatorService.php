@@ -232,4 +232,122 @@ class PayrollCalculatorService
             'payouts' => $payouts,
         ];
     }
+
+    /**
+     * Get the company-wide 13th month / seniority reserves overview for all active operational staff.
+     */
+    public function getCompanyThirteenthMonthReserves(?int $year = null, ?int $month = null): array
+    {
+        $users = \App\Models\User::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('is_test_account')->orWhere('is_test_account', false);
+            })
+            ->whereNotIn('role', ['SUPER_ADMIN', 'SUPERADMIN'])
+            ->orderBy('name')
+            ->get();
+
+        $staffReserves = [];
+        $companyTotalAccrued = 0.0;
+        $companyTotalDisbursed = 0.0;
+        $companyTotalAvailable = 0.0;
+
+        foreach ($users as $user) {
+            $salary = UserSalary::where('user_id', $user->id)
+                ->where('effective_from', '<=', now()->toDateString())
+                ->orderByDesc('effective_from')
+                ->orderByDesc('id')
+                ->first()
+                ?? UserSalary::where('user_id', $user->id)
+                    ->orderByDesc('effective_from')
+                    ->first();
+
+            $baseSalary = $salary ? (float) $salary->base_salary : 0.0;
+            $monthlyAccrual = round($baseSalary / 12, 2);
+
+            $accrualQuery = Payroll::where('user_id', $user->id);
+            $payoutQuery = ThirteenthMonthPayout::where('user_id', $user->id);
+
+            if ($year !== null) {
+                $accrualQuery->where('period_year', $year);
+                $payoutQuery->whereYear('payout_date', $year);
+            }
+
+            $allPayrolls = $accrualQuery->orderBy('period_month')->get([
+                'id',
+                'period_month',
+                'period_year',
+                'thirteenth_month_contribution',
+                'thirteenth_month_accrual',
+                'status',
+                'total_net_pay',
+                'created_at'
+            ]);
+
+            $accruedMonths = [];
+            $monthlyBreakdown = [];
+
+            foreach ($allPayrolls as $p) {
+                $contrib = (float) ($p->thirteenth_month_contribution ?? $p->thirteenth_month_accrual ?? 0);
+                if ($contrib > 0) {
+                    $accruedMonths[] = (int) $p->period_month;
+                }
+                $monthlyBreakdown[] = [
+                    'payroll_id' => $p->id,
+                    'month' => (int) $p->period_month,
+                    'year' => (int) $p->period_year,
+                    'amount' => round($contrib, 2),
+                    'status' => $p->status,
+                ];
+            }
+
+            $totalAccrued = (float) $allPayrolls->sum(function ($p) {
+                return (float) ($p->thirteenth_month_contribution ?? $p->thirteenth_month_accrual ?? 0);
+            });
+            $monthsAccrued = count($accruedMonths);
+            $totalDisbursed = (float) $payoutQuery->sum('amount');
+            $availableBalance = round($totalAccrued - $totalDisbursed, 2);
+            $payouts = $payoutQuery->orderByDesc('payout_date')->get();
+
+            // If filtered by specific month, calculate month specific accrual
+            $monthSpecificAccrual = null;
+            if ($month !== null) {
+                $match = $allPayrolls->firstWhere('period_month', $month);
+                $monthSpecificAccrual = $match ? (float) ($match->thirteenth_month_contribution ?? $match->thirteenth_month_accrual ?? 0) : 0.0;
+            }
+
+            $companyTotalAccrued += ($month !== null ? $monthSpecificAccrual : $totalAccrued);
+            $companyTotalDisbursed += $totalDisbursed;
+            $companyTotalAvailable += $availableBalance;
+
+            $staffReserves[] = [
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'department' => $user->department ?? 'General Operations',
+                'base_salary' => $baseSalary,
+                'monthly_accrual' => $monthlyAccrual,
+                'months_accrued' => $monthsAccrued,
+                'accrued_months' => array_values(array_unique($accruedMonths)),
+                'monthly_breakdown' => $monthlyBreakdown,
+                'month_specific_accrual' => $monthSpecificAccrual,
+                'total_accrued' => round($totalAccrued, 2),
+                'total_disbursed' => round($totalDisbursed, 2),
+                'available_balance' => $availableBalance,
+                'payouts' => $payouts,
+            ];
+        }
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'kpi' => [
+                'company_total_accrued' => round($companyTotalAccrued, 2),
+                'company_total_disbursed' => round($companyTotalDisbursed, 2),
+                'company_total_available_balance' => round($companyTotalAvailable, 2),
+                'eligible_staff_count' => count($staffReserves),
+            ],
+            'staff' => $staffReserves,
+        ];
+    }
 }

@@ -175,7 +175,6 @@ export const TeamDailySettlementCard: React.FC<TeamDailySettlementCardProps> = (
           <Text style={styles.loadingText}>Loading team settlements...</Text>
         </View>
       ) : (
-        /* Sellers List */
         <View style={styles.sellerList}>
           {data?.sellers && data.sellers.length > 0 ? (
             data.sellers.map((item: TeamSellerStatusItem) => (

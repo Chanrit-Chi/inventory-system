@@ -305,7 +305,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
               <View style={styles.maskContainer} pointerEvents="none">
                 {/* Top Mask with Live In-Camera Feedback HUD */}
                 <View style={styles.maskTop}>
-                  {currentFeedback && (
+                  {currentFeedback ? (
                     <Animated.View
                       style={[
                         styles.feedbackBanner,
@@ -326,24 +326,24 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                             : currentFeedback.type === 'warning'
                             ? 'warning'
                             : currentFeedback.type === 'error'
-                            ? 'alert-circle'
+                            ? 'close-circle'
                             : 'information-circle'
                         }
-                        size={20}
+                        size={18}
                         color={tokens.colors.onPrimary}
                       />
                       <View style={{ flexShrink: 1 }}>
-                        <Text style={styles.feedbackMessage} numberOfLines={1}>
+                        <Text style={styles.feedbackMessage} numberOfLines={2}>
                           {currentFeedback.message}
                         </Text>
-                        {Boolean(currentFeedback.submessage) && (
+                        {currentFeedback.submessage ? (
                           <Text style={styles.feedbackSubmessage} numberOfLines={1}>
                             {currentFeedback.submessage}
                           </Text>
-                        )}
+                        ) : null}
                       </View>
                     </Animated.View>
-                  )}
+                  ) : null}
                 </View>
 
                 {/* Center Row */}
@@ -420,7 +420,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 size={20}
                 color={itemsCount > 0 ? tokens.colors.primaryContainer : tokens.colors.secondary}
               />
-              {itemsCount > 0 && (
+              {Boolean(itemsCount > 0) && (
                 <View style={styles.counterBadge}>
                   <Text style={styles.counterBadgeText}>{itemsCount > 99 ? '99+' : itemsCount}</Text>
                 </View>
@@ -480,7 +480,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                       <Text style={styles.sheetCountText}>{itemsCount} items</Text>
                     </View>
                   </View>
-                  {itemsValue > 0 && (
+                  {Boolean(itemsValue > 0) && (
                     <Text style={styles.sheetSubtotalText}>
                       Total: {currencySymbol}{itemsValue.toFixed(2)}
                     </Text>
@@ -549,7 +549,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                               </View>
                             )}
                           </View>
-                          {priceOrCost > 0 && (
+                          {Boolean(priceOrCost > 0) && (
                             <Text style={styles.itemPriceText}>
                               {currencySymbol}{priceOrCost.toFixed(2)} each • Total: {currencySymbol}{itemTotal.toFixed(2)}
                             </Text>
@@ -590,7 +590,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                             </View>
                           )}
 
-                          {onRemoveItem && (
+                          {onRemoveItem ? (
                             <TouchableOpacity
                               testID={`btn-remove-${item.id}`}
                               style={styles.trashBtn}
@@ -600,7 +600,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                             >
                               <Ionicons name="trash-outline" size={15} color={tokens.colors.textMuted} />
                             </TouchableOpacity>
-                          )}
+                          ) : null}
                         </View>
                       </View>
                     )

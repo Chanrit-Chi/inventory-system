@@ -486,6 +486,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
       base_salary: '',
       salary_reason: 'Initial Starting Salary Package',
       isActive: true,
+      is_test_account: false,
     })
     setUserModalOpen(true)
   }
@@ -504,6 +505,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
       base_salary: u.base_salary !== undefined && u.base_salary !== null ? String(u.base_salary) : '',
       salary_reason: u.salary_reason || 'Salary Adjustment',
       isActive: u.isActive,
+      is_test_account: Boolean(u.is_test_account ?? u.isTestAccount),
     })
     setUserModalOpen(true)
   }
@@ -527,6 +529,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
             base_salary: parsedSalary,
             salary_reason: data.salary_reason || '',
             isActive: data.isActive,
+            is_test_account: data.is_test_account,
           })
         } catch {
           updated = {
@@ -541,6 +544,8 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
             base_salary: parsedSalary,
             salary_reason: data.salary_reason,
             isActive: data.isActive,
+            is_test_account: data.is_test_account,
+            isTestAccount: data.is_test_account,
           }
         }
         setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? updated : u)))
@@ -567,6 +572,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
             notes: data.notes,
             base_salary: parsedSalary,
             salary_reason: data.salary_reason || 'Initial Starting Salary Package',
+            is_test_account: data.is_test_account,
           })
         } catch {
           newU = {
@@ -581,6 +587,8 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
             base_salary: parsedSalary || 0,
             salary_reason: data.salary_reason,
             isActive: true,
+            is_test_account: data.is_test_account,
+            isTestAccount: data.is_test_account,
             must_change_password: true,
             mustChangePassword: true,
             createdAt: new Date().toISOString(),

@@ -54,7 +54,7 @@ export const InvoiceCardItem: React.FC<InvoiceCardItemProps> = React.memo(({
         <View style={styles.headerTitleCol}>
           <View style={styles.invNumRow}>
             <Text style={styles.invNum}>{invNum}</Text>
-            {orderNum && <Text style={styles.orderTag}> • Order #{orderNum}</Text>}
+            {Boolean(orderNum) && <Text style={styles.orderTag}> • Order #{orderNum}</Text>}
           </View>
           <Text style={styles.customerName} numberOfLines={1}>{custName}</Text>
         </View>
@@ -89,7 +89,7 @@ export const InvoiceCardItem: React.FC<InvoiceCardItemProps> = React.memo(({
 
       {/* Quick Action Toolbar on Card */}
       <View style={styles.cardActionsRow}>
-        {balance > 0 && canRecordPayment && (
+        {Boolean(balance > 0 && canRecordPayment) && (
           <TouchableOpacity
             style={styles.recordPaymentQuickBtn}
             onPress={(e) => {

@@ -502,7 +502,7 @@ export const AdminRolesScreen: React.FC<AdminRolesScreenProps> = ({ onNavigate }
       </ScrollView>
 
       {/* Floating Action Bar when changes exist */}
-      {!isSuperAdminRole && isDirty && (
+      {Boolean(!isSuperAdminRole && isDirty) && (
         <View style={styles.floatingActionBar}>
           <TouchableOpacity
             style={styles.resetBtn}

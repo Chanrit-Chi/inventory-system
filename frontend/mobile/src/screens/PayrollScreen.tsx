@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   RefreshControl,
   ScrollView,
   Platform,
+  LayoutAnimation,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
@@ -22,10 +25,18 @@ import {
   fetchUserSalary,
   setUserSalary,
   fetch13thMonthSavings,
+  fetchCompany13thMonthReserves,
   record13thMonthPayout,
+  fetchStaffIncentives,
 } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
-import type { Payroll, UserAccount, ThirteenthMonthSummary } from '../types'
+import type {
+  Payroll,
+  UserAccount,
+  ThirteenthMonthSummary,
+  CompanyThirteenthMonthReservesData,
+  StaffThirteenthMonthReserve,
+} from '../types'
 import { styles } from './payroll/PayrollScreen.styles'
 import {
   formatCurrency,
@@ -39,6 +50,7 @@ import { GeneratePayrollModal } from './payroll/components/GeneratePayrollModal'
 import { PayrollDetailModal } from './payroll/components/PayrollDetailModal'
 import { PayrollFilterBar } from './payroll/components/PayrollFilterBar'
 import { PayrollCardItem } from './payroll/components/PayrollCardItem'
+import { ThirteenthMonthReservesTab } from './payroll/components/ThirteenthMonthReservesTab'
 
 export default function PayrollScreen() {
   const { can } = usePermissions()
@@ -86,24 +98,52 @@ export default function PayrollScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkPaying, setBulkPaying] = useState(false)
 
-  // Filters (default to current month and year)
-  const [filterMonth, setFilterMonth] = useState<number | 'ALL'>(new Date().getMonth() + 1)
+  // Filters (default to all months for full year visibility)
+  const [filterMonth, setFilterMonth] = useState<number | 'ALL'>('ALL')
   const [filterYear, setFilterYear] = useState<number | 'ALL'>(new Date().getFullYear())
+  const [filterStatus, setFilterStatus] = useState<string>('ALL')
+  const [searchMonthly, setSearchMonthly] = useState('')
 
-  const availableYears = useMemo(
-    () => Array.from(new Set([new Date().getFullYear(), ...payrolls.map((p) => p.period_year)])).sort((a, b) => b - a),
-    [payrolls]
-  )
+  // Sub-tab Navigation
+  const [activePayrollTab, setActivePayrollTab] = useState<'monthly' | 'thirteenthMonth'>('monthly')
+  const [companyReservesData, setCompanyReservesData] = useState<CompanyThirteenthMonthReservesData | null>(null)
+  const [companyReservesLoading, setCompanyReservesLoading] = useState(false)
+  const [companyReservesRefreshing, setCompanyReservesRefreshing] = useState(false)
+  const [reservesYear, setReservesYear] = useState<number | 'ALL'>(new Date().getFullYear())
+  const [reservesMonth, setReservesMonth] = useState<number | 'ALL'>('ALL')
 
-  const filteredPayrolls = useMemo(
-    () =>
-      payrolls.filter(
-        (p) =>
-          (filterMonth === 'ALL' || p.period_month === filterMonth) &&
-          (filterYear === 'ALL' || p.period_year === filterYear)
-      ),
-    [payrolls, filterMonth, filterYear]
-  )
+  const availableYears = useMemo(() => {
+    const curr = new Date().getFullYear()
+    const years = new Set<number>([curr + 1, curr, curr - 1, curr - 2, curr - 3])
+    for (const p of payrolls) {
+      if (p.period_year) years.add(Number(p.period_year))
+    }
+    const staff = companyReservesData?.staff || []
+    for (const s of staff) {
+      for (const b of (s.monthly_breakdown || [])) {
+        if (b.year) years.add(Number(b.year))
+      }
+      for (const p of (s.payouts || [])) {
+        if (p.payout_date) {
+          const y = new Date(p.payout_date).getFullYear()
+          if (!isNaN(y)) years.add(y)
+        }
+      }
+    }
+    return Array.from(years).sort((a, b) => b - a)
+  }, [payrolls, companyReservesData])
+
+  const filteredPayrolls = useMemo(() => {
+    const q = searchMonthly.toLowerCase().trim()
+    return payrolls.filter((p) => {
+      const matchMonth = filterMonth === 'ALL' || p.period_month === filterMonth
+      const matchYear = filterYear === 'ALL' || p.period_year === filterYear
+      const matchStatus = filterStatus === 'ALL' || p.status === filterStatus
+      const staffName = p.user?.name || users.find((u) => u.id === p.user_id)?.name || ''
+      const matchSearch = !q || staffName.toLowerCase().includes(q) || (p.user?.role || '').toLowerCase().includes(q)
+      return matchMonth && matchYear && matchStatus && matchSearch
+    })
+  }, [payrolls, filterMonth, filterYear, filterStatus, searchMonthly, users])
 
   // Map of user_ids that already have a payroll for the selected period
   const periodExistingUserIds = useMemo(() => {
@@ -118,16 +158,26 @@ export default function PayrollScreen() {
     return map
   }, [selectedMonth, selectedYear, payrolls])
 
+  const operationalUsers = useMemo(() => {
+    return users.filter((u) => {
+      const roleUpper = String(u.role || '').toUpperCase().replace(/[-\s]/g, '_')
+      const isSuperAdmin = roleUpper === 'SUPER_ADMIN' || roleUpper === 'SUPERADMIN'
+      const isTest = u.is_test_account === true || u.isTestAccount === true
+      const isActive = u.isActive !== false
+      return !isSuperAdmin && !isTest && isActive
+    })
+  }, [users])
+
   const eligibleUsers = useMemo(() => {
-    return users.filter((u) => !periodExistingUserIds.has(u.id))
-  }, [users, periodExistingUserIds])
+    return operationalUsers.filter((u) => !periodExistingUserIds.has(u.id))
+  }, [operationalUsers, periodExistingUserIds])
 
   // Reset/sync multi selection when opening modal or changing period
   useEffect(() => {
     if (generateVisible) {
-      setSelectedStaffIds(new Set(users.filter((u) => !periodExistingUserIds.has(u.id)).map((u) => u.id)))
+      setSelectedStaffIds(new Set(operationalUsers.filter((u) => !periodExistingUserIds.has(u.id)).map((u) => u.id)))
     }
-  }, [generateVisible, selectedMonth, selectedYear, periodExistingUserIds, users])
+  }, [generateVisible, selectedMonth, selectedYear, periodExistingUserIds, operationalUsers])
 
   // Check if a payroll already exists for the selected single user
   const existingPayrollForSelection = useMemo(() => {
@@ -148,24 +198,50 @@ export default function PayrollScreen() {
   const [standaloneNotes, setStandaloneNotes] = useState('Khmer New Year / Bi-Annual Payout')
   const [savingStandalone, setSavingStandalone] = useState(false)
 
+  const loadCompanyReserves = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setCompanyReservesRefreshing(true)
+    else setCompanyReservesLoading(true)
+    try {
+      const res = await fetchCompany13thMonthReserves(reservesYear, reservesMonth)
+      if (res && (res.success || res.data)) {
+        setCompanyReservesData(res.data || null)
+      }
+    } catch (err: unknown) {
+      console.warn('Failed to load company 13th month reserves:', err)
+    } finally {
+      setCompanyReservesLoading(false)
+      setCompanyReservesRefreshing(false)
+    }
+  }, [reservesYear, reservesMonth])
+
   const loadData = useCallback(async () => {
     try {
-      const res = await fetchPayrolls()
+      const [res, usersData] = await Promise.all([
+        fetchPayrolls(),
+        fetchUsers(),
+      ])
       if (res && (res.success || res.data)) {
         const list = res.data ?? (Array.isArray(res) ? res : [])
         setPayrolls(Array.isArray(list) ? list : [])
       }
-      const usersData = await fetchUsers()
       if (Array.isArray(usersData)) {
         setUsers(usersData)
         if (usersData.length > 0 && !selectedUser) {
           setSelectedUser(usersData[0].id)
         }
       }
+      // Preload 13th month reserves in background
+      loadCompanyReserves(false)
     } catch (err: unknown) {
       console.warn('Failed to load payroll data:', err)
     }
-  }, [selectedUser])
+  }, [selectedUser, loadCompanyReserves])
+
+  useEffect(() => {
+    if (activePayrollTab === 'thirteenthMonth') {
+      loadCompanyReserves()
+    }
+  }, [activePayrollTab, loadCompanyReserves])
 
   useEffect(() => {
     setLoading(true)
@@ -174,9 +250,12 @@ export default function PayrollScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await loadData()
+    await Promise.allSettled([
+      loadData(),
+      loadCompanyReserves(true),
+    ])
     setRefreshing(false)
-  }, [loadData])
+  }, [loadData, loadCompanyReserves])
 
   const handleSelectAllEligible = () => {
     setSelectedStaffIds(new Set(eligibleUsers.map((u) => u.id)))
@@ -290,9 +369,33 @@ export default function PayrollScreen() {
       }
     }
 
+    const hasOverride =
+      p.incentive_override !== null &&
+      p.incentive_override !== undefined &&
+      String(p.incentive_override) !== ''
+    setIncentiveMode(hasOverride ? 'MANUAL' : 'AUTO')
+    setManualIncentive(String(p.incentive_override ?? 0))
+
+    let currentIncentiveAmount = p.incentive_amount
+    // If draft and AUTO mode, fetch fresh live incentive calculations from completed orders
+    if (p.status === 'DRAFT' && !hasOverride) {
+      try {
+        const incRes = await fetchStaffIncentives(p.user_id, {
+          month: p.period_month,
+          year: p.period_year,
+        })
+        if (incRes?.data?.summary?.total_incentive !== undefined) {
+          currentIncentiveAmount = incRes.data.summary.total_incentive
+        }
+      } catch (err) {
+        console.warn('Failed to fetch live incentives for payroll detail:', err)
+      }
+    }
+
     setEditingPayroll({
       ...p,
       base_salary: currentBaseSalary,
+      incentive_amount: currentIncentiveAmount ?? p.incentive_amount ?? 0,
     })
     setWorkingDays(String(p.working_days ?? 26))
     setPerfBenefit(String(p.performance_benefit ?? 0))
@@ -302,12 +405,6 @@ export default function PayrollScreen() {
     setCollecBenefit(String(p.collective_benefit ?? 0))
     setOtherBenefit(String(p.other_benefits ?? 0))
     setPayrollStatus(p.status)
-    const hasOverride =
-      p.incentive_override !== null &&
-      p.incentive_override !== undefined &&
-      String(p.incentive_override) !== ''
-    setIncentiveMode(hasOverride ? 'MANUAL' : 'AUTO')
-    setManualIncentive(String(p.incentive_override ?? 0))
 
     const hasPayout = p.thirteenth_month_payout !== undefined && p.thirteenth_month_payout !== null && Number(p.thirteenth_month_payout) > 0
     setIncludeThirteenthPayout(Boolean(hasPayout))
@@ -566,11 +663,20 @@ export default function PayrollScreen() {
     }
   }
 
-  const handleOpenStandalonePayout = (u: UserAccount) => {
-    const available = staffReserves[u.id] ?? 0
-    setStandalonePayoutUser(u)
+  const handleOpenStandalonePayout = (u: UserAccount | StaffThirteenthMonthReserve) => {
+    const userId = 'id' in u ? u.id : u.user_id
+    const available = 'available_balance' in u ? u.available_balance : staffReserves[userId] ?? 0
+    const existing = users.find((item) => item.id === userId)
+    const userObj: UserAccount = existing || {
+      id: userId,
+      name: u.name,
+      email: u.email,
+      role: (u.role as any) || 'SELLER',
+      isActive: true,
+    }
+    setStandalonePayoutUser(userObj)
     setStandaloneAmount(String(available > 0 ? available : ''))
-    setStandaloneNotes('Khmer New Year / Bi-Annual Seniority Payout')
+    setStandaloneNotes('13th Month / Seniority Payout')
   }
 
   const handleRecordStandalonePayout = async () => {
@@ -590,8 +696,7 @@ export default function PayrollScreen() {
       if (res && res.success) {
         Alert.alert('Payout Recorded', `Disbursed ${formatCurrency(amt)} to ${standalonePayoutUser.name}.`)
         setStandalonePayoutUser(null)
-        // Refresh reserves
-        await openSalaryManager()
+        await Promise.allSettled([loadData(), loadCompanyReserves(), openSalaryManager()])
       } else {
         Alert.alert('Error', res?.message || 'Failed to record payout.')
       }
@@ -627,109 +732,132 @@ export default function PayrollScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Toolbar */}
-      <View style={styles.header}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.toolbarScrollContent}
+      {/* Top Sub-Tab Navigation Segment */}
+      <View style={styles.subTabSegmentContainer}>
+        <TouchableOpacity
+          style={[styles.subTabSegmentBtn, activePayrollTab === 'monthly' && styles.subTabSegmentBtnActive]}
+          onPress={() => setActivePayrollTab('monthly')}
+          activeOpacity={0.8}
         >
-          {payrolls.length > 0 && (
-            <TouchableOpacity
-              style={[styles.salaryBtn, selectionMode && styles.salaryBtnActive]}
-              onPress={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
-              activeOpacity={0.75}
-            >
-              <Ionicons
-                name={selectionMode ? 'close-circle' : 'checkbox-outline'}
-                size={15}
-                color={selectionMode ? tokens.colors.onPrimary : tokens.colors.primaryContainer}
-              />
-              <Text style={[styles.salaryBtnText, selectionMode && styles.salaryBtnTextActive]}>
-                {selectionMode ? 'Cancel' : 'Select'}
-              </Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.salaryBtn} onPress={openSalaryManager} activeOpacity={0.75}>
-            <Ionicons name="wallet-outline" size={15} color={tokens.colors.primaryContainer} />
-            <Text style={styles.salaryBtnText}>Salaries & Reserves</Text>
-          </TouchableOpacity>
-          {Boolean(can('payroll:manage')) && (
-            <TouchableOpacity style={styles.generateBtn} onPress={() => setGenerateVisible(true)} activeOpacity={0.85}>
-              <Ionicons name="add" size={18} color={tokens.colors.onPrimary} />
-              <Text style={styles.generateBtnText}>Generate</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
+          <Ionicons
+            name="calendar-outline"
+            size={14}
+            color={activePayrollTab === 'monthly' ? tokens.colors.onPrimary : tokens.colors.secondary}
+          />
+          <Text style={[styles.subTabSegmentText, activePayrollTab === 'monthly' && styles.subTabSegmentTextActive]}>
+            Monthly Payroll
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.subTabSegmentBtn, activePayrollTab === 'thirteenthMonth' && styles.subTabSegmentBtnActive]}
+          onPress={() => setActivePayrollTab('thirteenthMonth')}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="gift-outline"
+            size={14}
+            color={activePayrollTab === 'thirteenthMonth' ? tokens.colors.onPrimary : tokens.colors.secondary}
+          />
+          <Text style={[styles.subTabSegmentText, activePayrollTab === 'thirteenthMonth' && styles.subTabSegmentTextActive]}>
+            13th Month Reserves
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Filters */}
-      {payrolls.length > 0 && (
-        <PayrollFilterBar
-          filterMonth={filterMonth}
-          setFilterMonth={setFilterMonth}
-          filterYear={filterYear}
-          setFilterYear={setFilterYear}
+      {/* VIEW A: 13TH MONTH RESERVES DASHBOARD TAB */}
+      {activePayrollTab === 'thirteenthMonth' ? (
+        <ThirteenthMonthReservesTab
+          data={companyReservesData}
+          loading={companyReservesLoading}
+          refreshing={companyReservesRefreshing}
+          onRefresh={() => loadCompanyReserves(true)}
+          filterYear={reservesYear}
+          setFilterYear={setReservesYear}
+          filterMonth={reservesMonth}
+          setFilterMonth={setReservesMonth}
           availableYears={availableYears}
+          onOpenPayout={handleOpenStandalonePayout}
         />
-      )}
-
-      {loading && !refreshing ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={tokens.colors.primaryContainer} />
-        </View>
       ) : (
-        <FlatList
-          data={filteredPayrolls}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={Platform.OS === 'android'}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="cash-outline" size={48} color={tokens.colors.outline} />
-              <Text style={styles.emptyText}>
-                {payrolls.length === 0 ? 'No payroll records found.' : 'No payrolls match the selected filters.'}
-              </Text>
-            </View>
-          }
-        />
-      )}
+        /* VIEW B: MONTHLY PAYROLL TAB */
+        <>
+          {/* Spacious Action, Search & Filter Toolbar */}
+          <PayrollFilterBar
+            search={searchMonthly}
+            setSearch={setSearchMonthly}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            filterMonth={filterMonth}
+            setFilterMonth={setFilterMonth}
+            filterYear={filterYear}
+            setFilterYear={setFilterYear}
+            availableYears={availableYears}
+            onOpenGenerate={() => setGenerateVisible(true)}
+            onOpenSalary={openSalaryManager}
+            selectionMode={selectionMode}
+            onToggleSelectionMode={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+            canManage={Boolean(can('payroll:manage'))}
+          />
 
-      {/* Bulk Mark-as-Paid floating bar */}
-      {Boolean(selectionMode && can('payroll:manage')) && (
-        <View style={styles.bulkBar}>
-          <Text style={styles.bulkHint}>
-            {bulkEligibleCount > 0
-              ? `${bulkEligibleCount} finalized payroll(s) selected`
-              : 'Select FINALIZED payrolls to mark as paid'}
-          </Text>
-          <TouchableOpacity
-            style={[styles.bulkPayBtn, bulkEligibleCount === 0 && styles.modalBtnDisabled]}
-            onPress={handleBulkMarkPaid}
-            disabled={bulkPaying || bulkEligibleCount === 0}
-          >
-            {bulkPaying ? (
-              <ActivityIndicator size="small" color={tokens.colors.onPrimary} />
-            ) : (
-              <>
-                <Ionicons name="cash" size={15} color={tokens.colors.onPrimary} />
-                <Text style={styles.bulkPayText}>Mark Paid</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+          {loading && !refreshing ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={tokens.colors.primaryContainer} />
+            </View>
+          ) : (
+            <FlatList
+              data={filteredPayrolls}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
+              contentContainerStyle={styles.listContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Ionicons name="cash-outline" size={48} color={tokens.colors.outline} />
+                  <Text style={styles.emptyText}>
+                    {payrolls.length === 0 ? 'No payroll records found.' : 'No payrolls match the selected filters.'}
+                  </Text>
+                </View>
+              }
+            />
+          )}
+
+          {/* Bulk Mark-as-Paid floating bar */}
+          {Boolean(selectionMode && can('payroll:manage')) && (
+            <View style={styles.bulkBar}>
+              <Text style={styles.bulkHint}>
+                {bulkEligibleCount > 0
+                  ? `${bulkEligibleCount} finalized payroll(s) selected`
+                  : 'Select FINALIZED payrolls to mark as paid'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.bulkPayBtn, bulkEligibleCount === 0 && styles.modalBtnDisabled]}
+                onPress={handleBulkMarkPaid}
+                disabled={bulkPaying || bulkEligibleCount === 0}
+              >
+                {bulkPaying ? (
+                  <ActivityIndicator size="small" color={tokens.colors.onPrimary} />
+                ) : (
+                  <>
+                    <Ionicons name="cash" size={15} color={tokens.colors.onPrimary} />
+                    <Text style={styles.bulkPayText}>Mark Paid</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
 
       {/* BASE SALARY & 13TH MONTH RESERVES MANAGER MODAL */}
       <SalaryManagementModal
         visible={salaryVisible}
         onClose={() => setSalaryVisible(false)}
-        users={users}
+        users={operationalUsers}
         salaryLoading={salaryLoading}
         salaryDrafts={salaryDrafts}
         staffReserves={staffReserves}
@@ -764,7 +892,7 @@ export default function PayrollScreen() {
         setSelectedMonth={setSelectedMonth}
         selectedYear={selectedYear}
         setSelectedYear={setSelectedYear}
-        users={users}
+        users={operationalUsers}
         eligibleUsers={eligibleUsers}
         selectedStaffIds={selectedStaffIds}
         periodExistingUserIds={periodExistingUserIds}
