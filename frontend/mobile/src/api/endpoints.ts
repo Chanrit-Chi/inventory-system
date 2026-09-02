@@ -149,6 +149,15 @@ export async function updateUser(id: string, payload: Partial<{
 }
 
 /**
+ * Reset a user's password (admin only)
+ * PATCH /api/v1/users/:id  — sends only { password }
+ * Backend will also set must_change_password = true
+ */
+export async function resetUserPassword(id: string, password: string): Promise<void> {
+  await apiClient.patch(`/users/${id}`, { password })
+}
+
+/**
  * Toggle user active/inactive status
  * PATCH /api/v1/users/:id/status
  */

@@ -33,6 +33,7 @@ export interface StaffManagementTabProps {
   onOpenEdit: (u: UserAccount) => void
   onToggleActive: (u: UserAccount) => void
   onDeleteUser: (u: UserAccount) => void
+  onResetPassword: (u: UserAccount) => void
 }
 
 export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
@@ -43,6 +44,7 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
   onOpenEdit,
   onToggleActive,
   onDeleteUser,
+  onResetPassword,
 }) => {
   const [staffFilter, setStaffFilter] = React.useState<'ALL' | 'OPERATIONAL' | 'TEST'>('ALL')
 
@@ -220,6 +222,17 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
                     accessibilityLabel={`Edit ${u.name}`}
                   >
                     <Ionicons name="pencil" size={13} color={tokens.colors.onBackground} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.cardActionIconBtn, styles.resetIconBtn]}
+                    onPress={(e) => {
+                      e.stopPropagation?.()
+                      onResetPassword(u)
+                    }}
+                    accessibilityLabel={`Reset password for ${u.name}`}
+                  >
+                    <Ionicons name="key-outline" size={13} color="#B45309" />
                   </TouchableOpacity>
 
                   {u.role !== 'SUPER_ADMIN' && (

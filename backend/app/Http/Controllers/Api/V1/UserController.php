@@ -299,6 +299,7 @@ class UserController extends BaseApiController
         }
         if ($request->has('password') && !empty($data['password'])) {
             $updateData['password'] = Hash::make($data['password']);
+            $updateData['must_change_password'] = true;
         }
         if ($request->has('permission_group')) $updateData['permission_group'] = $data['permission_group'];
         if ($request->has('notes')) $updateData['notes'] = $data['notes'];

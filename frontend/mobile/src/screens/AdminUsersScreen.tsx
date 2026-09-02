@@ -25,6 +25,7 @@ import {
   updateUser,
   toggleUserStatus,
   deleteUser,
+  resetUserPassword,
   fetchAuditLogs,
   type AuditLogEntry,
 } from '../api/endpoints'
@@ -32,6 +33,7 @@ import { StaffDetailModal } from '../components/StaffDetailModal'
 import { styles } from './admin_users/AdminUsersScreen.styles'
 import { AuditCalendarModal } from './admin_users/components/AuditCalendarModal'
 import { UserFormModal } from './admin_users/components/UserFormModal'
+import { ResetPasswordModal } from './admin_users/components/ResetPasswordModal'
 import {
   AuditLogTab,
   DateRangeMode,
@@ -204,6 +206,21 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
   // Staff Detail & Performance Modal
   const [selectedDetailUser, setSelectedDetailUser] = useState<UserAccount | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
+
+  // Reset Password Modal
+  const [resetPasswordModalOpen, setResetPasswordModalOpen] = useState(false)
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<UserAccount | null>(null)
+
+  const handleOpenResetPassword = (user: UserAccount) => {
+    setResetPasswordTarget(user)
+    setResetPasswordModalOpen(true)
+  }
+
+  const handleResetPassword = async (newPassword: string) => {
+    if (!resetPasswordTarget) return
+    await resetUserPassword(resetPasswordTarget.id, newPassword)
+    showToast(`Password reset for ${resetPasswordTarget.name}. Share it securely.`, 'success')
+  }
 
   const { control, handleSubmit, reset, watch, setValue } = useForm<AdminUserFormValues>({
     resolver: zodResolver(adminUserSchema),
@@ -752,6 +769,7 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
               onOpenEdit={handleOpenEdit}
               onToggleActive={handleToggleActive}
               onDeleteUser={handleDeleteUser}
+              onResetPassword={handleOpenResetPassword}
             />
           )}
 
@@ -803,6 +821,17 @@ export const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ onNavigate }
         onClose={() => setDetailModalOpen(false)}
         onEditProfile={handleOpenEdit}
         onStatusToggle={handleToggleActive}
+      />
+
+      {/* Reset Password Modal */}
+      <ResetPasswordModal
+        visible={resetPasswordModalOpen}
+        user={resetPasswordTarget}
+        onClose={() => {
+          setResetPasswordModalOpen(false)
+          setResetPasswordTarget(null)
+        }}
+        onConfirm={handleResetPassword}
       />
 
       {/* Post-Creation Staff Credentials Dialog */}
