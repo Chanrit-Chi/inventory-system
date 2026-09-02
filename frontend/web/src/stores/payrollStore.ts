@@ -10,6 +10,7 @@ export interface PayrollUser {
   department?: string
   avatar_url?: string
   hire_date?: string
+  probation_exempt?: boolean
   is_on_probation?: boolean
   seniority_months?: number
   probation_ends_at?: string
@@ -65,6 +66,7 @@ export interface StaffThirteenthMonthReserve {
   role: string
   department: string
   hire_date?: string
+  probation_exempt?: boolean
   seniority_months?: number
   is_on_probation?: boolean
   probation_ends_at?: string

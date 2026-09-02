@@ -25,6 +25,7 @@ class User extends Authenticatable
         'role_id',
         'phone',
         'hire_date',
+        'probation_exempt',
         'department',
         'is_active',
         'is_test_account',
@@ -61,6 +62,7 @@ class User extends Authenticatable
             'is_active'            => 'boolean',
             'is_test_account'      => 'boolean',
             'must_change_password' => 'boolean',
+            'probation_exempt'     => 'boolean',
             'hire_date'            => 'date',
         ];
     }
@@ -284,9 +286,14 @@ class User extends Authenticatable
     /**
      * Determine if staff member is currently in the 3-month probation / performance review period.
      * New staff in probation are restricted to base salary only (no bonuses/benefits/13th month).
+     * If probation_exempt is true (waived probation), staff gets full benefits from Day 1.
      */
     public function isOnProbation(?\Carbon\Carbon $asOfDate = null): bool
     {
+        if (!empty($this->attributes['probation_exempt'])) {
+            return false;
+        }
+
         if (!array_key_exists('hire_date', $this->attributes) || empty($this->attributes['hire_date'])) {
             return false;
         }
@@ -303,14 +310,16 @@ class User extends Authenticatable
     public function getProbationStatus(?\Carbon\Carbon $asOfDate = null): array
     {
         $targetDate = $asOfDate ?? now();
+        $isExempt = !empty($this->attributes['probation_exempt']);
         $hireDateVal = array_key_exists('hire_date', $this->attributes) ? $this->attributes['hire_date'] : null;
         $startDate = $hireDateVal ? \Carbon\Carbon::parse($hireDateVal) : null;
         $seniorityMonths = $this->getSeniorityMonths($targetDate);
         $onProbation = $this->isOnProbation($targetDate);
-        $probationEnd = $startDate ? $startDate->copy()->addMonths(3) : null;
+        $probationEnd = ($startDate && !$isExempt) ? $startDate->copy()->addMonths(3) : null;
 
         return [
             'hire_date' => $startDate?->toDateString(),
+            'probation_exempt' => $isExempt,
             'seniority_months' => $seniorityMonths,
             'is_on_probation' => $onProbation,
             'probation_ends_at' => $probationEnd?->toDateString(),

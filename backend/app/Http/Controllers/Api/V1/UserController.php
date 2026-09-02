@@ -157,6 +157,7 @@ class UserController extends BaseApiController
             'email'            => ['required', 'email', 'unique:users,email'],
             'phone'            => ['nullable', 'string', 'max:30'],
             'hire_date'        => ['nullable', 'date'],
+            'probation_exempt' => ['nullable', 'boolean'],
             'department'       => ['nullable', 'string', 'max:50'],
             'role'             => ['required', 'string', Rule::in($validRoles)],
             'role_id'          => ['nullable', 'string'],
@@ -174,12 +175,14 @@ class UserController extends BaseApiController
 
         $plainPassword = !empty($data['password']) ? $data['password'] : Str::random(10);
         $isTestAccount = filter_var($request->input('is_test_account', $request->input('isTestAccount', false)), FILTER_VALIDATE_BOOLEAN);
+        $probationExempt = filter_var($request->input('probation_exempt', false), FILTER_VALIDATE_BOOLEAN);
 
         $user = User::create([
             'name'                 => $data['name'],
             'email'                => $data['email'],
             'phone'                => $data['phone'] ?? null,
             'hire_date'            => $data['hire_date'] ?? null,
+            'probation_exempt'     => $probationExempt,
             'department'           => $data['department'] ?? null,
             'role'                 => $finalRole,
             'role_id'              => $finalRoleId,
@@ -248,6 +251,7 @@ class UserController extends BaseApiController
             'email'            => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($user->id)],
             'phone'            => ['sometimes', 'nullable', 'string', 'max:30'],
             'hire_date'        => ['sometimes', 'nullable', 'date'],
+            'probation_exempt' => ['sometimes', 'boolean'],
             'department'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'role'             => ['sometimes', 'string', Rule::in($validRoles)],
             'role_id'          => ['sometimes', 'nullable', 'string'],
@@ -267,6 +271,7 @@ class UserController extends BaseApiController
         if ($request->has('email')) $updateData['email'] = $data['email'];
         if ($request->has('phone')) $updateData['phone'] = $data['phone'];
         if ($request->has('hire_date')) $updateData['hire_date'] = $data['hire_date'];
+        if ($request->has('probation_exempt')) $updateData['probation_exempt'] = (bool) $request->input('probation_exempt');
         if ($request->has('department')) $updateData['department'] = $data['department'];
 
         if ($request->has('role') || $request->has('role_id')) {
@@ -380,6 +385,9 @@ class UserController extends BaseApiController
             'email'                => $user->email,
             'phone'                => array_key_exists('phone', $attrs) ? $attrs['phone'] : null,
             'hire_date'            => $user->hire_date?->toDateString(),
+            'probation_exempt'     => (bool) ($user->probation_exempt ?? false),
+            'is_on_probation'      => $user->isOnProbation(),
+            'seniority_months'     => $user->getSeniorityMonths(),
             'department'           => array_key_exists('department', $attrs) ? $attrs['department'] : null,
             'notes'                => array_key_exists('notes', $attrs) ? $attrs['notes'] : null,
             'role'                 => $roleSlug,

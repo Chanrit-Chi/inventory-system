@@ -133,4 +133,44 @@ class StaffSeniorityAndProbationTest extends TestCase
         $this->assertFalse($seniorRecord['is_on_probation']);
         $this->assertTrue($seniorRecord['benefits_eligible']);
     }
+
+    public function test_probation_exempt_staff_receives_immediate_full_benefits(): void
+    {
+        // New hire (hired yesterday), but probation is waived (probation_exempt = true)
+        $exemptStaff = User::create([
+            'name' => 'Exempt Senior Transfer',
+            'email' => 'exempt@inventory.local',
+            'password' => bcrypt('password123'),
+            'role' => 'SELLER',
+            'is_active' => true,
+            'hire_date' => Carbon::create(2026, 8, 1)->toDateString(),
+            'probation_exempt' => true,
+        ]);
+
+        UserSalary::create([
+            'user_id' => $exemptStaff->id,
+            'base_salary' => 500.00,
+            'effective_from' => '2026-08-01',
+            'created_by' => $this->admin->id,
+        ]);
+
+        Order::create([
+            'order_number' => 'ORD-EXEMPT-01',
+            'client_mutation_id' => 'MUT-EXEMPT-01',
+            'seller_id' => $exemptStaff->id,
+            'status' => 'COMPLETED',
+            'subtotal' => 100.00,
+            'total_amount' => 100.00,
+            'completed_at' => Carbon::create(2026, 8, 15),
+        ]);
+
+        $service = new PayrollCalculatorService();
+        $payroll = $service->calculateForUser($exemptStaff, 8, 2026);
+
+        // Even though hired in Month 8, probation_exempt grants full benefits from Day 1
+        $this->assertFalse($exemptStaff->isOnProbation());
+        $this->assertEquals(500.00, $payroll->base_salary);
+        $this->assertGreaterThan(0, $payroll->incentive_amount);
+        $this->assertEquals(round(500.00 / 12, 2), round($payroll->thirteenth_month_contribution, 2));
+    }
 }
