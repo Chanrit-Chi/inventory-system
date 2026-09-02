@@ -130,20 +130,21 @@ function handleReset() {
         <Badge
           v-if="matchedCustomer && tierDetails"
           :variant="tierDetails.variant"
-          class="text-[10px] px-1.5 py-0.5 font-semibold gap-1 shadow-2xs"
+          class="text-xs font-mono font-semibold gap-1.5"
         >
-          <component :is="getTierIcon(tierDetails.tier)" class="w-3 h-3" />
+          <component :is="getTierIcon(tierDetails.tier)" class="w-3.5 h-3.5" />
           <span>{{ tierDetails.label }}</span>
         </Badge>
 
         <!-- + New Member Badge -->
-        <div
+        <Badge
           v-if="!matchedCustomer && suggestions.length === 0 && phone.trim().length >= 3 && status !== 'searching'"
-          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-subtle border border-border text-muted-foreground text-[10px] font-bold"
+          variant="neutral"
+          class="text-xs font-mono font-semibold gap-1.5"
         >
-          <Sparkles class="w-2.5 h-2.5 text-primary" />
+          <Sparkles class="w-3.5 h-3.5 text-primary" />
           <span>+ New Member</span>
-        </div>
+        </Badge>
 
         <!-- Change / Clear Button -->
         <button

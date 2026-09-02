@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { X, Check, Package, AlertCircle, Search } from 'lucide-vue-next'
+import Badge from '@/components/ui/Badge.vue'
 
 export interface ProductVariant {
   id: string
@@ -120,18 +121,18 @@ function getStockStatus(variant: ProductVariant) {
   const inCart = getCartQuantity(variant)
   const remaining = getEffectiveAvailableStock(variant)
   if (variant.quantity_on_hand <= 0) {
-    return { label: 'Out of Stock', class: 'bg-error-bg text-error-text border-error-border' }
+    return { label: 'Out of Stock', variant: 'destructive' as const }
   }
   if (remaining <= 0) {
-    return { label: `Max in cart (${inCart}/${variant.quantity_on_hand})`, class: 'bg-warning-bg text-warning-text border-warning-border' }
+    return { label: `Max in cart (${inCart}/${variant.quantity_on_hand})`, variant: 'warning' as const }
   }
   if (inCart > 0) {
-    return { label: `${remaining} left (${inCart} in cart)`, class: 'bg-success-bg text-success-text border-success-border' }
+    return { label: `${remaining} left (${inCart} in cart)`, variant: 'success' as const }
   }
   if (variant.quantity_on_hand <= 5) {
-    return { label: `${variant.quantity_on_hand} left`, class: 'bg-warning-bg text-warning-text border-warning-border' }
+    return { label: `${variant.quantity_on_hand} left`, variant: 'warning' as const }
   }
-  return { label: `${variant.quantity_on_hand} in stock`, class: 'bg-success-bg text-success-text border-success-border' }
+  return { label: `${variant.quantity_on_hand} in stock`, variant: 'success' as const }
 }
 
 const filteredVariants = computed(() => {
@@ -242,14 +243,12 @@ function close() {
               </span>
 
               <!-- Stock Badge -->
-              <span
-                :class="[
-                  'px-2 py-0.5 text-3xs font-semibold rounded-full border',
-                  getStockStatus(variant).class
-                ]"
+              <Badge
+                :variant="getStockStatus(variant).variant"
+                class="text-xs font-mono font-semibold"
               >
                 {{ getStockStatus(variant).label }}
-              </span>
+              </Badge>
             </div>
 
             <!-- SKU & Barcode chips (Compact & Non-breaking) -->

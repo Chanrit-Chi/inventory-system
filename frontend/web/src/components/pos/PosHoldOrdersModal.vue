@@ -7,6 +7,7 @@ import {
   User,
   ShoppingBag
 } from 'lucide-vue-next'
+import Badge from '@/components/ui/Badge.vue'
 import type { HeldOrder } from '@/stores/posStore'
 
 interface Props {
@@ -103,14 +104,14 @@ function close() {
           class="p-3 rounded-xl border border-border bg-card hover:border-cta transition-all flex items-center justify-between gap-3 group"
         >
           <!-- Order Details -->
-          <div class="space-y-0.5 flex-1 min-w-0">
+          <div class="space-y-1 flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-xs font-bold text-foreground truncate">
                 {{ order.name }}
               </span>
-              <span class="px-1.5 py-0.2 text-3xs font-semibold rounded-md bg-surface-subtle border border-border text-muted-foreground font-mono shrink-0">
+              <Badge variant="neutral" class="text-xs font-mono">
                 {{ formatTime(order.timestamp) }}
-              </span>
+              </Badge>
             </div>
 
             <div class="flex items-center gap-2.5 text-3xs text-muted-foreground">

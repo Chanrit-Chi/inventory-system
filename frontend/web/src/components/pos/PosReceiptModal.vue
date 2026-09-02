@@ -287,7 +287,7 @@ onUnmounted(() => {
               <Badge
                 v-if="customerDisplay.loyalty_tier"
                 :variant="getTierDetails(customerDisplay.loyalty_tier).variant"
-                class="text-[9px] px-1.5 py-0 font-semibold font-mono"
+                class="text-xs font-mono font-semibold"
               >
                 {{ customerDisplay.loyalty_tier }}
               </Badge>

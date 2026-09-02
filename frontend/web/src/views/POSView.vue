@@ -1291,47 +1291,32 @@ defineExpose({
               </div>
 
               <!-- Top Left: Multi-variant Pill Indicator -->
-              <span
+              <Badge
                 v-if="product.variants && product.variants.length > 1"
-                class="absolute top-2 left-2 z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-card/95 backdrop-blur-md text-foreground border border-border shadow-xs"
+                variant="neutral"
+                class="absolute top-2 left-2 z-10 text-xs font-bold shadow-xs backdrop-blur-md gap-1"
               >
-                <Layers class="w-3 h-3 text-primary stroke-[2.2]" />
+                <Layers class="w-3.5 h-3.5 text-primary stroke-[2.2]" />
                 <span class="font-mono font-bold text-primary">{{ product.variants.length }}</span>
-                <span class="text-muted-foreground text-[9px] font-medium">Options</span>
-              </span>
+                <span class="text-muted-foreground text-xs font-medium">Options</span>
+              </Badge>
 
               <!-- Top Right: In-Cart Counter Pill (Cleanly inside thumbnail top-right) -->
               <div
                 v-if="getProductCartCount(product.id) > 0"
-                class="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-cta text-cta-foreground font-black text-[10px] shadow-sm font-mono flex items-center gap-1 animate-in zoom-in-50"
+                class="absolute top-2 right-2 z-10 px-2.5 py-0.5 rounded-full bg-cta text-cta-foreground font-black text-xs shadow-sm font-mono flex items-center gap-1 animate-in zoom-in-50"
               >
-                <ShoppingBag :size="10" />
+                <ShoppingBag :size="11" />
                 <span>{{ getProductCartCount(product.id) }}</span>
               </div>
 
               <!-- Bottom Left: High Contrast Stock Status Badge (Overlaid on thumbnail with backdrop-blur) -->
-              <span
-                :class="[
-                  'absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border shadow-xs backdrop-blur-md',
-                  getProductStock(product) <= 0
-                    ? 'bg-rose-50/95 text-rose-800 border-rose-200 dark:bg-rose-950/90 dark:text-rose-300 dark:border-rose-800'
-                    : getProductStock(product) <= 5
-                      ? 'bg-amber-50/95 text-amber-800 border-amber-200 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-800'
-                      : 'bg-card/95 text-foreground border-border dark:bg-card/90'
-                ]"
+              <Badge
+                :variant="getProductStock(product) <= 0 ? 'destructive' : getProductStock(product) <= 5 ? 'warning' : 'success'"
+                class="absolute bottom-2 left-2 z-10 text-xs font-mono font-semibold shadow-xs backdrop-blur-md"
               >
-                <span
-                  class="w-1.5 h-1.5 rounded-full shrink-0"
-                  :class="[
-                    getProductStock(product) <= 0
-                      ? 'bg-rose-500'
-                      : getProductStock(product) <= 5
-                        ? 'bg-amber-500 animate-pulse'
-                        : 'bg-emerald-500'
-                  ]"
-                />
-                <span>{{ getProductStock(product) <= 0 ? 'Out of stock' : `${getProductStock(product)} in stock` }}</span>
-              </span>
+                <span>{{ getProductStock(product) <= 0 ? 'Out of Stock' : `${getProductStock(product)} in stock` }}</span>
+              </Badge>
             </div>
 
             <!-- Product Metadata -->
@@ -1339,9 +1324,9 @@ defineExpose({
               <div class="space-y-1">
                 <!-- Category Badge Row (Dedicated full width, no overlap) -->
                 <div class="flex items-center gap-1.5 min-h-[18px]">
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-primary/10 text-primary truncate max-w-full">
+                  <Badge variant="primary" class="text-xs font-bold uppercase tracking-wider truncate max-w-full">
                     {{ product.category?.name || 'General' }}
-                  </span>
+                  </Badge>
                 </div>
 
                 <!-- Product Name with 2-line Uniform Box -->
@@ -1612,7 +1597,7 @@ defineExpose({
                 <span class="text-xs font-bold text-foreground truncate">{{ posStore.customer.name || 'Valued Customer' }}</span>
                 <Badge
                   :variant="getTierDetails(calculateLoyalty(posStore.customer).tier).variant"
-                  class="text-[10px] px-1.5 py-0 font-semibold"
+                  class="text-xs font-mono font-semibold"
                 >
                   {{ calculateLoyalty(posStore.customer).tier }}
                 </Badge>

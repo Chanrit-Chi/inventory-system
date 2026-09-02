@@ -148,7 +148,7 @@ function close() {
           <Badge
             v-if="loyaltyStyle"
             :variant="loyaltyStyle.variant"
-            class="text-[10px] px-1.5 py-0.5 font-semibold gap-1"
+            class="text-xs font-mono font-semibold gap-1.5"
           >
             <span>{{ loyaltyStyle.icon }}</span>
             <span>{{ loyaltyStyle.label }}</span>
