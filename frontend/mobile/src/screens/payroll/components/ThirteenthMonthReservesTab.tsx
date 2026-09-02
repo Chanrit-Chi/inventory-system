@@ -81,6 +81,12 @@ export const ThirteenthMonthReservesTab: React.FC<ThirteenthMonthReservesTabProp
     )
   })
 
+  // Executive KPI summary calculations
+  const totalAvailable = data?.kpi?.company_total_available_balance ?? filteredStaff.reduce((sum, s) => sum + (s.available_balance || 0), 0)
+  const totalAccrued = data?.kpi?.company_total_accrued ?? filteredStaff.reduce((sum, s) => sum + (s.total_accrued || 0), 0)
+  const totalDisbursed = data?.kpi?.company_total_disbursed ?? filteredStaff.reduce((sum, s) => sum + (s.total_disbursed || 0), 0)
+  const staffCount = data?.kpi?.eligible_staff_count ?? filteredStaff.length
+
   return (
     <ScrollView
       style={styles.container}
@@ -88,6 +94,58 @@ export const ThirteenthMonthReservesTab: React.FC<ThirteenthMonthReservesTabProp
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[tokens.colors.primaryContainer]} />}
     >
+      {/* ── 13TH-MONTH SUMMARY KPI CARD (Scrolls naturally with list) ───────── */}
+      <View style={styles.kpiCard}>
+        <View style={styles.kpiHeaderRow}>
+          <View style={styles.kpiHeaderTitleRow}>
+            <Ionicons name="gift" size={15} color={tokens.colors.primaryContainer} />
+            <Text style={styles.kpiHeaderTitle}>13TH-MONTH RESERVE POOL</Text>
+          </View>
+          <View style={styles.kpiPeriodBadge}>
+            <Text style={styles.kpiPeriodBadgeText}>
+              {monthLabel} {yearLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Hero Available Reserve */}
+        <View style={styles.kpiHeroSection}>
+          <Text style={styles.kpiHeroLabel}>TOTAL NET AVAILABLE RESERVE</Text>
+          <Text
+            style={styles.kpiHeroValue}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
+            {formatCurrency(totalAvailable)}
+          </Text>
+        </View>
+
+        {/* 3-Column Breakdown */}
+        <View style={styles.kpiMetricsRow}>
+          <View style={styles.kpiMetricCol}>
+            <Text style={styles.kpiMetricSubLabel}>Total Accrued</Text>
+            <Text style={[styles.kpiMetricSubValue, { color: tokens.colors.statusSuccess }]}>
+              +{formatCurrency(totalAccrued)}
+            </Text>
+          </View>
+          <View style={styles.kpiMetricColDivider} />
+          <View style={styles.kpiMetricCol}>
+            <Text style={styles.kpiMetricSubLabel}>Disbursed</Text>
+            <Text style={[styles.kpiMetricSubValue, { color: '#D97706' }]}>
+              -{formatCurrency(totalDisbursed)}
+            </Text>
+          </View>
+          <View style={styles.kpiMetricColDivider} />
+          <View style={styles.kpiMetricCol}>
+            <Text style={styles.kpiMetricSubLabel}>Eligible Staff</Text>
+            <Text style={[styles.kpiMetricSubValue, { color: '#7C3AED' }]}>
+              {staffCount} Staff
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* ── TOOLBAR: SEARCH & CLICK-TO-SELECT PERIOD FILTER BUTTON ───────────── */}
       <View style={styles.toolbarContainer}>
         <View style={styles.searchRow}>
@@ -445,6 +503,97 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: tokens.spacing.md,
     paddingBottom: 40,
+  },
+  /* Summary KPI Card */
+  kpiCard: {
+    backgroundColor: tokens.colors.surfaceCard,
+    borderRadius: tokens.borderRadius.card,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    marginBottom: tokens.spacing.md,
+    ...tokens.shadows.card,
+  },
+  kpiHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  kpiHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  kpiHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: tokens.colors.primaryContainer,
+    letterSpacing: 0.5,
+  },
+  kpiPeriodBadge: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  kpiPeriodBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: tokens.colors.primaryContainer,
+  },
+  kpiHeroSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiHeroLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: tokens.colors.secondary,
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  kpiHeroValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: tokens.colors.primaryContainer,
+  },
+  kpiMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  kpiMetricColDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#CBD5E1',
+  },
+  kpiMetricSubLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: tokens.colors.secondary,
+    marginBottom: 1,
+  },
+  kpiMetricSubValue: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   /* Toolbar */
   toolbarContainer: {

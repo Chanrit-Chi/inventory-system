@@ -285,7 +285,6 @@ class PayrollCalculatorService
                 'period_month',
                 'period_year',
                 'thirteenth_month_contribution',
-                'thirteenth_month_accrual',
                 'status',
                 'total_net_pay',
                 'created_at'
@@ -295,7 +294,7 @@ class PayrollCalculatorService
             $monthlyBreakdown = [];
 
             foreach ($allPayrolls as $p) {
-                $contrib = (float) ($p->thirteenth_month_contribution ?? $p->thirteenth_month_accrual ?? 0);
+                $contrib = (float) ($p->thirteenth_month_contribution ?? 0);
                 if ($contrib > 0) {
                     $accruedMonths[] = (int) $p->period_month;
                 }
@@ -309,7 +308,7 @@ class PayrollCalculatorService
             }
 
             $totalAccrued = (float) $allPayrolls->sum(function ($p) {
-                return (float) ($p->thirteenth_month_contribution ?? $p->thirteenth_month_accrual ?? 0);
+                return (float) ($p->thirteenth_month_contribution ?? 0);
             });
             $monthsAccrued = count($accruedMonths);
             $totalDisbursed = (float) $payoutQuery->sum('amount');
@@ -320,7 +319,7 @@ class PayrollCalculatorService
             $monthSpecificAccrual = null;
             if ($month !== null) {
                 $match = $allPayrolls->firstWhere('period_month', $month);
-                $monthSpecificAccrual = $match ? (float) ($match->thirteenth_month_contribution ?? $match->thirteenth_month_accrual ?? 0) : 0.0;
+                $monthSpecificAccrual = $match ? (float) ($match->thirteenth_month_contribution ?? 0) : 0.0;
             }
 
             $companyTotalAccrued += ($month !== null ? $monthSpecificAccrual : $totalAccrued);

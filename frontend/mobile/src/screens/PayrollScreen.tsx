@@ -783,23 +783,6 @@ export default function PayrollScreen() {
         /* VIEW B: MONTHLY PAYROLL TAB */
         <>
           {/* Spacious Action, Search & Filter Toolbar */}
-          <PayrollFilterBar
-            search={searchMonthly}
-            setSearch={setSearchMonthly}
-            filterStatus={filterStatus}
-            setFilterStatus={setFilterStatus}
-            filterMonth={filterMonth}
-            setFilterMonth={setFilterMonth}
-            filterYear={filterYear}
-            setFilterYear={setFilterYear}
-            availableYears={availableYears}
-            onOpenGenerate={() => setGenerateVisible(true)}
-            onOpenSalary={openSalaryManager}
-            selectionMode={selectionMode}
-            onToggleSelectionMode={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
-            canManage={Boolean(can('payroll:manage'))}
-          />
-
           {loading && !refreshing ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color={tokens.colors.primaryContainer} />
@@ -815,6 +798,25 @@ export default function PayrollScreen() {
               removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={styles.listContent}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              ListHeaderComponent={
+                <PayrollFilterBar
+                  search={searchMonthly}
+                  setSearch={setSearchMonthly}
+                  filterStatus={filterStatus}
+                  setFilterStatus={setFilterStatus}
+                  filterMonth={filterMonth}
+                  setFilterMonth={setFilterMonth}
+                  filterYear={filterYear}
+                  setFilterYear={setFilterYear}
+                  availableYears={availableYears}
+                  onOpenGenerate={() => setGenerateVisible(true)}
+                  onOpenSalary={openSalaryManager}
+                  selectionMode={selectionMode}
+                  onToggleSelectionMode={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+                  canManage={Boolean(can('payroll:manage'))}
+                  payrolls={filteredPayrolls}
+                />
+              }
               ListEmptyComponent={
                 <View style={styles.empty}>
                   <Ionicons name="cash-outline" size={48} color={tokens.colors.outline} />

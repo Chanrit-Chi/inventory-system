@@ -8,7 +8,8 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
-import { MONTH_NAMES } from '../payrollUtils'
+import { formatCurrency, MONTH_NAMES } from '../payrollUtils'
+import type { Payroll } from '../../../types'
 import { PeriodFilterModal } from './PeriodFilterModal'
 
 export interface PayrollFilterBarProps {
@@ -26,6 +27,7 @@ export interface PayrollFilterBarProps {
   selectionMode: boolean
   onToggleSelectionMode: () => void
   canManage: boolean
+  payrolls?: Payroll[]
 }
 
 export const PayrollFilterBar: React.FC<PayrollFilterBarProps> = ({
@@ -43,16 +45,99 @@ export const PayrollFilterBar: React.FC<PayrollFilterBarProps> = ({
   selectionMode,
   onToggleSelectionMode,
   canManage,
+  payrolls = [],
 }) => {
   const [modalVisible, setModalVisible] = useState(false)
 
   const monthLabel = filterMonth === 'ALL' ? 'Full Year' : MONTH_NAMES[filterMonth - 1] || `Month ${filterMonth}`
   const yearLabel = filterYear === 'ALL' ? 'All Years' : String(filterYear)
-  const isFiltered = filterMonth !== (new Date().getMonth() + 1) || filterYear !== new Date().getFullYear() || filterStatus !== 'ALL'
+  const isFiltered = filterMonth !== 'ALL' || filterYear !== new Date().getFullYear() || filterStatus !== 'ALL'
+
+  // Monthly KPI calculations
+  const totalNet = payrolls.reduce((sum, p) => sum + (Number(p.total_net_pay) || 0), 0)
+  const totalBase = payrolls.reduce((sum, p) => sum + (Number(p.base_salary) || 0), 0)
+  const totalAdditions = payrolls.reduce(
+    (sum, p) =>
+      sum +
+      (Number(p.overtime_amount) || 0) +
+      (Number(p.performance_benefit) || 0) +
+      (Number(p.delivery_benefit) || 0) +
+      (Number(p.collective_benefit) || 0) +
+      (Number(p.other_benefits) || 0) +
+      (Number(p.incentive_override ?? p.incentive_amount) || 0),
+    0
+  )
+  const total13th = payrolls.reduce(
+    (sum, p) =>
+      sum +
+      (Number(p.thirteenth_month_contribution) ||
+        (Number(p.base_salary) || 0) / 12),
+    0
+  )
+  const staffCount = payrolls.length
 
   return (
     <View style={filterStyles.container}>
-      {/* ── ROW 1: ACTIONS ─────────────────────────────────────────────────── */}
+      {/* ── MONTHLY SUMMARY KPI CARD (Scrolls naturally with list) ─────────── */}
+      <View style={filterStyles.kpiCard}>
+        <View style={filterStyles.kpiHeaderRow}>
+          <View style={filterStyles.kpiHeaderTitleRow}>
+            <Ionicons name="briefcase" size={15} color={tokens.colors.primaryContainer} />
+            <Text style={filterStyles.kpiHeaderTitle}>TOTAL MONTHLY NET PAYROLL</Text>
+          </View>
+          <View style={filterStyles.kpiPeriodBadge}>
+            <Text style={filterStyles.kpiPeriodBadgeText}>
+              {monthLabel} {yearLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Hero Net Amount */}
+        <View style={filterStyles.kpiHeroSection}>
+          <Text style={filterStyles.kpiHeroLabel}>DISBURSED / NET PAYROLL</Text>
+          <Text
+            style={filterStyles.kpiHeroValue}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
+            {formatCurrency(totalNet)}
+          </Text>
+        </View>
+
+        {/* 3-Column Metrics Breakdown */}
+        <View style={filterStyles.kpiMetricsRow}>
+          <View style={filterStyles.kpiMetricCol}>
+            <Text style={filterStyles.kpiMetricSubLabel}>Gross Base</Text>
+            <Text style={[filterStyles.kpiMetricSubValue, { color: tokens.colors.onSurface }]}>
+              {formatCurrency(totalBase)}
+            </Text>
+          </View>
+          <View style={filterStyles.kpiMetricColDivider} />
+          <View style={filterStyles.kpiMetricCol}>
+            <Text style={filterStyles.kpiMetricSubLabel}>Incentives & OT</Text>
+            <Text style={[filterStyles.kpiMetricSubValue, { color: tokens.colors.statusSuccess }]}>
+              +{formatCurrency(totalAdditions)}
+            </Text>
+          </View>
+          <View style={filterStyles.kpiMetricColDivider} />
+          <View style={filterStyles.kpiMetricCol}>
+            <Text style={filterStyles.kpiMetricSubLabel}>13th Accrual</Text>
+            <Text style={[filterStyles.kpiMetricSubValue, { color: tokens.colors.primaryContainer }]}>
+              +{formatCurrency(total13th)}
+            </Text>
+          </View>
+          <View style={filterStyles.kpiMetricColDivider} />
+          <View style={filterStyles.kpiMetricCol}>
+            <Text style={filterStyles.kpiMetricSubLabel}>Staff</Text>
+            <Text style={[filterStyles.kpiMetricSubValue, { color: '#7C3AED' }]}>
+              {staffCount}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── ROW 1: QUICK ACTIONS ───────────────────────────────────────────── */}
       <View style={filterStyles.actionsRow}>
         {Boolean(canManage) && (
           <TouchableOpacity
@@ -160,6 +245,98 @@ const filterStyles = StyleSheet.create({
     backgroundColor: tokens.colors.background,
     gap: 8,
   },
+  /* Summary KPI Card */
+  kpiCard: {
+    backgroundColor: tokens.colors.surfaceCard,
+    borderRadius: tokens.borderRadius.card,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    marginBottom: 4,
+    ...tokens.shadows.card,
+  },
+  kpiHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  kpiHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  kpiHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: tokens.colors.primaryContainer,
+    letterSpacing: 0.5,
+  },
+  kpiPeriodBadge: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: tokens.colors.primaryFixedDim,
+  },
+  kpiPeriodBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: tokens.colors.primaryContainer,
+  },
+  kpiHeroSection: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiHeroLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: tokens.colors.secondary,
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  kpiHeroValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: tokens.colors.primaryContainer,
+  },
+  kpiMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  kpiMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  kpiMetricColDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#CBD5E1',
+  },
+  kpiMetricSubLabel: {
+    fontSize: 8.5,
+    fontWeight: '600',
+    color: tokens.colors.secondary,
+    marginBottom: 1,
+  },
+  kpiMetricSubValue: {
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  /* Actions */
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',

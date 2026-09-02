@@ -1323,36 +1323,41 @@ onMounted(async () => {
 
                 <!-- Base Salary & Accrual Rate -->
                 <TableCell class="font-mono text-xs">
-                  <div class="font-medium text-foreground">{{ formatMoney(s.base_salary) }}</div>
-                  <div class="text-3xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                    +{{ formatMoney(s.monthly_accrual) }}/mo
+                  <div class="font-semibold text-foreground">{{ formatMoney(s.base_salary) }}</div>
+                  <div class="text-[11px] text-muted-foreground flex items-center gap-1 font-normal">
+                    <span class="text-primary font-medium">+{{ formatMoney(s.monthly_accrual) }}</span>/mo
                   </div>
                 </TableCell>
 
                 <!-- Accrual Progress & 12-Month Schedule -->
-                <TableCell class="w-64">
-                  <div class="flex flex-col gap-1.5">
-                    <div class="flex items-center justify-between text-3xs font-semibold text-muted-foreground">
-                      <span>{{ s.months_accrued }} / 12 months</span>
-                      <span>{{ Math.min(100, Math.round((s.months_accrued / 12) * 100)) }}%</span>
+                <TableCell class="w-68">
+                  <div class="flex flex-col gap-1.5 py-0.5">
+                    <div class="flex items-center justify-between text-[11px]">
+                      <span class="font-medium text-foreground">
+                        {{ s.months_accrued }}<span class="text-muted-foreground">/12 months</span>
+                      </span>
+                      <span class="font-mono font-semibold text-xs text-muted-foreground">
+                        {{ Math.min(100, Math.round((s.months_accrued / 12) * 100)) }}%
+                      </span>
                     </div>
-                    <div class="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <!-- Progress Track -->
+                    <div class="h-1.5 w-full bg-muted/80 rounded-full overflow-hidden">
                       <div
                         class="h-full rounded-full transition-all duration-300"
-                        :class="s.months_accrued >= 12 ? 'bg-emerald-500' : 'bg-primary'"
+                        :class="s.months_accrued >= 12 ? 'bg-success' : 'bg-primary'"
                         :style="{ width: `${Math.min(100, Math.max(5, (s.months_accrued / 12) * 100))}%` }"
                       ></div>
                     </div>
                     <!-- 12-Month Indicator Matrix -->
-                    <div class="flex items-center gap-0.5 pt-0.5">
+                    <div class="flex items-center gap-1 pt-0.5">
                       <span
                         v-for="mIdx in 12"
                         :key="mIdx"
-                        class="text-[9px] px-1 py-0.2 rounded font-mono font-bold"
+                        class="w-4.5 h-4.5 rounded text-[10px] flex items-center justify-center font-mono font-bold transition-colors"
                         :class="s.accrued_months?.includes(mIdx)
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-muted text-muted-foreground/40'"
-                        :title="s.accrued_months?.includes(mIdx) ? `Month ${mIdx} Accrued` : `Month ${mIdx} Pending`"
+                          ? 'bg-primary text-primary-foreground shadow-2xs'
+                          : 'bg-muted/60 text-muted-foreground/50 border border-border/40'"
+                        :title="`${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mIdx - 1]}: ${s.accrued_months?.includes(mIdx) ? 'Accrued' : 'Pending'}`"
                       >
                         {{ ['J','F','M','A','M','J','J','A','S','O','N','D'][mIdx - 1] }}
                       </span>
@@ -1361,23 +1366,29 @@ onMounted(async () => {
                 </TableCell>
 
                 <!-- Accrued YTD -->
-                <TableCell class="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  +{{ formatMoney(s.total_accrued) }}
+                <TableCell class="font-mono text-xs font-semibold">
+                  <span class="text-success-text dark:text-success">+{{ formatMoney(s.total_accrued) }}</span>
                 </TableCell>
 
                 <!-- Disbursed -->
-                <TableCell class="font-mono text-xs font-semibold text-amber-600 dark:text-amber-400">
-                  <span v-if="s.total_disbursed > 0">-{{ formatMoney(s.total_disbursed) }}</span>
-                  <span v-else class="text-muted-foreground font-normal">$0.00</span>
+                <TableCell class="font-mono text-xs font-semibold">
+                  <span v-if="s.total_disbursed > 0" class="text-warning-text dark:text-warning">-{{ formatMoney(s.total_disbursed) }}</span>
+                  <span v-else class="text-muted-foreground/60 font-normal">$0.00</span>
                 </TableCell>
 
                 <!-- Available Reserve Balance -->
-                <TableCell class="font-mono text-xs font-bold text-right">
+                <TableCell class="font-mono text-right">
                   <span
-                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs"
-                    :class="s.available_balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-muted text-muted-foreground'"
+                    v-if="s.available_balance > 0"
+                    class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
                   >
                     {{ formatMoney(s.available_balance) }}
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono text-muted-foreground bg-muted/50"
+                  >
+                    $0.00
                   </span>
                 </TableCell>
 
@@ -1387,21 +1398,21 @@ onMounted(async () => {
                     <Button
                       variant="primary"
                       size="sm"
-                      class="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                      class="h-8 px-3 text-xs gap-1 font-semibold"
                       :disabled="s.available_balance <= 0"
                       @click="openStandalonePayout(s.user_id, s.available_balance)"
                     >
-                      <DollarSign :size="12" />
+                      <DollarSign :size="13" />
                       <span>Disburse Payout</span>
                     </Button>
 
                     <Button
                       variant="outline"
                       size="sm"
-                      class="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground font-medium"
+                      class="h-8 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground font-medium"
                       @click="openStaffHistory(s)"
                     >
-                      <History :size="12" />
+                      <History :size="13" />
                       <span>History ({{ s.payouts?.length || 0 }})</span>
                     </Button>
                   </div>
