@@ -995,16 +995,17 @@ onMounted(async () => {
                       {{ getStaffName(p).slice(0, 2).toUpperCase() }}
                     </div>
                     <div>
-                      <div class="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                        <span>{{ getStaffName(p) }}</span>
-                        <span v-if="p.user?.is_on_probation" class="inline-flex items-center px-1.5 py-0.5 rounded text-4xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                          Probation
-                        </span>
-                      </div>
-                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
+                      <div class="font-semibold text-xs text-foreground">{{ getStaffName(p) }}</div>
+                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
                         <span>{{ getStaffRole(p) }}</span>
                         <span>•</span>
                         <span>{{ getStaffDept(p) }}</span>
+                        <template v-if="p.user?.is_on_probation">
+                          <span>•</span>
+                          <Badge variant="warning" class="text-[9.5px] px-1.5 py-0 font-medium leading-tight">
+                            Probation
+                          </Badge>
+                        </template>
                       </div>
                     </div>
                   </div>
@@ -1316,16 +1317,17 @@ onMounted(async () => {
                       {{ (s.name || 'S').slice(0, 2).toUpperCase() }}
                     </div>
                     <div>
-                      <div class="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                        <span>{{ s.name }}</span>
-                        <span v-if="s.is_on_probation" class="inline-flex items-center px-1.5 py-0.5 rounded text-4xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                          Probation (Mo {{ Math.min(3, (s.seniority_months ?? 0) + 1) }}/3)
-                        </span>
-                      </div>
-                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5">
+                      <div class="font-semibold text-xs text-foreground">{{ s.name }}</div>
+                      <div class="text-3xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
                         <span class="font-medium text-primary">{{ s.role }}</span>
                         <span>•</span>
                         <span>{{ s.department || 'General' }}</span>
+                        <template v-if="s.is_on_probation">
+                          <span>•</span>
+                          <Badge variant="warning" class="text-[9.5px] px-1.5 py-0 font-medium leading-tight">
+                            Probation (Mo {{ Math.min(3, (s.seniority_months ?? 0) + 1) }}/3)
+                          </Badge>
+                        </template>
                       </div>
                     </div>
                   </div>
