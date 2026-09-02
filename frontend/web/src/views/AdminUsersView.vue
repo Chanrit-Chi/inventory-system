@@ -1280,15 +1280,16 @@ onMounted(() => {
             <div class="flex items-center gap-2 pt-1">
               <span class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Default Role Capabilities:</span>
             </div>
-            <div class="flex flex-wrap gap-1.5">
-              <span
+            <div class="flex flex-wrap gap-2">
+              <Badge
                 v-for="perm in group.permissions"
                 :key="perm"
-                class="px-2.5 py-1 rounded-md bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-200 border border-sky-300 dark:border-sky-700 text-xs font-mono font-semibold flex items-center gap-1.5 shadow-2xs"
+                variant="info"
+                class="text-xs font-mono"
               >
-                <ShieldCheck :size="12" class="text-sky-700 dark:text-sky-400" />
+                <ShieldCheck :size="12" />
                 <span>{{ perm }}</span>
-              </span>
+              </Badge>
             </div>
           </div>
         </div>

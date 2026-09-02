@@ -659,30 +659,30 @@ onMounted(loadData)
                     {{ formatPermissionTitle(p) }}
                   </span>
 
-                  <!-- Origin Status Badge -->
+                  <!-- Origin Status Badge (Styled same as Inventory Ledger Stock Movement Types) -->
                   <template v-if="getOriginInfo(p.slug).type === 'SUPER_ADMIN_LOCKED'">
-                    <span class="font-mono text-[10.5px] px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-semibold shadow-2xs">
-                      <Lock :size="11" class="text-slate-600 dark:text-slate-400" />
+                    <Badge variant="neutral" class="text-xs font-mono">
+                      <Lock :size="12" />
                       <span>Role Baseline (Locked)</span>
-                    </span>
+                    </Badge>
                   </template>
                   <template v-else-if="getOriginInfo(p.slug).type === 'ROLE_DEFAULT'">
-                    <span class="font-mono text-[10.5px] px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-200 border border-sky-300 dark:border-sky-700 font-semibold shadow-2xs">
-                      <ShieldCheck :size="11" class="text-sky-700 dark:text-sky-400" />
+                    <Badge variant="info" class="text-xs font-mono">
+                      <ShieldCheck :size="12" />
                       <span>Role Default</span>
-                    </span>
+                    </Badge>
                   </template>
                   <template v-else-if="getOriginInfo(p.slug).type === 'CUSTOM_ADDED'">
-                    <span class="font-mono text-[10.5px] px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-950 dark:bg-emerald-950/60 dark:text-emerald-200 border border-emerald-400 dark:border-emerald-600 font-bold shadow-2xs">
-                      <Sparkles :size="11" class="text-emerald-700 dark:text-emerald-400" />
+                    <Badge variant="success" class="text-xs font-mono font-bold">
+                      <Sparkles :size="12" />
                       <span>+ Custom Added</span>
-                    </span>
+                    </Badge>
                   </template>
                   <template v-else-if="getOriginInfo(p.slug).type === 'BASELINE_REMOVED'">
-                    <span class="font-mono text-[10.5px] px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 bg-amber-100 text-amber-950 dark:bg-amber-950/60 dark:text-amber-200 border border-amber-400 dark:border-amber-600 font-bold shadow-2xs">
-                      <ShieldAlert :size="11" class="text-amber-700 dark:text-amber-400" />
+                    <Badge variant="warning" class="text-xs font-mono font-bold">
+                      <ShieldAlert :size="12" />
                       <span>- Baseline Removed</span>
-                    </span>
+                    </Badge>
                   </template>
                 </div>
                 <span class="text-[11px] text-muted-foreground truncate leading-tight">
