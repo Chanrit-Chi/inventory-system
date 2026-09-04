@@ -27,6 +27,7 @@ import {
   deleteCategory,
   fetchAttributes,
   createAttribute,
+  updateAttribute,
   deleteAttribute,
 } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
@@ -62,11 +63,34 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
   // Attribute Modal
   const [attrModalOpen, setAttrModalOpen] = useState(false)
   const [editingAttr, setEditingAttr] = useState<AttributeTaxonomy | null>(null)
+  const [attrValuesList, setAttrValuesList] = useState<string[]>([])
+  const [attrInputValue, setAttrInputValue] = useState('')
   
   const { control: attrControl, handleSubmit: handleAttrSubmit, reset: resetAttr } = useForm<AttributeFormValues>({
     resolver: zodResolver(attributeSchema),
     defaultValues: { name: '', code: '', values: '' },
   })
+
+  const handleAddChip = (text?: string) => {
+    const raw = (text !== undefined ? text : attrInputValue).trim()
+    if (!raw) return
+
+    const parts = raw.split(',').map((p) => p.trim()).filter((p) => p.length > 0)
+    setAttrValuesList((prev) => {
+      const next = [...prev]
+      for (const part of parts) {
+        if (!next.some((item) => item.toLowerCase() === part.toLowerCase())) {
+          next.push(part)
+        }
+      }
+      return next
+    })
+    setAttrInputValue('')
+  }
+
+  const handleRemoveChip = (index: number) => {
+    setAttrValuesList((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -265,6 +289,8 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
   const handleOpenAddAttribute = () => {
     setEditingAttr(null)
     resetAttr({ name: '', code: '', values: '' })
+    setAttrValuesList([])
+    setAttrInputValue('')
     setAttrModalOpen(true)
   }
 
@@ -275,11 +301,27 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
       code: attr.code || '',
       values: attr.values.join(', '),
     })
+    setAttrValuesList([...attr.values])
+    setAttrInputValue('')
     setAttrModalOpen(true)
   }
 
   const onSubmitAttribute = async (data: AttributeFormValues) => {
-    const rawValues = data.values.split(',').map((v) => v.trim()).filter((v) => v.length > 0)
+    let finalValues = [...attrValuesList]
+    if (attrInputValue.trim()) {
+      const parts = attrInputValue.trim().split(',').map((p) => p.trim()).filter((p) => p.length > 0)
+      for (const part of parts) {
+        if (!finalValues.some((item) => item.toLowerCase() === part.toLowerCase())) {
+          finalValues.push(part)
+        }
+      }
+    }
+
+    if (finalValues.length === 0) {
+      showToast('Please add at least one preset value.', 'warning')
+      return
+    }
+
     const code = data.code?.trim() || data.name.substring(0, 3).toUpperCase()
 
     if (editingAttr) {
@@ -287,21 +329,33 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
         ...editingAttr,
         name: data.name.trim(),
         code,
-        values: rawValues,
+        values: finalValues,
       }
       setAttributes(attributes.map((a) => (a.id === editingAttr.id ? updated : a)))
+      try {
+        await updateAttribute(editingAttr.id, {
+          name: data.name.trim(),
+          code,
+          values: finalValues,
+        })
+      } catch {
+        // Fallback optimistic
+      }
       showToast(`Attribute "${data.name}" updated.`, 'success')
     } else {
       const newAttr: AttributeTaxonomy = {
         id: `tax-${Date.now()}`,
         name: data.name.trim(),
         code,
-        values: rawValues,
+        values: finalValues,
         productCount: 0,
       }
       setAttributes([...attributes, newAttr])
       try {
-        await createAttribute({ name: data.name.trim(), code, values: rawValues })
+        const res = await createAttribute({ name: data.name.trim(), code, values: finalValues })
+        if (res?.data?.id) {
+          newAttr.id = res.data.id
+        }
       } catch {
         // Fallback optimistic
       }
@@ -664,17 +718,62 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
                 placeholder="e.g. SIZE, CLR, WST"
               />
 
-              <ControlledInput
-                name="values"
-                control={attrControl}
-                label="Preset Values * (Comma separated)"
-                placeholder="e.g. S, M, L, XL, 2XL or Black, White, Navy"
-                inputProps={{
-                  multiline: true,
-                  numberOfLines: 3,
-                  style: styles.multilineInput,
-                }}
-              />
+              {/* Interactive Preset Values Tag/Chip Builder */}
+              <View style={styles.chipSection}>
+                <View style={styles.chipHeaderRow}>
+                  <Text style={styles.formLabel}>Preset Values *</Text>
+                  <Text style={styles.chipCountLabel}>{attrValuesList.length} value(s)</Text>
+                </View>
+
+                {/* Chips Container */}
+                {attrValuesList.length > 0 ? (
+                  <View style={styles.tagWrapContainer}>
+                    {attrValuesList.map((val, idx) => (
+                      <View key={idx} style={styles.removableChip}>
+                        <Ionicons name="pricetag-outline" size={11} color={tokens.colors.primaryContainer} />
+                        <Text style={styles.removableChipText} numberOfLines={1}>{val}</Text>
+                        <TouchableOpacity
+                          onPress={() => handleRemoveChip(idx)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          style={styles.chipRemoveBtn}
+                        >
+                          <Ionicons name="close-circle" size={15} color={tokens.colors.secondary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Add Input Row */}
+                <View style={styles.chipInputRow}>
+                  <TextInput
+                    style={styles.chipTextInput}
+                    placeholder="Type value (e.g. S, M, L or Red, Blue)..."
+                    placeholderTextColor={tokens.colors.textMuted}
+                    value={attrInputValue}
+                    onChangeText={(text) => {
+                      if (text.includes(',')) {
+                        handleAddChip(text)
+                      } else {
+                        setAttrInputValue(text)
+                      }
+                    }}
+                    onSubmitEditing={() => handleAddChip()}
+                    returnKeyType="done"
+                  />
+                  <TouchableOpacity
+                    style={[styles.addChipBtn, !attrInputValue.trim() && styles.addChipBtnDisabled]}
+                    onPress={() => handleAddChip()}
+                    disabled={!attrInputValue.trim()}
+                  >
+                    <Ionicons name="add" size={18} color={attrInputValue.trim() ? tokens.colors.onPrimary : tokens.colors.secondary} />
+                    <Text style={[styles.addChipBtnText, !attrInputValue.trim() && { color: tokens.colors.secondary }]}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.chipHelperText}>
+                  Type and tap Add or comma. You can also paste comma-separated lists.
+                </Text>
+              </View>
 
               <TouchableOpacity style={styles.submitBtn} onPress={handleAttrSubmit(onSubmitAttribute)}>
                 <Text style={styles.submitBtnText}>{editingAttr ? 'Save Attribute' : 'Create Attribute'}</Text>
@@ -1022,6 +1121,91 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: tokens.colors.statusError,
+  },
+  chipSection: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  chipHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  chipCountLabel: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+    fontFamily: tokens.fonts.medium,
+  },
+  tagWrapContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    padding: 8,
+    backgroundColor: tokens.colors.surfaceMuted,
+    borderRadius: tokens.borderRadius.input,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+  },
+  removableChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    borderRadius: tokens.borderRadius.pill,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  removableChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: tokens.colors.onBackground,
+    maxWidth: 120,
+  },
+  chipRemoveBtn: {
+    padding: 2,
+    marginLeft: 2,
+  },
+  chipInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  chipTextInput: {
+    flex: 1,
+    backgroundColor: tokens.colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    borderRadius: tokens.borderRadius.input,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: tokens.colors.onBackground,
+  },
+  addChipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.primaryContainer,
+    borderRadius: tokens.borderRadius.input,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  addChipBtnDisabled: {
+    backgroundColor: tokens.colors.surfaceMuted,
+  },
+  addChipBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.onPrimary,
+  },
+  chipHelperText: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+    marginTop: 4,
   },
 })
 

@@ -161,14 +161,24 @@ const cameraVideoRef = ref<HTMLVideoElement | null>(null)
 const lastScannedCode = ref('')
 const isCameraSupported = computed(() => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
 
-const barcodeInputRef = ref<HTMLInputElement | null>(null)
+const barcodeInputRef = ref<any>(null)
+
+function focusBarcodeInput() {
+  const el = barcodeInputRef.value as any
+  if (!el) return
+  if (typeof el.focus === 'function') {
+    el.focus()
+  } else if (el.$el?.querySelector) {
+    el.$el.querySelector('input')?.focus()
+  }
+}
 
 watch(
   () => showScannerInput.value,
   (open) => {
     if (open) {
       barcodeInput.value = ''
-      nextTick(() => barcodeInputRef.value?.focus())
+      nextTick(() => focusBarcodeInput())
     } else {
       stopCameraScanner()
     }
@@ -358,7 +368,7 @@ function handleOpenScannerPrompt() {
   barcodeInput.value = ''
   showScannerInput.value = true
   nextTick(() => {
-    barcodeInputRef.value?.focus()
+    focusBarcodeInput()
   })
 }
 
@@ -444,7 +454,7 @@ async function handleContinuousScanSubmit() {
 
   // Keep input focused continuously for subsequent scans
   nextTick(() => {
-    barcodeInputRef.value?.focus()
+    focusBarcodeInput()
   })
 }
 

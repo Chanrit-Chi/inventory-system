@@ -153,6 +153,70 @@ class AuthBoundaryAndConcurrencyTest extends TestCase
         $this->withToken($token2)->getJson('/api/v1/auth/me')->assertStatus(200);
     }
 
+    public function test_concurrent_web_logins_with_distinct_device_identifiers_coexist_without_session_revocation(): void
+    {
+        // Terminal 1: Cashier on Chrome Web Terminal
+        $res1 = $this->postJson('/api/v1/auth/login', [
+            'email'       => 'cashier@pos.test',
+            'password'    => 'CashierSecret123!',
+            'device_name' => 'Web-Chrome (ABC123)',
+        ]);
+        $res1->assertStatus(200);
+        $token1 = $res1->json('data.token');
+
+        // Terminal 2: Second Cashier on Firefox Web Terminal using same cashier account
+        $res2 = $this->postJson('/api/v1/auth/login', [
+            'email'       => 'cashier@pos.test',
+            'password'    => 'CashierSecret123!',
+            'device_name' => 'Web-Firefox (XYZ789)',
+        ]);
+        $res2->assertStatus(200);
+        $token2 = $res2->json('data.token');
+
+        // Both tokens are distinct and coexist
+        $this->assertNotEquals($token1, $token2);
+        $this->assertEquals(2, $this->cashier->tokens()->count());
+
+        // Terminal 1 token is still valid (not expired/revoked)
+        $this->resetAuthGuards();
+        $this->withToken($token1)->getJson('/api/v1/auth/me')->assertStatus(200);
+
+        // Terminal 2 token is valid
+        $this->resetAuthGuards();
+        $this->withToken($token2)->getJson('/api/v1/auth/me')->assertStatus(200);
+    }
+
+    public function test_login_without_device_name_does_not_revoke_other_sessions(): void
+    {
+        // Login 1 without device name
+        $res1 = $this->postJson('/api/v1/auth/login', [
+            'email'    => 'cashier@pos.test',
+            'password' => 'CashierSecret123!',
+        ]);
+        $res1->assertStatus(200);
+        $token1 = $res1->json('data.token');
+
+        // Login 2 without device name
+        $res2 = $this->postJson('/api/v1/auth/login', [
+            'email'    => 'cashier@pos.test',
+            'password' => 'CashierSecret123!',
+        ]);
+        $res2->assertStatus(200);
+        $token2 = $res2->json('data.token');
+
+        // Both tokens coexist
+        $this->assertNotEquals($token1, $token2);
+        $this->assertEquals(2, $this->cashier->tokens()->count());
+
+        // Login 1 is still authenticated
+        $this->resetAuthGuards();
+        $this->withToken($token1)->getJson('/api/v1/auth/me')->assertStatus(200);
+
+        // Login 2 is still authenticated
+        $this->resetAuthGuards();
+        $this->withToken($token2)->getJson('/api/v1/auth/me')->assertStatus(200);
+    }
+
     public function test_single_device_logout_only_invalidates_calling_device_token(): void
     {
         // Login Device A and Device B

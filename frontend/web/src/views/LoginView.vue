@@ -73,8 +73,8 @@ const tagline = computed(() => brandingStore.branding.tagline || 'High-Velocity 
   <div class="min-h-screen bg-background flex flex-col items-center justify-center p-4 selection:bg-cta/20 selection:text-foreground">
     <!-- Brand Header -->
     <div class="w-full max-w-md flex flex-col items-center mb-6 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-card border border-border/80 shadow-md p-2 flex items-center justify-center mb-3">
-        <img :src="logoUrl" :alt="`${storeName} Logo`" class="max-h-full max-w-full object-contain" />
+      <div class="w-16 h-16 rounded-2xl bg-card border border-border/80 shadow-md p-1 flex items-center justify-center mb-3">
+        <img :src="logoUrl" :alt="`${storeName} Logo`" class="w-full h-full object-contain" />
       </div>
       <h1 class="font-display text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{{ storeName }}</h1>
       <p class="text-xs text-muted-foreground mt-0.5">{{ tagline }}</p>

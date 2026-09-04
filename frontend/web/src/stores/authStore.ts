@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api, { ApiError } from '@/api/axios'
+import { getDeviceIdentifier } from '@/utils/device'
 
 export interface User {
   id: string
@@ -46,10 +47,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Login
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string, deviceName?: string) {
     isLoading.value = true
     try {
-      const res = await api.post('/auth/login', { email, password })
+      const resolvedDeviceName = deviceName || getDeviceIdentifier()
+      const res = await api.post('/auth/login', {
+        email,
+        password,
+        device_name: resolvedDeviceName,
+      })
       const payload = res.data?.data || res.data
 
       const authToken = payload?.token
@@ -96,8 +102,16 @@ export const useAuthStore = defineStore('auth', () => {
     initialized.value = false
   }
 
-  function handleSessionExpired() {
-    logout()
+  async function handleSessionExpired() {
+    await logout()
+    try {
+      const { router } = await import('@/router')
+      if (router.currentRoute.value.name !== 'login') {
+        router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+      }
+    } catch {
+      // Ignore in non-router/unit test environment
+    }
   }
 
   // Refresh user from API (optional)

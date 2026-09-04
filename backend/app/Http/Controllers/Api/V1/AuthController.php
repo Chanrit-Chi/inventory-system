@@ -42,11 +42,17 @@ class AuthController extends BaseApiController
 
         // Determine device/client token name and IP
         $rawDevice = trim((string) $request->input('device_name', ''));
-        $deviceName = $rawDevice !== '' ? $rawDevice : 'mobile';
         $ip = $request->ip() ?: '127.0.0.1';
 
-        // Clean up previous tokens for this specific device name to prevent token bloat
-        $user->tokens()->where('name', $deviceName)->delete();
+        if ($rawDevice !== '') {
+            $deviceName = $rawDevice;
+            // Clean up previous tokens for this specific device name to prevent token bloat
+            $user->tokens()->where('name', $deviceName)->delete();
+        } else {
+            // If no device identifier is supplied, generate a unique session/client identifier
+            // so concurrent logins (e.g. across multiple web browsers, tabs, or staff members) do not revoke each other
+            $deviceName = 'client-' . \Illuminate\Support\Str::random(8);
+        }
 
         // Create new Bearer token with full access abilities and client IP recorded
         $token = $user->createToken($deviceName, ['*', 'ip:' . $ip])->plainTextToken;

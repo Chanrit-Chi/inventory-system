@@ -534,21 +534,21 @@ function handleLogout() {
 }
 
 .sidebar-brand-logo-wrap {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--color-primary, #924C00) 0%, var(--color-cta, #FF8800) 100%);
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(146, 76, 0, 0.25);
+  box-shadow: none;
   overflow: hidden;
 }
 
 .sidebar-brand-logo-img {
-  width: 24px;
-  height: 24px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

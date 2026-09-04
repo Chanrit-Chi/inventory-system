@@ -160,13 +160,16 @@ async function runImport() {
 
 // ── Column guide per tab ───────────────────────────────────────────────────────
 const productColumns = [
-  { name: 'name', required: true, note: 'Primary product name' },
-  { name: 'sku', required: false, note: 'Unique SKU code (auto-generated if omitted)' },
-  { name: 'barcode', required: false, note: 'EAN / UPC / Code128 barcode number' },
+  { name: 'name', required: true, note: 'Primary product name (grouping key for variable products)' },
+  { name: 'sku', required: false, note: 'Variant unique SKU (auto-generated if omitted)' },
+  { name: 'barcode', required: false, note: 'Variant EAN / UPC / Code128 barcode number' },
+  { name: 'variant_name', required: false, note: 'Variant / Variable name (e.g. "Red / M", "Large"). Default: "Standard"' },
+  { name: 'attributes', required: false, note: 'Variant attributes formatted as "Key: Value | Key: Value" (e.g. "Color: Red | Size: M")' },
+  { name: 'parent_sku', required: false, note: 'Parent product identifier to group variable rows together' },
   { name: 'category', required: false, note: 'Category name (auto-created if new)' },
   { name: 'purchase_price', required: true, note: 'Unit cost / acquisition price ($)' },
   { name: 'selling_price', required: true, note: 'Default retail selling price ($)' },
-  { name: 'quantity', required: false, note: 'Initial opening stock ledger (default: 0)' },
+  { name: 'quantity', required: false, note: 'Initial opening stock ledger for this variant (default: 0)' },
   { name: 'reorder_level', required: false, note: 'Low stock alert threshold (default: 5)' },
   { name: 'description', required: false, note: 'Product description notes' },
   { name: 'is_active', required: false, note: '1 = Active, 0 = Inactive (default: 1)' },
@@ -201,14 +204,17 @@ const currentColumns = computed(() => (activeTab.value === 'products' ? productC
           <Upload :size="20" />
         </div>
         <div>
-          <div class="flex items-center gap-2.5">
+          <div class="flex items-center gap-2.5 flex-wrap">
             <h1 class="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Data Import Engine</h1>
             <Badge variant="default" class="text-xs px-2.5 py-0.5 font-medium">
               Excel / CSV
             </Badge>
+            <Badge variant="success" dot class="text-xs px-2.5 py-0.5 font-semibold">
+              Simple &amp; Variable Products
+            </Badge>
           </div>
           <p class="text-muted-foreground text-sm mt-0.5">
-            Bulk migrate master products, catalog matrices, and historical sales transactions from spreadsheets.
+            Bulk migrate master products, variable catalog matrices, and historical sales transactions from spreadsheets.
           </p>
         </div>
       </div>
@@ -276,7 +282,7 @@ const currentColumns = computed(() => (activeTab.value === 'products' ? productC
                   </h3>
                   <p class="text-xs text-muted-foreground mt-1 leading-relaxed">
                     <template v-if="activeTab === 'products'">
-                      Each spreadsheet row creates one master catalog product with initial opening stock ledger. Matching SKUs or barcodes will be updated or deduplicated based on your configuration.
+                      <strong>Supports Simple &amp; Variable Products:</strong> Multiple rows sharing the same <code class="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground font-semibold">name</code> or <code class="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground font-semibold">parent_sku</code> are automatically merged into a single master product with multiple variants. Use <code class="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground font-semibold">variant_name</code> and <code class="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground font-semibold">attributes</code> (e.g. <span class="font-mono text-[11px] text-foreground font-medium">Color: Red | Size: M</span>) to auto-generate variant attributes and stock matrices.
                     </template>
                     <template v-else>
                       Rows sharing the same <code class="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground font-semibold">order_number</code> are grouped into a single multi-item sales order. Historical import records transaction revenue without deducting current live inventory.
@@ -541,12 +547,12 @@ const currentColumns = computed(() => (activeTab.value === 'products' ? productC
           </CardContent>
 
           <!-- Tip Box in Footer -->
-          <div class="p-4 border-t border-border bg-[#FFF9F2] flex items-start gap-2.5">
-            <div class="p-1 rounded-md bg-[#FFF3E0] text-[#924C00] shrink-0 mt-0.5">
+          <div class="p-4 border-t border-border bg-surface-subtle dark:bg-surface-muted/60 flex items-start gap-2.5">
+            <div class="p-1.5 rounded-lg bg-cta-muted text-primary border border-border-strong shrink-0 mt-0.5">
               <Info :size="14" />
             </div>
-            <p class="text-xs text-[#924C00] leading-relaxed">
-              <strong>Best Practice:</strong> Download the pre-formatted Excel template above. It contains header validations and sample records.
+            <p class="text-xs text-muted-foreground leading-relaxed">
+              <strong class="text-foreground font-semibold">Best Practice:</strong> Download the pre-formatted Excel template above. It contains header validations and sample records.
             </p>
           </div>
         </Card>

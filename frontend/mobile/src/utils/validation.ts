@@ -79,7 +79,7 @@ export type CategoryFormValues = z.infer<typeof categorySchema>
 export const attributeSchema = z.object({
   name: z.string().min(1, 'Attribute name is required'),
   code: z.string().optional().or(z.literal('')),
-  values: z.string().min(1, 'At least one value is required (comma separated)'),
+  values: z.string().optional().or(z.literal('')),
 })
 export type AttributeFormValues = z.infer<typeof attributeSchema>
 

@@ -57,6 +57,69 @@ class AttributeController extends BaseApiController
     }
 
     /**
+     * PATCH /api/v1/attributes/{id}
+     */
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $attribute = Attribute::findOrFail($id);
+
+        $validated = $request->validate([
+            'name'      => ['sometimes', 'required', 'string', 'max:50', 'unique:attributes,name,' . $attribute->id],
+            'is_active' => ['boolean'],
+            'values'    => ['nullable', 'array'],
+            'values.*'  => ['string', 'max:50'],
+        ]);
+
+        if (array_key_exists('name', $validated)) {
+            $attribute->name = $validated['name'];
+        }
+        if (array_key_exists('is_active', $validated)) {
+            $attribute->is_active = $validated['is_active'];
+        }
+        $attribute->save();
+
+        if (array_key_exists('values', $validated)) {
+            $submittedValues = array_values(array_unique(array_filter(array_map('trim', $validated['values'] ?? []))));
+
+            // Sync values:
+            $currentValues = $attribute->values()->get();
+            $currentMap = $currentValues->keyBy('value_name');
+
+            $keptIds = [];
+            foreach ($submittedValues as $valName) {
+                if ($currentMap->has($valName)) {
+                    $valModel = $currentMap->get($valName);
+                    if (!$valModel->is_active) {
+                        $valModel->update(['is_active' => true]);
+                    }
+                    $keptIds[] = $valModel->id;
+                } else {
+                    $newVal = AttributeValue::create([
+                        'attribute_id' => $attribute->id,
+                        'value_name'   => $valName,
+                        'is_active'    => true,
+                    ]);
+                    $keptIds[] = $newVal->id;
+                }
+            }
+
+            // Remove or deactivate values omitted from update
+            foreach ($currentValues as $existingVal) {
+                if (!in_array($existingVal->id, $keptIds)) {
+                    $isBound = \App\Models\VariantAttributeValue::where('attribute_value_id', $existingVal->id)->exists();
+                    if (!$isBound) {
+                        $existingVal->delete();
+                    } else {
+                        $existingVal->update(['is_active' => false]);
+                    }
+                }
+            }
+        }
+
+        return $this->successResponse($attribute->fresh(['values' => fn ($q) => $q->where('is_active', true)]), 'Attribute updated successfully.');
+    }
+
+    /**
      * DELETE /api/v1/attributes/{id}
      */
     public function destroy(string $id): JsonResponse

@@ -37,8 +37,12 @@ class ImportService
     /**
      * Import products from an XLSX/CSV file.
      *
-     * Each row creates one simple product + one default variant.
-     * If `quantity` > 0, an opening RESTOCK stock movement is recorded.
+     * Supports both Simple and Variable products:
+     * - Rows sharing the same `name` or `parent_sku` are grouped into a single master product
+     *   with multiple variants.
+     * - Columns `variant_name` (or `variant`, `variable`) and `attributes` (e.g. "Color: Red | Size: M")
+     *   are parsed, auto-creating attributes and linking them to variants.
+     * - If `quantity` > 0, an opening RESTOCK stock movement is recorded for each variant.
      *
      * @return array{ imported: int, updated: int, skipped: int, errors: array }
      */
@@ -47,9 +51,12 @@ class ImportService
         $rows   = $this->readSheet($file);
         $result = ['imported' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
 
-        // Expected headers (case-insensitive, trimmed)
-        $required = ['name', 'purchase_price', 'selling_price'];
+        if (empty($rows)) {
+            return $result;
+        }
 
+        // Group rows by parent product (by parent_sku or product name)
+        $productGroups = [];
         foreach ($rows as $rowIndex => $row) {
             $lineNum = $rowIndex + 2; // 1-indexed, +1 for header row
 
@@ -58,23 +65,64 @@ class ImportService
                 continue;
             }
 
-            // Validate required columns
-            $missing = [];
-            foreach ($required as $col) {
-                if (!isset($row[$col]) || $row[$col] === null || $row[$col] === '') {
-                    $missing[] = $col;
-                }
+            $name      = trim((string) ($row['name'] ?? $row['product_name'] ?? ''));
+            $parentSku = trim((string) ($row['parent_sku'] ?? ''));
+
+            if ($name === '' && $parentSku === '') {
+                $result['errors'][] = ['row' => $lineNum, 'message' => 'Missing required product name or parent_sku.'];
+                $result['skipped']++;
+                continue;
             }
-            if (!empty($missing)) {
-                $result['errors'][] = ['row' => $lineNum, 'message' => 'Missing required columns: ' . implode(', ', $missing)];
+
+            // Fallback selling and purchase price check
+            $purchasePrice = $row['purchase_price'] ?? $row['cost_price'] ?? null;
+            $sellingPrice  = $row['selling_price'] ?? null;
+
+            if (($purchasePrice === null || $purchasePrice === '') && ($sellingPrice === null || $sellingPrice === '')) {
+                // If this is a subsequent variant row with same parent, it may inherit parent's price,
+                // otherwise it's missing pricing
+            }
+
+            // Grouping key: parent_sku takes precedence, otherwise name
+            $groupKey = $parentSku !== ''
+                ? 'psku:' . strtolower($parentSku)
+                : 'name:' . strtolower($name);
+
+            if (!isset($productGroups[$groupKey])) {
+                $productGroups[$groupKey] = [
+                    'name'       => $name,
+                    'parent_sku' => $parentSku,
+                    'meta'       => $row,
+                    'items'      => [],
+                    'lines'      => [],
+                ];
+            } elseif ($productGroups[$groupKey]['name'] === '' && $name !== '') {
+                $productGroups[$groupKey]['name'] = $name;
+            }
+
+            $productGroups[$groupKey]['items'][] = $row;
+            $productGroups[$groupKey]['lines'][] = $lineNum;
+        }
+
+        // Process each product group
+        foreach ($productGroups as $groupKey => $group) {
+            $firstLine = $group['lines'][0];
+
+            // Validate that we have prices either at group meta or per row
+            $meta = $group['meta'];
+            $defaultPurchase = $meta['purchase_price'] ?? $meta['cost_price'] ?? null;
+            $defaultSelling  = $meta['selling_price'] ?? null;
+
+            if (($defaultPurchase === null || $defaultPurchase === '') && ($defaultSelling === null || $defaultSelling === '')) {
+                $result['errors'][] = ['row' => $firstLine, 'message' => "Missing required price columns (purchase_price, selling_price) for product \"{$group['name']}\"."];
                 $result['skipped']++;
                 continue;
             }
 
             try {
-                $this->processProductRow($row, $lineNum, $actor, $updateExisting, $result);
+                $this->processProductGroup($group, $actor, $updateExisting, $result);
             } catch (\Throwable $e) {
-                $result['errors'][] = ['row' => $lineNum, 'message' => $e->getMessage()];
+                $result['errors'][] = ['row' => $firstLine, 'message' => $e->getMessage()];
                 $result['skipped']++;
             }
         }
@@ -82,64 +130,79 @@ class ImportService
         return $result;
     }
 
-    private function processProductRow(array $row, int $lineNum, User $actor, bool $updateExisting, array &$result): void
+    private function processProductGroup(array $group, User $actor, bool $updateExisting, array &$result): void
     {
-        $name         = trim((string) $row['name']);
-        $sku          = isset($row['sku']) && $row['sku'] !== '' ? trim((string) $row['sku']) : null;
-        $barcode      = isset($row['barcode']) && $row['barcode'] !== '' ? trim((string) $row['barcode']) : null;
-        $purchasePrice = (float) ($row['purchase_price'] ?? 0);
-        $sellingPrice  = (float) ($row['selling_price'] ?? 0);
-        $quantity      = (int) ($row['quantity'] ?? 0);
-        $reorderLevel  = isset($row['reorder_level']) && $row['reorder_level'] !== '' ? (int) $row['reorder_level'] : 5;
-        $description  = isset($row['description']) && $row['description'] !== '' ? trim((string) $row['description']) : null;
-        $isActive     = isset($row['is_active']) && $row['is_active'] !== '' ? filter_var($row['is_active'], FILTER_VALIDATE_BOOLEAN) : true;
-        $categoryName = isset($row['category']) && $row['category'] !== '' ? trim((string) $row['category']) : null;
+        $meta      = $group['meta'];
+        $items     = $group['items'];
+        $lines     = $group['lines'];
+        $firstLine = $lines[0];
 
-        // Resolve or create category — generate a unique slug code to satisfy NOT NULL unique constraint
-        $categoryId = null;
-        if ($categoryName) {
-            $baseCode = Str::slug($categoryName);
-            $code     = $baseCode;
-            $attempt  = 1;
-            while (ProductCategory::where('code', $code)->exists()) {
-                // name already exists with a different code — just fetch by name
-                $existing = ProductCategory::where('name', $categoryName)->first();
-                if ($existing) {
-                    $categoryId = $existing->id;
-                    break;
-                }
-                $code = $baseCode . '-' . $attempt++;
+        $name          = trim((string) ($group['name'] !== '' ? $group['name'] : ($meta['name'] ?? $meta['product_name'] ?? '')));
+        $parentSku     = $group['parent_sku'] !== '' ? $group['parent_sku'] : null;
+        $categoryName  = isset($meta['category']) && $meta['category'] !== '' ? trim((string) $meta['category']) : null;
+        $purchasePrice = (float) ($meta['purchase_price'] ?? $meta['cost_price'] ?? 0);
+        $sellingPrice  = (float) ($meta['selling_price'] ?? 0);
+        $reorderLevel  = isset($meta['reorder_level']) && $meta['reorder_level'] !== '' ? (int) $meta['reorder_level'] : 5;
+        $description   = isset($meta['description']) && $meta['description'] !== '' ? trim((string) $meta['description']) : null;
+        $isActive      = isset($meta['is_active']) && $meta['is_active'] !== '' ? filter_var($meta['is_active'], FILTER_VALIDATE_BOOLEAN) : true;
+        $productBarcode= isset($meta['barcode']) && $meta['barcode'] !== '' ? trim((string) $meta['barcode']) : null;
+
+        $categoryId = $this->resolveCategory($categoryName);
+
+        // Gather all SKUs and barcodes in this group for duplicate/existing detection
+        $groupSkus = [];
+        $groupBarcodes = [];
+        foreach ($items as $item) {
+            if (!empty($item['sku'])) {
+                $groupSkus[] = trim((string) $item['sku']);
             }
-            if (!$categoryId) {
-                $category   = ProductCategory::firstOrCreate(
-                    ['name' => $categoryName],
-                    ['code' => $code]
-                );
-                $categoryId = $category->id;
+            if (!empty($item['barcode'])) {
+                $groupBarcodes[] = trim((string) $item['barcode']);
             }
         }
+        if ($parentSku) {
+            $groupSkus[] = $parentSku;
+        }
 
-        // Duplicate detection: match on SKU first, then barcode
+        // Duplicate detection:
+        // 1. By variant SKU
         $existingProduct = null;
-        if ($sku) {
-            $existingVariant = ProductVariant::withTrashed()->where('sku', $sku)->first();
+        if (!empty($groupSkus)) {
+            $existingVariant = ProductVariant::withTrashed()->whereIn('sku', $groupSkus)->first();
             if ($existingVariant) {
                 $existingProduct = $existingVariant->product()->withTrashed()->first();
             }
+            if (!$existingProduct) {
+                $existingProduct = Product::withTrashed()->whereIn('sku', $groupSkus)->first();
+            }
         }
-        if (!$existingProduct && $barcode) {
-            $existingProduct = Product::withTrashed()->where('barcode', $barcode)->first();
+        // 2. By barcode
+        if (!$existingProduct && !empty($groupBarcodes)) {
+            $existingVariant = ProductVariant::withTrashed()->whereIn('barcode', $groupBarcodes)->first();
+            if ($existingVariant) {
+                $existingProduct = $existingVariant->product()->withTrashed()->first();
+            }
+            if (!$existingProduct) {
+                $existingProduct = Product::withTrashed()->whereIn('barcode', $groupBarcodes)->first();
+            }
+        }
+        // 3. By exact product name
+        if (!$existingProduct && $name !== '') {
+            $existingProduct = Product::withTrashed()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
         }
 
         if ($existingProduct) {
             if (!$updateExisting) {
-                $result['errors'][] = ['row' => $lineNum, 'message' => "Duplicate product (SKU/barcode already exists): \"{$name}\" — skipped."];
+                $result['errors'][] = ['row' => $firstLine, 'message' => "Duplicate product (SKU, barcode, or name already exists): \"{$name}\" — skipped."];
                 $result['skipped']++;
                 return;
             }
 
-            // Update existing product
-            DB::transaction(function () use ($existingProduct, $name, $purchasePrice, $sellingPrice, $reorderLevel, $description, $isActive, $categoryId, $quantity, $actor) {
+            // Update existing master product and its variants
+            DB::transaction(function () use (
+                $existingProduct, $name, $purchasePrice, $sellingPrice, $reorderLevel,
+                $description, $isActive, $categoryId, $items, $lines, $actor
+            ) {
                 $existingProduct->update([
                     'name'                  => $name,
                     'purchase_price'        => $purchasePrice,
@@ -150,15 +213,78 @@ class ImportService
                     'category_id'           => $categoryId,
                 ]);
 
-                // Update first variant prices
-                $variant = $existingProduct->variants()->first();
-                if ($variant) {
-                    $variant->update([
-                        'cost_price'    => $purchasePrice,
-                        'selling_price' => $sellingPrice,
-                        'reorder_level' => $reorderLevel,
-                        'is_active'     => $isActive,
-                    ]);
+                $isMultiVariant = count($items) > 1;
+
+                foreach ($items as $idx => $row) {
+                    $vSku          = isset($row['sku']) && $row['sku'] !== '' ? trim((string) $row['sku']) : null;
+                    $vBarcode      = isset($row['barcode']) && $row['barcode'] !== '' ? trim((string) $row['barcode']) : null;
+                    $vCostPrice    = (float) ($row['purchase_price'] ?? $row['cost_price'] ?? $purchasePrice);
+                    $vSellingPrice = (float) ($row['selling_price'] ?? $sellingPrice);
+                    $vQuantity     = (int) ($row['quantity'] ?? $row['stock'] ?? 0);
+                    $vReorder      = isset($row['reorder_level']) && $row['reorder_level'] !== '' ? (int) $row['reorder_level'] : $reorderLevel;
+                    $vIsActive     = isset($row['is_active']) && $row['is_active'] !== '' ? filter_var($row['is_active'], FILTER_VALIDATE_BOOLEAN) : $isActive;
+
+                    $attrString  = $row['attributes'] ?? $row['variant_options'] ?? $row['options'] ?? null;
+                    $parsedAttrs = $this->parseAttributesString($attrString);
+                    $vName       = $this->resolveVariantName($row, $parsedAttrs, $isMultiVariant, $idx);
+
+                    // Find variant under existingProduct
+                    $variant = null;
+                    if ($vSku) {
+                        $variant = $existingProduct->variants()->where('sku', $vSku)->first();
+                    }
+                    if (!$variant && $vBarcode) {
+                        $variant = $existingProduct->variants()->where('barcode', $vBarcode)->first();
+                    }
+                    if (!$variant && $vName && $vName !== 'Standard') {
+                        $variant = $existingProduct->variants()->where('name', $vName)->first();
+                    }
+                    if (!$variant && !$isMultiVariant) {
+                        $variant = $existingProduct->variants()->first();
+                    }
+
+                    if ($variant) {
+                        $variant->update([
+                            'name'          => $vName,
+                            'cost_price'    => $vCostPrice,
+                            'selling_price' => $vSellingPrice,
+                            'reorder_level' => $vReorder,
+                            'is_active'     => $vIsActive,
+                            'barcode'       => $vBarcode ?? $variant->barcode,
+                        ]);
+                    } else {
+                        $finalSku = $vSku ?? $this->variantGenerator->generateUniqueSku(Str::slug($name . '-' . $vName));
+                        $variant  = ProductVariant::create([
+                            'product_id'       => $existingProduct->id,
+                            'name'             => $vName,
+                            'sku'              => $finalSku,
+                            'barcode'          => $vBarcode,
+                            'cost_price'       => $vCostPrice,
+                            'selling_price'    => $vSellingPrice,
+                            'quantity_on_hand' => $vQuantity,
+                            'reorder_level'    => $vReorder,
+                            'is_active'        => $vIsActive,
+                        ]);
+
+                        if ($vQuantity > 0) {
+                            StockMovement::create([
+                                'product_id'      => $existingProduct->id,
+                                'variant_id'      => $variant->id,
+                                'movement_type'   => MovementType::RESTOCK->value,
+                                'quantity_change' => $vQuantity,
+                                'quantity_before' => 0,
+                                'quantity_after'  => $vQuantity,
+                                'notes'           => 'Opening stock import (variant update)',
+                                'user_id'         => $actor->id,
+                                'created_by'      => $actor->id,
+                                'created_at'      => now(),
+                            ]);
+                        }
+                    }
+
+                    if (!empty($parsedAttrs)) {
+                        $this->variantGenerator->attachAttributeValuesToVariant($existingProduct, $variant, $parsedAttrs);
+                    }
                 }
             });
 
@@ -166,14 +292,15 @@ class ImportService
             return;
         }
 
-        // Create new product + variant + opening stock movement
+        // Create new master product + variants
         DB::transaction(function () use (
-            $name, $sku, $barcode, $purchasePrice, $sellingPrice, $quantity,
-            $reorderLevel, $description, $isActive, $categoryId, $actor
+            $name, $parentSku, $productBarcode, $purchasePrice, $sellingPrice, $reorderLevel,
+            $description, $isActive, $categoryId, $items, $lines, $actor
         ) {
             $product = Product::create([
                 'name'                  => $name,
-                'barcode'               => $barcode,
+                'sku'                   => $parentSku,
+                'barcode'               => $productBarcode,
                 'purchase_price'        => $purchasePrice,
                 'selling_price'         => $sellingPrice,
                 'default_reorder_level' => $reorderLevel,
@@ -182,40 +309,161 @@ class ImportService
                 'category_id'           => $categoryId,
             ]);
 
-            // Determine variant SKU
-            $rawSku = $sku ?? (Str::slug($name) . '-' . strtoupper(Str::random(4)));
-            $finalSku = $this->variantGenerator->generateUniqueSku($rawSku);
+            $isMultiVariant = count($items) > 1;
 
-            $variant = ProductVariant::create([
-                'product_id'       => $product->id,
-                'name'             => 'Standard',
-                'sku'              => $finalSku,
-                'barcode'          => $barcode,
-                'cost_price'       => $purchasePrice,
-                'selling_price'    => $sellingPrice,
-                'quantity_on_hand' => $quantity,
-                'reorder_level'    => $reorderLevel,
-                'is_active'        => $isActive,
-            ]);
+            foreach ($items as $idx => $row) {
+                $vSku          = isset($row['sku']) && $row['sku'] !== '' ? trim((string) $row['sku']) : null;
+                $vBarcode      = isset($row['barcode']) && $row['barcode'] !== '' ? trim((string) $row['barcode']) : null;
+                $vCostPrice    = (float) ($row['purchase_price'] ?? $row['cost_price'] ?? $purchasePrice);
+                $vSellingPrice = (float) ($row['selling_price'] ?? $sellingPrice);
+                $vQuantity     = (int) ($row['quantity'] ?? $row['stock'] ?? 0);
+                $vReorder      = isset($row['reorder_level']) && $row['reorder_level'] !== '' ? (int) $row['reorder_level'] : $reorderLevel;
+                $vIsActive     = isset($row['is_active']) && $row['is_active'] !== '' ? filter_var($row['is_active'], FILTER_VALIDATE_BOOLEAN) : $isActive;
 
-            // Record opening stock movement
-            if ($quantity > 0) {
-                StockMovement::create([
-                    'product_id'      => $product->id,
-                    'variant_id'      => $variant->id,
-                    'movement_type'   => MovementType::RESTOCK->value,
-                    'quantity_change' => $quantity,
-                    'quantity_before' => 0,
-                    'quantity_after'  => $quantity,
-                    'notes'           => 'Opening stock import',
-                    'user_id'         => $actor->id,
-                    'created_by'      => $actor->id,
-                    'created_at'      => now(),
+                $attrString  = $row['attributes'] ?? $row['variant_options'] ?? $row['options'] ?? null;
+                $parsedAttrs = $this->parseAttributesString($attrString);
+                $vName       = $this->resolveVariantName($row, $parsedAttrs, $isMultiVariant, $idx);
+
+                // Variant SKU resolution
+                $rawSku   = $vSku ?? (Str::slug($name . '-' . $vName) . '-' . strtoupper(Str::random(4)));
+                $finalSku = $this->variantGenerator->generateUniqueSku($rawSku);
+
+                $variant = ProductVariant::create([
+                    'product_id'       => $product->id,
+                    'name'             => $vName,
+                    'sku'              => $finalSku,
+                    'barcode'          => $vBarcode ?? ($isMultiVariant ? null : $productBarcode),
+                    'cost_price'       => $vCostPrice,
+                    'selling_price'    => $vSellingPrice,
+                    'quantity_on_hand' => $vQuantity,
+                    'reorder_level'    => $vReorder,
+                    'is_active'        => $vIsActive,
                 ]);
+
+                if (!empty($parsedAttrs)) {
+                    $this->variantGenerator->attachAttributeValuesToVariant($product, $variant, $parsedAttrs);
+                }
+
+                if ($vQuantity > 0) {
+                    StockMovement::create([
+                        'product_id'      => $product->id,
+                        'variant_id'      => $variant->id,
+                        'movement_type'   => MovementType::RESTOCK->value,
+                        'quantity_change' => $vQuantity,
+                        'quantity_before' => 0,
+                        'quantity_after'  => $vQuantity,
+                        'notes'           => 'Opening stock import',
+                        'user_id'         => $actor->id,
+                        'created_by'      => $actor->id,
+                        'created_at'      => now(),
+                    ]);
+                }
             }
         });
 
         $result['imported']++;
+    }
+
+    /**
+     * Resolve variant name from row values, parsed attributes, or default index.
+     */
+    private function resolveVariantName(array $row, array $parsedAttrs, bool $isMultiVariant, int $index = 0): string
+    {
+        $candidates = ['variant_name', 'variant', 'variable', 'variation'];
+        foreach ($candidates as $key) {
+            if (!empty($row[$key])) {
+                return trim((string) $row[$key]);
+            }
+        }
+
+        if (!empty($parsedAttrs)) {
+            $valNames = array_column($parsedAttrs, 'value_name');
+            if (!empty($valNames)) {
+                return implode(' / ', $valNames);
+            }
+        }
+
+        return $isMultiVariant ? ('Variant ' . ($index + 1)) : 'Standard';
+    }
+
+    /**
+     * Parse attribute string (e.g. "Color: Red | Size: M" or "Color=Red; Size=M") into structured array.
+     *
+     * @return array<int, array{attribute_name: string, value_name: string}>
+     */
+    public function parseAttributesString(?string $str): array
+    {
+        if (empty($str)) {
+            return [];
+        }
+
+        $pairs = [];
+        $normalized = str_replace([';', '|'], "\n", $str);
+        $lines = explode("\n", $normalized);
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+
+            // Split by comma if multiple key-value pairs exist on the same line
+            $segments = preg_split('/,\s*(?=[^,]+[:=])/', $line);
+            foreach ($segments as $segment) {
+                $segment = trim($segment);
+                if (empty($segment)) {
+                    continue;
+                }
+
+                if (str_contains($segment, ':')) {
+                    [$key, $val] = explode(':', $segment, 2);
+                } elseif (str_contains($segment, '=')) {
+                    [$key, $val] = explode('=', $segment, 2);
+                } else {
+                    continue;
+                }
+
+                $key = trim($key);
+                $val = trim($val);
+                if ($key !== '' && $val !== '') {
+                    $pairs[] = [
+                        'attribute_name' => $key,
+                        'value_name'     => $val,
+                    ];
+                }
+            }
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Resolve or auto-create a category by name.
+     */
+    private function resolveCategory(?string $categoryName): ?string
+    {
+        if (!$categoryName) {
+            return null;
+        }
+
+        $existing = ProductCategory::where('name', $categoryName)->first();
+        if ($existing) {
+            return $existing->id;
+        }
+
+        $baseCode = Str::slug($categoryName);
+        $code     = $baseCode;
+        $attempt  = 1;
+        while (ProductCategory::where('code', $code)->exists()) {
+            $code = $baseCode . '-' . $attempt++;
+        }
+
+        $category = ProductCategory::create([
+            'name' => $categoryName,
+            'code' => $code,
+        ]);
+
+        return $category->id;
     }
 
     // -------------------------------------------------------------------------
@@ -456,8 +704,68 @@ class ImportService
     public function getProductsTemplateData(): array
     {
         return [
-            'headers' => ['name', 'sku', 'barcode', 'category', 'purchase_price', 'selling_price', 'quantity', 'reorder_level', 'description', 'is_active'],
-            'sample'  => ['Sample Product', 'SKU-001', '8851234567890', 'Electronics', '150.00', '250.00', '100', '10', 'Sample product description', '1'],
+            'headers' => [
+                'name',
+                'sku',
+                'barcode',
+                'category',
+                'purchase_price',
+                'selling_price',
+                'quantity',
+                'reorder_level',
+                'description',
+                'is_active',
+                'variant_name',
+                'attributes',
+                'parent_sku',
+            ],
+            'sample'  => [
+                [
+                    'Wireless Ergonomic Mouse',
+                    'WM-001',
+                    '8851234567890',
+                    'Electronics',
+                    '15.00',
+                    '29.99',
+                    '50',
+                    '10',
+                    'Ergonomic wireless mouse (Simple product example)',
+                    '1',
+                    'Standard',
+                    '',
+                    '',
+                ],
+                [
+                    'Premium Cotton T-Shirt',
+                    'TSH-RED-M',
+                    '8851234567891',
+                    'Apparel',
+                    '8.00',
+                    '19.99',
+                    '30',
+                    '5',
+                    '100% cotton crewneck (Variable product - Red / M)',
+                    '1',
+                    'Red / M',
+                    'Color: Red | Size: M',
+                    'TSH-COTTON',
+                ],
+                [
+                    'Premium Cotton T-Shirt',
+                    'TSH-BLU-L',
+                    '8851234567892',
+                    'Apparel',
+                    '8.00',
+                    '19.99',
+                    '25',
+                    '5',
+                    '100% cotton crewneck (Variable product - Blue / L)',
+                    '1',
+                    'Blue / L',
+                    'Color: Blue | Size: L',
+                    'TSH-COTTON',
+                ],
+            ],
         ];
     }
 

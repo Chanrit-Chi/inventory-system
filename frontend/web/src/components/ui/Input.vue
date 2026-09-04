@@ -5,7 +5,7 @@ export default {
 </script>
 
 <script setup lang="ts">
-import { computed, useAttrs } from 'vue'
+import { computed, useAttrs, ref } from 'vue'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -36,6 +36,15 @@ const props = withDefaults(defineProps<Props>(), {
 const attrs = useAttrs()
 const emit = defineEmits<{ (e: 'update:modelValue', value: string | number): void }>()
 
+const inputRef = ref<HTMLInputElement | null>(null)
+
+defineExpose({
+  inputRef,
+  focus: (options?: FocusOptions) => inputRef.value?.focus(options),
+  blur: () => inputRef.value?.blur(),
+  select: () => inputRef.value?.select(),
+})
+
 const inputClasses = computed(() =>
   cn(
     'flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-foreground shadow-xs',
@@ -60,6 +69,7 @@ const onInput = (e: Event) => {
       <slot name="prefix" />
     </div>
     <input
+      ref="inputRef"
       :id="id"
       :name="name"
       :type="type"

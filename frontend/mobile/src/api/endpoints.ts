@@ -713,6 +713,15 @@ export async function createAttribute(payload: { name: string; code?: string; va
 }
 
 /**
+ * Update an existing product attribute
+ * PATCH /api/v1/attributes/:id
+ */
+export async function updateAttribute(id: string, payload: { name?: string; code?: string; values?: string[] }): Promise<ApiResponse<AttributeTaxonomy>> {
+  const response = await apiClient.patch<ApiResponse<AttributeTaxonomy>>(`/attributes/${id}`, payload)
+  return response.data
+}
+
+/**
  * Delete an unlinked attribute
  * DELETE /api/v1/attributes/:id
  */

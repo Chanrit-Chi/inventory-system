@@ -43,6 +43,24 @@ api.interceptors.request.use(
   (error: unknown) => Promise.reject(error)
 )
 
+let sessionExpiredToastTimeout: ReturnType<typeof setTimeout> | null = null
+
+function notifySessionExpired() {
+  if (sessionExpiredToastTimeout) return
+  sessionExpiredToastTimeout = setTimeout(() => {
+    sessionExpiredToastTimeout = null
+  }, 3000)
+
+  import('@/composables/useToast').then(({ useToast }) => {
+    try {
+      const toast = useToast()
+      toast.warning('Your session has expired. Please log in again.')
+    } catch {
+      // ignore
+    }
+  }).catch(() => {})
+}
+
 // Response interceptor — standardizes error envelope
 api.interceptors.response.use(
   (response) => response,
@@ -71,6 +89,9 @@ api.interceptors.response.use(
 
     // Clear auth on 401 Unauthorized and notify user
     if (status === 401) {
+      const requestUrl = error.config?.url || ''
+      const isAuthEndpoint = requestUrl.includes('/login') || requestUrl.includes('/auth/login')
+
       tokenStore.clear()
       import('@/stores/authStore').then(({ useAuthStore }) => {
         try {
@@ -80,14 +101,10 @@ api.interceptors.response.use(
           // ignore
         }
       }).catch(() => {})
-      import('@/composables/useToast').then(({ useToast }) => {
-        try {
-          const toast = useToast()
-          toast.warning('Your session has expired. Please log in again.')
-        } catch {
-          // ignore
-        }
-      }).catch(() => {})
+
+      if (!isAuthEndpoint) {
+        notifySessionExpired()
+      }
     }
 
     return Promise.reject(new ApiError(message, errors, status, false))

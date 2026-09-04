@@ -185,6 +185,7 @@ Route::prefix('v1')->group(function () {
             // Product Attributes & Taxonomy
             Route::get('/attributes',                            [AttributeController::class, 'index']);
             Route::post('/attributes',                           [AttributeController::class, 'store']);
+            Route::match(['put', 'patch'], '/attributes/{id}',   [AttributeController::class, 'update']);
             Route::delete('/attributes/{id}',                    [AttributeController::class, 'destroy']);
 
             // Sales Channels Administration

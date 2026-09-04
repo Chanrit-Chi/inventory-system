@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { useAuditLogStore } from '@/stores/auditLogStore'
 import { useToast } from '@/composables/useToast'
 import {
@@ -8,9 +8,10 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Activity,
   Key,
+  Calendar,
+  X,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -20,19 +21,69 @@ import {
   EmptyState,
   Skeleton,
   DatePicker,
+  SelectField,
 } from '@/components/ui'
 
 const toast = useToast()
 const store = useAuditLogStore()
 
-const filters = ref({
-  page: 1,
-  per_page: 30,
-  user_id: '' as string,
-  action: '' as string,
-  from: '' as string,
-  to: '' as string,
-  search: '' as string,
+const search = ref('')
+const selectedCategory = ref('ALL')
+const selectedDatePreset = ref('all')
+const customDateFrom = ref('')
+const customDateTo = ref('')
+const currentPage = ref(1)
+const perPage = ref(25)
+
+const categoryOptions = [
+  { label: 'All Categories', value: 'ALL' },
+  { label: 'Security & Auth', value: 'SECURITY' },
+  { label: 'Inventory & Stock', value: 'INVENTORY' },
+  { label: 'Orders & Sales', value: 'ORDERS' },
+  { label: 'Staff & Roles', value: 'STAFF' },
+  { label: 'Payroll & Shifts', value: 'PAYROLL' },
+  { label: 'Billing & Invoices', value: 'BILLING' },
+]
+
+const datePresetOptions = [
+  { label: 'All Time', value: 'all' },
+  { label: 'Today', value: 'today' },
+  { label: 'Last 7 Days', value: '7d' },
+  { label: 'Last 30 Days', value: '30d' },
+  { label: 'Custom Range…', value: 'custom' },
+]
+
+function computeDateBounds(preset: string): { from?: string; to?: string } {
+  const today = new Date()
+  const toStr = today.toISOString().slice(0, 10)
+  if (preset === 'today') return { from: toStr, to: toStr }
+  if (preset === '7d') {
+    const d = new Date(today)
+    d.setDate(d.getDate() - 6)
+    return { from: d.toISOString().slice(0, 10), to: toStr }
+  }
+  if (preset === '30d') {
+    const d = new Date(today)
+    d.setDate(d.getDate() - 29)
+    return { from: d.toISOString().slice(0, 10), to: toStr }
+  }
+  if (preset === 'custom') {
+    return {
+      from: customDateFrom.value || undefined,
+      to: customDateTo.value || undefined,
+    }
+  }
+  return {}
+}
+
+const hasActiveFilters = computed(() => {
+  return (
+    !!search.value.trim() ||
+    selectedCategory.value !== 'ALL' ||
+    selectedDatePreset.value !== 'all' ||
+    !!customDateFrom.value ||
+    !!customDateTo.value
+  )
 })
 
 const logs = computed(() => store.logs)
@@ -44,14 +95,14 @@ const authEvents = computed(() => logs.value.filter(l => (l.action || '').toLowe
 
 async function loadLogs() {
   try {
+    const bounds = computeDateBounds(selectedDatePreset.value)
     await store.fetchLogs({
-      page: filters.value.page,
-      per_page: filters.value.per_page,
-      user_id: filters.value.user_id || undefined,
-      action: filters.value.action || undefined,
-      from: filters.value.from || undefined,
-      to: filters.value.to || undefined,
-      search: filters.value.search || undefined,
+      page: currentPage.value,
+      per_page: perPage.value,
+      category: selectedCategory.value !== 'ALL' ? selectedCategory.value : undefined,
+      date_from: bounds.from,
+      date_to: bounds.to,
+      search: search.value.trim() || undefined,
     })
   } catch (err) {
     const e = err as { message?: string }
@@ -59,28 +110,71 @@ async function loadLogs() {
   }
 }
 
-function resetFilters() {
-  filters.value = {
-    page: 1,
-    per_page: 30,
-    user_id: '',
-    action: '',
-    from: '',
-    to: '',
-    search: '',
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    currentPage.value = 1
+    loadLogs()
+  }, 350)
+}
+
+watch(selectedCategory, () => {
+  currentPage.value = 1
+  loadLogs()
+})
+
+watch(selectedDatePreset, (newPreset) => {
+  currentPage.value = 1
+  if (newPreset !== 'custom') {
+    loadLogs()
   }
+})
+
+function onCategoryChange(val?: string | number) {
+  if (val !== undefined && val !== null) {
+    selectedCategory.value = String(val)
+  }
+  currentPage.value = 1
+  loadLogs()
+}
+
+function onDatePresetChange(val?: string | number) {
+  if (val !== undefined && val !== null) {
+    selectedDatePreset.value = String(val)
+  }
+  currentPage.value = 1
+  if (selectedDatePreset.value !== 'custom') {
+    loadLogs()
+  }
+}
+
+function onCustomDateChange() {
+  if (customDateFrom.value && customDateTo.value) {
+    currentPage.value = 1
+    loadLogs()
+  }
+}
+
+function resetFilters() {
+  search.value = ''
+  selectedCategory.value = 'ALL'
+  selectedDatePreset.value = 'all'
+  customDateFrom.value = ''
+  customDateTo.value = ''
+  currentPage.value = 1
   loadLogs()
 }
 
 function nextPage() {
-  if (store.meta && filters.value.page < store.meta.last_page) {
-    filters.value.page += 1
+  if (store.meta && currentPage.value < store.meta.last_page) {
+    currentPage.value += 1
     loadLogs()
   }
 }
 function prevPage() {
-  if (filters.value.page > 1) {
-    filters.value.page -= 1
+  if (currentPage.value > 1) {
+    currentPage.value -= 1
     loadLogs()
   }
 }
@@ -200,48 +294,66 @@ onMounted(loadLogs)
 
     <!-- Filter Toolbar -->
     <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs flex flex-col gap-3">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <!-- Search Input with instant/debounced search -->
+        <div class="flex-1 max-w-md">
           <Input
-            v-model="filters.search"
+            v-model="search"
             type="text"
-            placeholder="Search description, target, actor…"
-            class="bg-surface text-sm"
+            placeholder="Search description, target, operator…"
+            class="bg-surface text-xs sm:text-sm h-9"
+            @input="onSearchInput"
             @keyup.enter="loadLogs"
           >
             <template #prefix>
-              <Search :size="15" />
+              <Search :size="15" class="text-muted-foreground" />
             </template>
           </Input>
         </div>
 
-        <div>
-          <Input
-            v-model="filters.action"
-            type="text"
-            placeholder="Filter action (e.g. login, create)…"
-            class="bg-surface text-sm font-mono"
-            @keyup.enter="loadLogs"
+        <!-- Structured Category & Date Preset Selectors -->
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <SelectField
+            id="audit-category-select"
+            v-model="selectedCategory"
+            :options="categoryOptions"
+            placeholder="All Categories"
+            class="h-9 w-44 sm:w-48 bg-surface text-xs"
+            @change="onCategoryChange"
           />
-        </div>
 
-        <div class="flex items-center gap-2">
-          <DatePicker v-model="filters.from" placeholder="From date" class="w-full bg-surface text-xs" />
-          <span class="text-muted-foreground text-xs">to</span>
-          <DatePicker v-model="filters.to" placeholder="To date" class="w-full bg-surface text-xs" />
+          <SelectField
+            id="audit-date-preset-select"
+            v-model="selectedDatePreset"
+            :options="datePresetOptions"
+            placeholder="All Time"
+            class="h-9 w-36 sm:w-40 bg-surface text-xs"
+            @change="onDatePresetChange"
+          />
+
+          <Button
+            v-if="hasActiveFilters"
+            variant="ghost"
+            size="sm"
+            class="h-9 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            @click="resetFilters"
+          >
+            <X :size="13" class="mr-1" />
+            <span>Reset</span>
+          </Button>
         </div>
       </div>
 
-      <div class="flex items-center justify-between pt-2 border-t border-border/50 flex-wrap gap-2 text-xs">
-        <span class="text-muted-foreground">Tip: Press enter in search inputs to quickly filter logs.</span>
+      <!-- Collapsible Custom Date Range Row (only shown when 'Custom Range…' is selected) -->
+      <div v-if="selectedDatePreset === 'custom'" class="flex items-center gap-3 pt-2.5 border-t border-border/50 flex-wrap text-xs">
+        <div class="flex items-center gap-1.5 text-muted-foreground">
+          <Calendar :size="14" />
+          <span>Custom Date Range:</span>
+        </div>
         <div class="flex items-center gap-2">
-          <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground" @click="resetFilters">
-            Reset
-          </Button>
-          <Button variant="primary" size="sm" class="h-8 px-3 text-xs gap-1.5" @click="loadLogs">
-            <Filter :size="13" />
-            <span>Apply Filters</span>
-          </Button>
+          <DatePicker v-model="customDateFrom" placeholder="From date" class="h-8.5 w-36 bg-surface text-xs" @change="onCustomDateChange" />
+          <span class="text-muted-foreground text-xs">to</span>
+          <DatePicker v-model="customDateTo" placeholder="To date" class="h-8.5 w-36 bg-surface text-xs" @change="onCustomDateChange" />
         </div>
       </div>
     </div>
@@ -340,14 +452,14 @@ onMounted(loadLogs)
         class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
       >
         <span class="font-mono">
-          Page {{ filters.page }} of {{ store.meta.last_page }} ({{ store.meta.total }} total)
+          Page {{ currentPage }} of {{ store.meta.last_page }} ({{ store.meta.total }} total)
         </span>
         <div class="flex items-center gap-1.5">
           <Button
             variant="outline"
             size="sm"
             class="h-8 px-2.5 text-xs gap-1"
-            :disabled="filters.page === 1"
+            :disabled="currentPage === 1"
             @click="prevPage"
           >
             <ChevronLeft :size="14" />
@@ -357,7 +469,7 @@ onMounted(loadLogs)
             variant="outline"
             size="sm"
             class="h-8 px-2.5 text-xs gap-1"
-            :disabled="!store.meta || filters.page >= store.meta.last_page"
+            :disabled="!store.meta || currentPage >= store.meta.last_page"
             @click="nextPage"
           >
             <span>Next</span>

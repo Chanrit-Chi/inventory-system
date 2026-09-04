@@ -6,8 +6,8 @@ import {
   Animated,
   Dimensions,
   ActivityIndicator,
+  Image,
 } from 'react-native'
-import { Image } from 'expo-image'
 import { StatusBar } from 'expo-status-bar'
 import { tokens } from '../theme/tokens'
 
@@ -22,24 +22,26 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   logoUrl,
   subtitle = 'Inventory & Point of Sale',
 }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const scaleAnim = useRef(new Animated.Value(0.92)).current
+  const fadeAnim = useRef(new Animated.Value(0.1)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 450,
+        duration: 350,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 7,
+        friction: 8,
         tension: 40,
         useNativeDriver: true,
       }),
     ]).start()
   }, [fadeAnim, scaleAnim])
+
+  const hasRemoteLogo = Boolean(logoUrl && typeof logoUrl === 'string' && logoUrl.startsWith('http'))
 
   return (
     <View style={styles.container}>
@@ -59,21 +61,15 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       >
         {/* LOGO HERO */}
         <View style={styles.logoContainer}>
-          {logoUrl ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={styles.logoImage}
-              contentFit="contain"
-              priority="high"
-            />
-          ) : (
-            <Image
-              source={require('../../assets/KC SHOP-No BG.png')}
-              style={styles.logoImage}
-              contentFit="contain"
-              priority="high"
-            />
-          )}
+          <Image
+            source={
+              hasRemoteLogo
+                ? { uri: logoUrl as string }
+                : require('../../assets/KC SHOP-No BG.png')
+            }
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
         {/* APP BRAND TITLES */}
@@ -123,24 +119,18 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.85,
   },
   logoContainer: {
-    width: 140,
-    height: 140,
+    width: 160,
+    height: 160,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 4,
   },
   logoImage: {
-    width: 130,
-    height: 130,
+    width: 150,
+    height: 150,
   },
   brandTitle: {
     fontSize: 26,
-    fontFamily: 'DMSans_800ExtraBold',
     fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.6,
@@ -148,7 +138,6 @@ const styles = StyleSheet.create({
   },
   brandSubtitle: {
     fontSize: 13,
-    fontFamily: 'DMSans_500Medium',
     fontWeight: '500',
     color: '#64748B',
     marginTop: 4,
@@ -178,6 +167,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94A3B8',
     marginTop: 3,
-    fontFamily: 'DMSans_400Regular',
   },
 })

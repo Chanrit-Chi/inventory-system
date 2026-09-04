@@ -108,13 +108,19 @@ class ImportController extends BaseApiController
             ],
         ]);
 
-        // Write sample row
-        foreach ($sampleRow as $colIdx => $value) {
-            $sheet->setCellValue([$colIdx + 1, 2], $value);
+        $rows = (isset($sampleRow[0]) && is_array($sampleRow[0])) ? $sampleRow : [$sampleRow];
+
+        // Write sample rows
+        foreach ($rows as $rIdx => $row) {
+            $rowNum = $rIdx + 2;
+            foreach ($row as $colIdx => $value) {
+                $sheet->setCellValue([$colIdx + 1, $rowNum], $value);
+            }
         }
 
-        // Style sample row
-        $sampleRange = "A2:{$lastCol}2";
+        // Style sample rows
+        $lastRowNum = count($rows) + 1;
+        $sampleRange = "A2:{$lastCol}{$lastRowNum}";
         $sheet->getStyle($sampleRange)->applyFromArray([
             'fill' => [
                 'fillType'   => Fill::FILL_SOLID,

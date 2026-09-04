@@ -10,6 +10,7 @@ import {
   Trash2,
   Tag,
   Sliders,
+  X,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -38,7 +39,9 @@ const store = useAttributeStore()
 
 const showEditModal = ref(false)
 const editing = ref<Partial<Attribute> | null>(null)
-const valuesText = ref('')
+const valuesList = ref<string[]>([])
+const newChipInput = ref('')
+const chipInputRef = ref<HTMLInputElement | null>(null)
 const search = ref('')
 
 const displayTypeOptions = [
@@ -79,14 +82,62 @@ async function load() {
 
 function openCreate() {
   editing.value = { name: '', slug: '', type: 'text', values: [] }
-  valuesText.value = ''
+  valuesList.value = []
+  newChipInput.value = ''
   showEditModal.value = true
 }
 
 function openEdit(a: Attribute) {
   editing.value = { ...a }
-  valuesText.value = (a.values || []).map(v => typeof v === 'string' ? v : (v as any).value_name || (v as any).id).join(', ')
+  valuesList.value = (a.values || [])
+    .map(v => typeof v === 'string' ? v : (v as any).value_name || (v as any).name || (v as any).id)
+    .filter(Boolean)
+  newChipInput.value = ''
   showEditModal.value = true
+}
+
+function focusChipInput() {
+  chipInputRef.value?.focus()
+}
+
+function addChip(rawText?: string) {
+  const textToAdd = (rawText !== undefined ? rawText : newChipInput.value).trim()
+  if (!textToAdd) return
+
+  // If the input contains commas (e.g. pasted or typed list)
+  const parts = textToAdd.split(',').map(p => p.trim()).filter(Boolean)
+
+  for (const part of parts) {
+    // Avoid exact or case-insensitive duplicates
+    const exists = valuesList.value.some(v => v.toLowerCase() === part.toLowerCase())
+    if (!exists) {
+      valuesList.value.push(part)
+    }
+  }
+
+  newChipInput.value = ''
+}
+
+function removeChip(index: number) {
+  valuesList.value.splice(index, 1)
+}
+
+function onChipInputKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault()
+    addChip()
+  } else if (e.key === 'Backspace' && newChipInput.value === '' && valuesList.value.length > 0) {
+    removeChip(valuesList.value.length - 1)
+  }
+}
+
+function onChipInputPaste(e: ClipboardEvent) {
+  const pasted = e.clipboardData?.getData('text')
+  if (pasted && (pasted.includes(',') || pasted.includes('\n'))) {
+    e.preventDefault()
+    const cleaned = pasted.replace(/\n/g, ',')
+    addChip(cleaned)
+  }
 }
 
 async function save() {
@@ -94,10 +145,14 @@ async function save() {
     toast.error('Attribute name is required')
     return
   }
-  editing.value.values = valuesText.value
-    .split(',')
-    .map(v => v.trim())
-    .filter(Boolean)
+
+  // Include any pending unsubmitted text in the input
+  if (newChipInput.value.trim()) {
+    addChip()
+  }
+
+  editing.value.values = [...valuesList.value]
+
   try {
     if (editing.value.id) {
       await store.updateAttribute(editing.value.id, editing.value)
@@ -325,13 +380,47 @@ onMounted(load)
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Values (comma-separated)</label>
-            <Input
-              v-model="valuesText"
-              placeholder="e.g. S, M, L, XL or Red, Navy, Olive"
-              class="h-9 bg-surface text-sm"
-            />
-            <p class="text-[11px] text-muted-foreground mt-1">Separate options with commas to produce individual value chips.</p>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-semibold text-foreground">Preset Option Values</label>
+              <span class="text-[11px] font-mono text-muted-foreground">{{ valuesList.length }} value(s)</span>
+            </div>
+
+            <!-- Interactive Tag / Chip Box -->
+            <div
+              class="min-h-[82px] p-2 bg-surface border border-border rounded-lg flex flex-wrap items-center content-start gap-1.5 focus-within:ring-2 focus-within:ring-cta/30 focus-within:border-cta transition-all cursor-text shadow-2xs"
+              @click="focusChipInput"
+            >
+              <span
+                v-for="(val, idx) in valuesList"
+                :key="idx"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-surface-subtle border border-border text-foreground hover:border-border-strong transition-colors shadow-2xs group"
+              >
+                <Tag :size="11" class="text-muted-foreground shrink-0" />
+                <span class="max-w-[150px] truncate">{{ val }}</span>
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer"
+                  @click.stop="removeChip(idx)"
+                  title="Remove option"
+                >
+                  <X :size="12" />
+                </button>
+              </span>
+
+              <input
+                ref="chipInputRef"
+                v-model="newChipInput"
+                type="text"
+                placeholder="Type and press Enter or comma (or paste S, M, L)..."
+                class="flex-1 min-w-[160px] h-7 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none px-1"
+                @keydown="onChipInputKeyDown"
+                @paste="onChipInputPaste"
+                @blur="addChip()"
+              />
+            </div>
+            <p class="text-[11px] text-muted-foreground mt-1.5">
+              Press <kbd class="px-1 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground border border-border">Enter</kbd> or <kbd class="px-1 py-0.5 rounded bg-muted font-mono text-[10px] text-foreground border border-border">,</kbd> to add. You can also paste comma-separated lists to import in bulk.
+            </p>
           </div>
         </div>
 

@@ -633,13 +633,23 @@ function AppShell() {
     ]
   )
 
+  const [splashReady, setSplashReady] = useState(false)
+
   useEffect(() => {
-    if (!isRestoring && fontsLoaded) {
+    // Ensure splash is visible for at least 800ms to allow smooth fade & brand impression
+    const timer = setTimeout(() => {
+      setSplashReady(true)
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!isRestoring && fontsLoaded && splashReady) {
       ExpoSplashScreen.hideAsync().catch(() => {})
     }
-  }, [isRestoring, fontsLoaded])
+  }, [isRestoring, fontsLoaded, splashReady])
 
-  if (isRestoring || !fontsLoaded) {
+  if (isRestoring || !fontsLoaded || !splashReady) {
     return (
       <SafeAreaProvider>
         <SplashScreen
