@@ -17,6 +17,9 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -46,7 +49,7 @@ class ImportService
      *
      * @return array{ imported: int, updated: int, skipped: int, errors: array }
      */
-    public function importProducts(UploadedFile $file, User $actor, bool $updateExisting = false): array
+    public function importProducts(UploadedFile|string $file, User $actor, bool $updateExisting = false): array
     {
         $rows   = $this->readSheet($file);
         $result = ['imported' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
@@ -149,6 +152,19 @@ class ImportService
 
         $categoryId = $this->resolveCategory($categoryName);
 
+        // Resolve product image URL if provided in row
+        $rawImageUrl = null;
+        foreach ($items as $item) {
+            $candidate = $this->resolveImageUrl($item);
+            if ($candidate) {
+                $rawImageUrl = $candidate;
+                break;
+            }
+        }
+        if (!$rawImageUrl) {
+            $rawImageUrl = $this->resolveImageUrl($meta);
+        }
+
         // Gather all SKUs and barcodes in this group for duplicate/existing detection
         $groupSkus = [];
         $groupBarcodes = [];
@@ -198,12 +214,18 @@ class ImportService
                 return;
             }
 
+            // Download and store image if URL is provided
+            $storedImageUrl = null;
+            if ($rawImageUrl) {
+                $storedImageUrl = $this->downloadAndStoreImage($rawImageUrl);
+            }
+
             // Update existing master product and its variants
             DB::transaction(function () use (
                 $existingProduct, $name, $purchasePrice, $sellingPrice, $reorderLevel,
-                $description, $isActive, $categoryId, $items, $lines, $actor
+                $description, $isActive, $categoryId, $storedImageUrl, $items, $lines, $actor
             ) {
-                $existingProduct->update([
+                $updateData = [
                     'name'                  => $name,
                     'purchase_price'        => $purchasePrice,
                     'selling_price'         => $sellingPrice,
@@ -211,7 +233,12 @@ class ImportService
                     'description'           => $description,
                     'is_active'             => $isActive,
                     'category_id'           => $categoryId,
-                ]);
+                ];
+                if ($storedImageUrl) {
+                    $updateData['image_url'] = $storedImageUrl;
+                }
+
+                $existingProduct->update($updateData);
 
                 $isMultiVariant = count($items) > 1;
 
@@ -292,10 +319,16 @@ class ImportService
             return;
         }
 
+        // Download and store image if URL is provided
+        $storedImageUrl = null;
+        if ($rawImageUrl) {
+            $storedImageUrl = $this->downloadAndStoreImage($rawImageUrl);
+        }
+
         // Create new master product + variants
         DB::transaction(function () use (
             $name, $parentSku, $productBarcode, $purchasePrice, $sellingPrice, $reorderLevel,
-            $description, $isActive, $categoryId, $items, $lines, $actor
+            $description, $isActive, $categoryId, $storedImageUrl, $items, $lines, $actor
         ) {
             $product = Product::create([
                 'name'                  => $name,
@@ -305,6 +338,7 @@ class ImportService
                 'selling_price'         => $sellingPrice,
                 'default_reorder_level' => $reorderLevel,
                 'description'           => $description,
+                'image_url'             => $storedImageUrl,
                 'is_active'             => $isActive,
                 'category_id'           => $categoryId,
             ]);
@@ -718,6 +752,7 @@ class ImportService
                 'variant_name',
                 'attributes',
                 'parent_sku',
+                'image_url',
             ],
             'sample'  => [
                 [
@@ -734,6 +769,7 @@ class ImportService
                     'Standard',
                     '',
                     '',
+                    'https://example.com/images/mouse.jpg',
                 ],
                 [
                     'Premium Cotton T-Shirt',
@@ -749,6 +785,7 @@ class ImportService
                     'Red / M',
                     'Color: Red | Size: M',
                     'TSH-COTTON',
+                    'https://example.com/images/tshirt-red.jpg',
                 ],
                 [
                     'Premium Cotton T-Shirt',
@@ -764,6 +801,7 @@ class ImportService
                     'Blue / L',
                     'Color: Blue | Size: L',
                     'TSH-COTTON',
+                    'https://example.com/images/tshirt-blue.jpg',
                 ],
             ],
         ];
@@ -782,13 +820,174 @@ class ImportService
     // -------------------------------------------------------------------------
 
     /**
+     * Resolve image URL or link from row data.
+     */
+    public function resolveImageUrl(array $row): ?string
+    {
+        $candidateKeys = [
+            'image',
+            'image_url',
+            'picture',
+            'photo',
+            'image_link',
+            'image link',
+            'img',
+            'productlist_images',
+            'productlist images',
+            'product_image',
+            'product image',
+        ];
+
+        foreach ($candidateKeys as $key) {
+            if (!empty($row[$key])) {
+                $val = trim((string) $row[$key]);
+                if ($val !== '') {
+                    // Check if it is an Excel formula =IMAGE("url")
+                    if (preg_match('/=IMAGE\(\s*["\']([^"\']+)["\']\s*\)/i', $val, $m)) {
+                        return trim($m[1]);
+                    }
+                    return $val;
+                }
+            }
+        }
+
+        // Also check if any column header contains 'image', 'picture', or 'photo'
+        foreach ($row as $k => $v) {
+            if ($v && (str_contains($k, 'image') || str_contains($k, 'picture') || str_contains($k, 'photo'))) {
+                $val = trim((string) $v);
+                if (filter_var($val, FILTER_VALIDATE_URL) || str_starts_with($val, 'http://') || str_starts_with($val, 'https://')) {
+                    return $val;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download an image from an external URL (AppSheet, Google Drive, direct URL)
+     * and persist it to system media storage.
+     */
+    public function downloadAndStoreImage(string $url): ?string
+    {
+        $cleanUrl = trim($url);
+        if (!filter_var($cleanUrl, FILTER_VALIDATE_URL) && !str_starts_with($cleanUrl, 'http://') && !str_starts_with($cleanUrl, 'https://')) {
+            return null;
+        }
+
+        // Convert Google Drive links if necessary
+        $downloadUrl = $this->transformGoogleDriveUrl($cleanUrl);
+
+        try {
+            // Attempt download with 8s timeout and standard browser headers
+            $response = Http::timeout(8)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept'     => 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                ])
+                ->get($downloadUrl);
+
+            if (!$response->successful()) {
+                Log::warning("ImportService: Failed to download product image from {$cleanUrl}. HTTP status: " . $response->status());
+                return null;
+            }
+
+            $body = $response->body();
+            if (empty($body) || strlen($body) < 100) {
+                Log::warning("ImportService: Empty or invalid image response from {$cleanUrl}");
+                return null;
+            }
+
+            // Determine file extension
+            $contentType = strtolower($response->header('Content-Type') ?? '');
+            $extension = 'jpg';
+            if (str_contains($contentType, 'png')) {
+                $extension = 'png';
+            } elseif (str_contains($contentType, 'webp')) {
+                $extension = 'webp';
+            } elseif (str_contains($contentType, 'gif')) {
+                $extension = 'gif';
+            } elseif (str_contains($contentType, 'jpeg') || str_contains($contentType, 'jpg')) {
+                $extension = 'jpg';
+            } else {
+                // Try from original URL
+                $path = parse_url($cleanUrl, PHP_URL_PATH) ?? '';
+                $urlExt = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                if (in_array($urlExt, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
+                    $extension = $urlExt === 'jpeg' ? 'jpg' : $urlExt;
+                }
+            }
+
+            $folder = 'products';
+            $filename = Str::uuid() . '.' . $extension;
+            $storagePath = $folder . '/' . $filename;
+
+            // Determine target disk (same precedence as MediaController: supabase -> r2 -> public)
+            $useSupabase = !empty(config('filesystems.disks.supabase.key'))
+                && !empty(config('filesystems.disks.supabase.secret'))
+                && !empty(config('filesystems.disks.supabase.bucket'));
+
+            $useR2 = !empty(config('filesystems.disks.r2.key'))
+                && !empty(config('filesystems.disks.r2.secret'))
+                && !empty(config('filesystems.disks.r2.bucket'));
+
+            if ($useSupabase) {
+                try {
+                    Storage::disk('supabase')->put($storagePath, $body);
+                    $baseUrl = config('filesystems.disks.supabase.url');
+                    return $baseUrl ? rtrim($baseUrl, '/') . '/' . ltrim($storagePath, '/') : Storage::disk('supabase')->url($storagePath);
+                } catch (\Throwable $e) {
+                    Log::warning("ImportService: Supabase upload failed, falling back to public disk: " . $e->getMessage());
+                }
+            }
+
+            if ($useR2) {
+                try {
+                    Storage::disk('r2')->put($storagePath, $body);
+                    $baseUrl = config('filesystems.disks.r2.url');
+                    return $baseUrl ? rtrim($baseUrl, '/') . '/' . ltrim($storagePath, '/') : Storage::disk('r2')->url($storagePath);
+                } catch (\Throwable $e) {
+                    Log::warning("ImportService: R2 upload failed, falling back to public disk: " . $e->getMessage());
+                }
+            }
+
+            // Default: local public disk
+            Storage::disk('public')->put($storagePath, $body);
+            return Storage::disk('public')->url($storagePath);
+
+        } catch (\Throwable $e) {
+            Log::warning("ImportService: Exception downloading product image from {$cleanUrl}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    private function transformGoogleDriveUrl(string $url): string
+    {
+        // Check for Google Drive file ID
+        if (preg_match('/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i', $url, $matches) ||
+            preg_match('/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i', $url, $matches) ||
+            preg_match('/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i', $url, $matches) ||
+            preg_match('/docs\.google\.com\/.*id=([a-zA-Z0-9_-]+)/i', $url, $matches)) {
+            $fileId = $matches[1];
+            return "https://lh3.googleusercontent.com/d/{$fileId}";
+        }
+
+        return $url;
+    }
+
+    /**
      * Read an XLSX/XLS/CSV file and return rows as associative arrays
      * keyed by the lowercase header names from the first row.
      */
-    private function readSheet(UploadedFile $file): array
+    private function readSheet(UploadedFile|string $file): array
     {
-        $path       = $file->getRealPath();
-        $extension  = strtolower($file->getClientOriginalExtension());
+        if ($file instanceof UploadedFile) {
+            $path      = $file->getRealPath();
+            $extension = strtolower($file->getClientOriginalExtension());
+        } else {
+            $path      = $file;
+            $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        }
 
         if ($extension === 'csv') {
             $reader = IOFactory::createReader('Csv');

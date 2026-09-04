@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\PrinterController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\PushTokenController;
 use App\Http\Controllers\Api\V1\QuotationController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RestockController;
@@ -78,6 +79,10 @@ Route::prefix('v1')->group(function () {
         Route::patch('/notifications/{id}/read',      [NotificationController::class, 'markAsRead']);
         Route::post('/notifications/mark-all-read',   [NotificationController::class, 'markAllAsRead']);
         Route::delete('/notifications/{id}',          [NotificationController::class, 'dismiss']);
+
+        // Push Notification Device Tokens (All Authenticated Roles)
+        Route::post('/push-tokens',           [PushTokenController::class, 'store']);
+        Route::delete('/push-tokens/{token}', [PushTokenController::class, 'destroy'])->where('token', '.*');
 
         // ============================================================
         // 2. POS & Point-of-Sale Core (All Authenticated Roles: Cashier/Seller, Manager, Admin)

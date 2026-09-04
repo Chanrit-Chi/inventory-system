@@ -34,6 +34,9 @@ import type {
   SellerDailySettlementSummary,
   SellerDailySettlementRecord,
   TeamDailySettlementSummary,
+  PushTokenRecord,
+  PushTokenPayload,
+  RegisterPushTokenPayload,
 } from '../types'
 import { getDeviceIdentifier } from '../utils/device'
 
@@ -1517,6 +1520,29 @@ export async function fetchTeamDailySettlementSummary(
     '/seller-settlements/team-daily',
     { params }
   )
+  return response.data
+}
+
+/**
+ * Register or update push notification token for authenticated user
+ * POST /api/v1/push-tokens
+ */
+export async function registerPushToken(
+  payload: PushTokenPayload
+): Promise<ApiResponse<PushTokenRecord>> {
+  const response = await apiClient.post<ApiResponse<PushTokenRecord>>('/push-tokens', payload)
+  return response.data
+}
+
+/**
+ * Deregister push notification token on device logout
+ * DELETE /api/v1/push-tokens/{token}
+ */
+export async function deregisterPushToken(
+  token: string
+): Promise<ApiResponse<null>> {
+  const encodedToken = encodeURIComponent(token.trim())
+  const response = await apiClient.delete<ApiResponse<null>>(`/push-tokens/${encodedToken}`)
   return response.data
 }
 

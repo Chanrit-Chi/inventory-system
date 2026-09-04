@@ -85,4 +85,51 @@ Status & Context:
 - Maintain brand specifications: Warm Cream (#FAF7F2/#F8F5F0), Deep Amber (#924C00), Vibrant Orange CTA (#FF8800), Charcoal text (#1A1C1C), Space Grotesk / Inter typography.
 - Ensure `npm run build` (`vue-tsc -b && vite build`) succeeds with 0 errors.
 
+## Request — 2026-09-04T14:37:03Z
+
+Implement end-to-end mobile push notification support for the inventory system across the Laravel backend and Expo React Native mobile app, ensuring role-based notification filtering and in-app toast presentation.
+
+Working directory: d:\GitCode\inventory-system
+Integrity mode: development
+
+## Requirements
+
+### R1. Backend Push Token Storage & Dispatch Service
+- Create `push_tokens` table schema and `PushToken` model with relation to `User`.
+- Implement `PushTokenController` with endpoints:
+  - `POST /api/v1/push-tokens` (register/update token for authenticated user, transfer token if reassigned)
+  - `DELETE /api/v1/push-tokens/{token}` (deregister on logout)
+- Implement `PushNotificationService` to send push messages via Expo Push API (`https://exp.host/--/api/v2/push/send`) in batches:
+  - Role-aware dispatch:
+    - Low stock: ADMIN, MANAGER, SELLER
+    - Restock completed: ADMIN, MANAGER
+    - Order completed: ADMIN, MANAGER, and SELLER (only if `order.user_id === seller.id`)
+    - Invoice overdue: ADMIN, MANAGER, SELLER
+    - Security events: ADMIN only
+
+### R2. Mobile Push Registration & In-App Notification Handling
+- Implement `usePushNotifications` hook in `frontend/mobile/src/hooks/usePushNotifications.ts`:
+  - Request push notification permissions on physical devices using `expo-notifications` and `expo-device`.
+  - Retrieve Expo push token and register via `POST /api/v1/push-tokens`.
+  - Deregister token on logout via `DELETE /api/v1/push-tokens/{token}`.
+- Implement `NotificationHandler` component in `frontend/mobile/src/components/NotificationHandler.tsx`:
+  - Configure foreground presentation to suppress OS banner when app is active.
+  - Listen for received notifications in foreground and trigger in-app `showToast` from `ToastContext` with matched alert types (`warning`, `success`, `info`, `error`).
+  - Mount `<NotificationHandler />` inside `<ToastProvider>` in `App.tsx`.
+
+## Acceptance Criteria
+
+### Backend Criteria
+- [ ] Migration `2026_09_04_140000_create_push_tokens_table.php` exists and passes `php artisan migrate`.
+- [ ] `PushToken` model exists and `User::pushTokens()` relationship resolves correctly.
+- [ ] Routes for `POST /api/v1/push-tokens` and `DELETE /api/v1/push-tokens/{token}` are registered and return successful JSON responses.
+- [ ] `PushNotificationService` handles single user, role, and multi-role dispatches with proper Seller order filtering.
+
+### Mobile Criteria
+- [ ] `usePushNotifications.ts` correctly manages token lifecycle without crashing on non-device or denied permission states.
+- [ ] `NotificationHandler.tsx` intercepts foreground notifications and feeds them into `useToast`.
+- [ ] `<NotificationHandler />` is cleanly mounted in `App.tsx`.
+- [ ] TypeScript compilation / syntax checks pass for mobile codebase without broken imports.
+
+
 

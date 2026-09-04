@@ -244,4 +244,85 @@ class NotificationApiTest extends TestCase
         $listAfter = $this->getJson('/api/v1/notifications');
         $this->assertNull(collect($listAfter->json('data'))->firstWhere('id', $notifId));
     }
+
+    public function test_seller_cannot_see_audit_or_restock_notifications(): void
+    {
+        $seller = User::create([
+            'name'     => 'Seller Test User',
+            'email'    => 'seller.test@example.com',
+            'password' => Hash::make('password123'),
+            'role'     => 'SELLER',
+        ]);
+
+        Sanctum::actingAs($seller);
+
+        // Create an audit log entry (simulate admin login)
+        \App\Models\AuditLog::create([
+            'source_type' => 'App\Models\User',
+            'source_id'   => $seller->id,
+            'action'      => 'user.login',
+            'category'    => 'AUTH',
+            'target'      => 'User: Admin User',
+            'actor_name'  => 'Admin User',
+            'occurred_at' => now(),
+        ]);
+
+        // Create a restock session
+        $session = RestockSession::create([
+            'user_id'      => $seller->id,
+            'session_code' => 'RS-TEST-01',
+            'status'       => 'verified',
+            'total_cost'   => 500,
+        ]);
+
+        $response = $this->getJson('/api/v1/notifications');
+        $response->assertStatus(200);
+
+        $data = collect($response->json('data'));
+
+        // Seller must NOT see audit notifications
+        $auditNotifs = $data->filter(fn($n) => str_starts_with($n['id'], 'audit_'));
+        $this->assertCount(0, $auditNotifs, 'Seller should NOT see audit notifications');
+
+        // Seller must NOT see restock notifications
+        $restockNotifs = $data->filter(fn($n) => str_starts_with($n['id'], 'restock_'));
+        $this->assertCount(0, $restockNotifs, 'Seller should NOT see restock notifications');
+    }
+
+    public function test_admin_can_see_audit_and_restock_notifications(): void
+    {
+        Sanctum::actingAs($this->user); // $this->user is ADMIN
+
+        // Create an audit log entry
+        \App\Models\AuditLog::create([
+            'source_type' => 'App\Models\User',
+            'source_id'   => $this->user->id,
+            'action'      => 'user.login',
+            'category'    => 'AUTH',
+            'target'      => 'User: Admin User',
+            'actor_name'  => 'Admin User',
+            'occurred_at' => now(),
+        ]);
+
+        // Create a restock session
+        RestockSession::create([
+            'user_id'      => $this->user->id,
+            'session_code' => 'RS-ADMIN-01',
+            'status'       => 'verified',
+            'total_cost'   => 1200,
+        ]);
+
+        $response = $this->getJson('/api/v1/notifications');
+        $response->assertStatus(200);
+
+        $data = collect($response->json('data'));
+
+        // Admin MUST see audit notifications
+        $auditNotifs = $data->filter(fn($n) => str_starts_with($n['id'], 'audit_'));
+        $this->assertNotEmpty($auditNotifs, 'Admin should see audit notifications');
+
+        // Admin MUST see restock notifications
+        $restockNotifs = $data->filter(fn($n) => str_starts_with($n['id'], 'restock_'));
+        $this->assertNotEmpty($restockNotifs, 'Admin should see restock notifications');
+    }
 }

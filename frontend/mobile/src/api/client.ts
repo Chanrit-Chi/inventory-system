@@ -93,11 +93,20 @@ apiClient.interceptors.response.use(
       const status = error.response.status
 
       if (status === 401) {
-        // Exclude login requests so bad credentials don't trigger session expiry flow
+        // Exclude endpoints that should not trigger session expiry flow:
+        // - /login or /auth (bad credentials / auth handshake)
+        // - /push-tokens (background push token registration / deregistration)
         const requestUrl = error.config?.url || ''
-        const isAuthEndpoint = requestUrl.includes('/login') || requestUrl.includes('/auth')
+        const isExemptEndpoint =
+          requestUrl.includes('/login') ||
+          requestUrl.includes('/auth') ||
+          requestUrl.includes('/push-tokens')
 
-        if (!isAuthEndpoint) {
+        const hasAuthCredentials = Boolean(
+          (error.config?.headers as any)?.Authorization || (_getToken && _getToken())
+        )
+
+        if (!isExemptEndpoint && hasAuthCredentials) {
           notifyUnauthorized(
             'Your session was terminated because another device signed into this account, or your session has expired.'
           )

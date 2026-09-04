@@ -191,8 +191,9 @@ class ProductController extends BaseApiController
             $product->variants()->update(['is_active' => false]);
 
             return $this->successResponse([
-                'product' => $product->fresh(['variants']),
-                'action'  => 'deactivated',
+                'product'     => $product->fresh(['variants']),
+                'action'      => 'deactivated',
+                'deactivated' => true,
             ], 'Product has historical transactions and has been deactivated instead of deleted.');
         }
 

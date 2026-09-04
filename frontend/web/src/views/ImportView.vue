@@ -173,6 +173,7 @@ const productColumns = [
   { name: 'reorder_level', required: false, note: 'Low stock alert threshold (default: 5)' },
   { name: 'description', required: false, note: 'Product description notes' },
   { name: 'is_active', required: false, note: '1 = Active, 0 = Inactive (default: 1)' },
+  { name: 'image / picture', required: false, note: 'Image URL (AppSheet, Google Drive, or web image link) — automatically downloaded and saved to your storage' },
 ]
 
 const salesColumns = [

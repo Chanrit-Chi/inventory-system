@@ -1,110 +1,143 @@
-# Project: OmniPOS Web Frontend Redesign
+# Project: Mobile Push Notification System
 
 ## Architecture
-- **Framework**: Vue 3.5 (Composition API `<script setup>`), TypeScript 5.7, Vite 8.2
-- **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`), CSS variable-driven design tokens, Radix Vue 1.9 primitives, Lucide icons
-- **State & Data**: Pinia stores for client domain state (`posStore`, `authStore`, `productStore`, etc.), Axios client (`src/api/axios.ts`) with Bearer token authentication
-- **Design Identity**:
-  * Background Base: Warm Cream (`#FAF7F2` / `#F8F5F0`)
-  * Elevated Surfaces: Crisp White (`#FFFFFF`)
-  * Borders: Amber-tinted Border (`#E8E2D9`)
-  * Brand Primary: Deep Amber (`#924C00`)
-  * Retail Accent / CTA: Vibrant Orange (`#FF8800`)
-  * Text & Typography: Charcoal (`#1A1C1C` / `#1D1B16`), Space Grotesk (headings/display) & Inter (UI/body) & Fira Code (monospaced figures)
+- **Backend**: Laravel 11/12 (PHP 8.4), Laravel Sanctum authentication, Eloquent ORM with UUIDs, SQLite in-memory test environment.
+- **Mobile**: Expo SDK 54, React Native 0.81, React 19, TypeScript 5.9, Axios API client, `expo-notifications`, `expo-device`, `ToastContext`.
+- **Push Service**: Expo Push HTTP/2 Gateway (`https://exp.host/--/api/v2/push/send`) with 100-item chunking, ticket parsing, and automated token pruning on `DeviceNotRegistered`.
 
 ---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Brand Token Layer | Tailwind v4 `@theme` configuration with warm cream, deep amber, vibrant orange, border tokens, and font families in `src/style.css` | M1 | Survey (Explorer 1) |
-| 2 | Shared Radix UI Primitives | Expand `src/components/ui/` (Button, Card, Input, Select, Dialog, Modal, Tabs, Switch, Badge, Table, Skeleton, EmptyState, Toast, StatCard) | M1 | Survey (Explorer 1 & 3) |
-| 3 | Core TypeScript Type Fixes | Fix TS errors in `useCustomerLookup.ts`, `QuotationsView.vue`, `ProductCreateView.vue`, `PayrollView.vue`, and POS components to restore build baseline | M1 | Survey (Explorer 1 & 3) |
-| 4 | App Shell Layout Overhaul | Clean topbar and collapsible sidebar navigation supporting all 26 routes with active indicators, badges, and collapse state | M2 | Survey (Explorer 2) |
-| 5 | Global Ctrl+K Command Palette | Multi-domain search dialog with instant navigation, action shortcuts, and keyboard accessibility | M2 | Survey (Explorer 2) |
-| 6 | Navigation & Header Controls | Channel switcher, store selector, notification panel, user profile menu, breadcrumb navigation | M2 | Survey (Explorer 2) |
-| 7 | Persistent POS Pinia Store | Implement `src/stores/posStore.ts` with multi-cart tabs (hold/resume), line discounts, customer binding, and localStorage persistence | M3 | Survey (Explorer 2) |
-| 8 | High-Density Catalog Grid | Redesign left catalog zone in `POSView.vue` with category chips, debounced search, barcode scanner integration, and variant selection modal | M3 | Survey (Explorer 2) |
-| 9 | Tactile Cart & Transaction Panel | Persistent right transaction cart with price totals, line discounts, quantity steppers, item removal, customer pill, and clear CTA | M3 | Survey (Explorer 2) |
-| 10 | Quick Cash & Checkout Modal | Redesign `PosCheckoutModal.vue` with 1-click cash pills ($10, $20, $50, $100, Exact), multi-tender, and thermal receipt simulation | M3 | Survey (Explorer 2) |
-| 11 | Dashboard View Modernization | High-impact KPI cards with trend indicators, recent orders table, stock alert cards, and quick actions in `DashboardView.vue` | M4 | Survey (Explorer 3) |
-| 12 | Catalog & Inventory Operations Views | Overhaul `ProductListView`, `ProductCreateView`, `ProductEditView`, `CategoriesView`, `AttributesView`, `InventoryLedgerView`, `RestockSessionView`, `SuppliersView` | M4 | Survey (Explorer 3) |
-| 13 | Sales, Orders & Customer Views | Overhaul `OrdersView`, `CustomersView`, `QuotationsView`, `InvoicesView`, `ExpensesView`, `BankAccountsView`, `PayrollView`, `SalesChannelsView` | M4 | Survey (Explorer 3) |
-| 14 | Admin, Settings & Auth Views | Overhaul `SettingsView`, `DeliverySettingsView`, `RolesView`, `PermissionsView`, `UsersView`, `AdminUsersView`, `AuditLogsView`, `ReportsView`, `LoginView` | M4 | Survey (Explorer 3) |
-| 15 | Feedback States & Micro-interactions | Consistent skeleton loaders, empty states with CTA, toast notifications, error recovery states, and smooth transitions across all views | M5 | Survey (Explorer 3) |
-| 16 | Production Build & E2E Validation | Pass `npm run build` (`vue-tsc -b && vite build`) with 0 errors and verify full end-to-end user workflows | M5 | Survey (Explorer 1, 2, 3) |
+| 1 | `push_tokens` Table Migration | Migration `2026_09_04_140000_create_push_tokens_table.php` with UUID `id`, `user_id` foreign key cascade, unique `token`, `device_name`/`device_type`, `platform` | M1 | Survey (Backend Explorer & Spec Miner) |
+| 2 | `PushToken` Model & `User` Relationship | Eloquent `PushToken` model with `user(): BelongsTo` and `User::pushTokens(): HasMany` relation | M1 | Survey (Backend Explorer & Spec Miner) |
+| 3 | Push Token Registration Endpoint | `POST /api/v1/push-tokens` under `auth:sanctum`. Upserts token and transfers token to authenticated user if previously registered to another user | M1 | Survey (Backend Explorer & Spec Miner) |
+| 4 | Push Token Deregistration Endpoint | `DELETE /api/v1/push-tokens/{token}` under `auth:sanctum`. Removes push token on logout (idempotent, supports URL-encoded token strings) | M1 | Survey (Backend Explorer & Spec Miner) |
+| 5 | `PushNotificationService` Dispatch Engine | Core service sending chunked HTTP POST batches (up to 100 items) to `https://exp.host/--/api/v2/push/send` via Laravel `Http` facade | M1 | Survey (Backend Explorer & Spec Miner) |
+| 6 | Role-Aware Dispatch Filtering | Role-based notification rules: Low stock (ADMIN, MANAGER, SELLER), Restock completed (ADMIN, MANAGER), Order completed (ADMIN, MANAGER, and matching SELLER only), Invoice overdue (ADMIN, MANAGER, SELLER), Security events (ADMIN only) | M1 | Survey (Backend Explorer & Spec Miner) |
+| 7 | Dead Token Automatic Pruning | When Expo ticket response contains `status: error` with `DeviceNotRegistered`, immediately delete token from `push_tokens` table | M1 | Survey (Backend Explorer & Spec Miner) |
+| 8 | Backend Push Notification Feature Tests | Comprehensive PHPUnit feature test suite in `tests/Feature/PushNotificationTest.php` covering CRUD, reassignment, role filtering, chunking, and fake Expo responses | M1 | Survey (Backend Explorer & Spec Miner) |
+| 9 | Mobile `usePushNotifications` Hook | React Native hook managing notification permission, Android channel, Expo push token retrieval with EAS project ID, non-device guard, backend sync, and logout cleanup | M2 | Survey (Mobile Explorer & Spec Miner) |
+| 10 | Mobile `NotificationHandler` Component | Foreground notification interceptor suppressing native OS alert banner (`shouldShowAlert: false`) and routing incoming push messages to `ToastContext.showToast()` | M2 | Survey (Mobile Explorer & Spec Miner) |
+| 11 | Mobile App Provider Tree Mounting | Cleanly mount `<NotificationHandler />` inside `<ToastProvider>` in `frontend/mobile/App.tsx` with access to both `useToast` and `useAuth` | M2 | Survey (Mobile Explorer & Spec Miner) |
+| 12 | Mobile TypeScript & Test Verification | Verification that mobile codebase passes `npx tsc --noEmit` with 0 errors and `npm test` passes all suites | M2 | Survey (Mobile Explorer & Spec Miner) |
+| 13 | End-to-End Verification & Forensic Audit | Verification across backend PHPUnit and mobile typecheck/tests, forensic integrity audit, and victory report | M3 | Survey (Orchestrator) |
 
 ---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Token Architecture & Base UI Primitives | Clean Tailwind v4 `@theme` in `src/style.css`, expand `src/components/ui/` with accessible Radix primitives, fix initial TypeScript build blockers | none | DONE |
-| M2 | App Shell, Navigation & Command Palette | Redesign `src/App.vue`, top navigation, 26-route grouped sidebar, channel selector, notifications, dynamic breadcrumbs, and live Ctrl+K Command Palette | M1 | DONE |
-| M3 | High-Density POS Terminal & Catalog | Build `src/stores/posStore.ts`, redesign `src/views/POSView.vue` + `src/components/pos/` (dual-zone layout, catalog, persistent cart, variant selector, quick cash checkout, receipt preview, hotkeys) | M1, M2 | DONE |
-| M4 | Dashboard & Operational Views Modernization | Redesign all 26 operational views across Catalog, Inventory, Sales, Finance, Customers, Settings, and Admin with standardized data tables, metric cards, and form dialogs | M1, M2 | DONE |
-| M5 | State Polish, Feedback & E2E Verification | Polish skeleton loaders, empty states, toasts, micro-animations, execute `npm run build`, and verify functional workflows | M1, M2, M3, M4 | DONE |
+| M1 | Backend Push Token Storage & Dispatch Service | Migration, `PushToken` model, `User::pushTokens()`, `PushTokenController`, `PushNotificationService` with role matrix, and PHPUnit feature tests | none | DONE |
+| M2 | Mobile Push Registration & In-App Notification Handling | `usePushNotifications` hook, `NotificationHandler` component, `App.tsx` mount, and TypeScript check | M1 | IN_PROGRESS |
+| M3 | End-to-End Verification, Forensic Audit & Victory Claim | Comprehensive integration tests, full verification, forensic integrity audit | M1, M2 | PLANNED |
 
 ---
 
 ## Interface Contracts
 
-### `src/style.css` (Tailwind v4 `@theme`)
-```css
-@theme {
-  --color-background: #FAF7F2;
-  --color-foreground: #1A1C1C;
-  --color-surface: #FFFFFF;
-  --color-surface-hover: #F3ECE2;
-  --color-border: #E8E2D9;
-  --color-border-strong: #D5CCC0;
-  --color-primary: #924C00;
-  --color-primary-hover: #7A3F00;
-  --color-primary-foreground: #FFFFFF;
-  --color-cta: #FF8800;
-  --color-cta-hover: #E67A00;
-  --color-cta-foreground: #FFFFFF;
-  --color-muted: #7A7268;
-  --color-muted-background: #F0EAE1;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Fira Code', monospace;
-}
-```
+### 1. Backend API Contracts (`POST /api/v1/push-tokens` & `DELETE /api/v1/push-tokens/{token}`)
+- **POST `/api/v1/push-tokens`**:
+  - Middleware: `auth:sanctum`
+  - Body:
+    ```json
+    {
+      "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+      "device_name": "iPhone 15 Pro",
+      "platform": "ios"
+    }
+    ```
+  - Behavior: Uses `PushToken::updateOrCreate(['token' => $token], ['user_id' => $user->id, 'device_name' => $deviceName, 'platform' => $platform])`. Automatically transfers token if already bound to another user.
+  - Response (HTTP 200/201):
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "user_id": "uuid",
+        "token": "ExponentPushToken[...]",
+        "device_name": "...",
+        "platform": "..."
+      },
+      "message": "Push token registered successfully."
+    }
+    ```
 
-### `src/stores/posStore.ts`
-```typescript
-export interface CartItem {
-  id: string
-  product_id: string
-  variant_id?: string
-  name: string
-  sku: string
-  barcode?: string
-  price: number
-  cost_price?: number
-  quantity: number
-  discount: number // percentage or fixed amount
-  notes?: string
-  image_url?: string
-}
+- **DELETE `/api/v1/push-tokens/{token}`**:
+  - Middleware: `auth:sanctum`
+  - Route param: `{token}` (raw or URL-encoded, regex `.*`)
+  - Behavior: `PushToken::where('token', urldecode($token))->where('user_id', $user->id)->delete();` (or deletes matching token). Idempotent.
+  - Response (HTTP 200):
+    ```json
+    {
+      "success": true,
+      "data": null,
+      "message": "Push token deregistered successfully."
+    }
+    ```
 
-export interface HoldCart {
-  id: string
-  name: string
-  customer?: { id: string; name: string; phone?: string }
-  items: CartItem[]
-  timestamp: number
-  notes?: string
-}
-```
+### 2. `PushNotificationService` Contract
+- `sendPush(array $tokens, array $payload): array`
+  - Batching: `array_chunk($tokens, 100)`
+  - Endpoint: `POST https://exp.host/--/api/v2/push/send`
+  - Pruning: On `ticket.status === 'error'` and `ticket.details.error === 'DeviceNotRegistered'`, delete matching token.
+  - Return: `['sent' => int, 'failed' => int, 'purged' => array]`
+- Event dispatchers:
+  - `notifyLowStock($variant)` -> dispatches to `['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER']`
+  - `notifyRestockCompleted($session)` -> dispatches to `['SUPER_ADMIN', 'ADMIN', 'MANAGER']` (SELLER excluded)
+  - `notifyOrderCompleted($order)` -> dispatches to `['SUPER_ADMIN', 'ADMIN', 'MANAGER']` and matching SELLER only (`order.user_id === seller.id` or `order.seller_id === seller.id`)
+  - `notifyInvoiceOverdue($invoice)` -> dispatches to `['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER']`
+  - `notifySecurityEvent($auditLog)` -> dispatches to `['SUPER_ADMIN', 'ADMIN']` only
+
+### 3. Mobile Hook Contract (`usePushNotifications`)
+- Signature:
+  ```typescript
+  export function usePushNotifications(): {
+    expoPushToken: string | null
+    permissionStatus: Notifications.PermissionStatus | 'undetermined'
+    isRegistered: boolean
+    registerDevice: () => Promise<string | null>
+  }
+  ```
+- Lifecycle:
+  - Checks `Device.isDevice`. If false, returns null and does not call native push APIs.
+  - Sets up Android channel `default` on Android 8.0+.
+  - Requests permissions. If granted, retrieves Expo push token with EAS project ID.
+  - Automatically syncs token with `POST /api/v1/push-tokens` when user is authenticated.
+  - Deregisters token via `DELETE /api/v1/push-tokens/{token}` on logout.
+
+### 4. Mobile Component Contract (`NotificationHandler`)
+- Foreground suppression:
+  ```typescript
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: false,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  })
+  ```
+- Listener: Listens via `Notifications.addNotificationReceivedListener` and maps:
+  - `low_stock` -> `'warning'`
+  - `restock` -> `'info'`
+  - `order` -> `'success'`
+  - `invoice` -> `'warning'`
+  - `audit` -> `'error'`
+  - Fallback -> `'info'`
+  Calls `useToast().showToast(message, type)`.
 
 ---
 
 ## Code Layout
-- `frontend/web/src/style.css`: Core Tailwind v4 design tokens and global layout rules
-- `frontend/web/src/components/ui/`: Radix Vue & Tailwind v4 shared primitives
-- `frontend/web/src/App.vue`: Root app shell, sidebar navigation, topbar, command palette
-- `frontend/web/src/stores/`: Pinia stores (`posStore.ts`, `authStore.ts`, `productStore.ts`, etc.)
-- `frontend/web/src/components/pos/`: POS components (Catalog Grid, Cart Panel, Variant Modal, Checkout Modal, Receipt Modal)
-- `frontend/web/src/views/`: 27 page views (POS, Dashboard, Products, Orders, Customers, Inventory, Settings, etc.)
+- `backend/database/migrations/2026_09_04_140000_create_push_tokens_table.php`: Migration for `push_tokens` table
+- `backend/app/Models/PushToken.php`: Eloquent model for push tokens
+- `backend/app/Models/User.php`: Extended with `pushTokens(): HasMany`
+- `backend/app/Http/Controllers/Api/V1/PushTokenController.php`: API controller for token registration and deregistration
+- `backend/app/Services/PushNotificationService.php`: Push notification dispatch and filtering service
+- `backend/routes/api.php`: Route registrations under `v1` and `auth:sanctum`
+- `backend/tests/Feature/PushNotificationTest.php`: Feature tests for push notifications and token management
+- `frontend/mobile/src/hooks/usePushNotifications.ts`: Custom hook for token acquisition and backend registration
+- `frontend/mobile/src/components/NotificationHandler.tsx`: Component for foreground suppression and in-app toast routing
+- `frontend/mobile/App.tsx`: Mounts `<NotificationHandler />` inside `<ToastProvider>`
+- `frontend/mobile/src/api/endpoints.ts`: Optional API helper functions for push token registration

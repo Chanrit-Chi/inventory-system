@@ -18,6 +18,14 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             SalesChannelSeeder::class,
             DeliveryAndBankSeeder::class,
+            ProductCategorySeeder::class,
+            AttributeSeeder::class,
+            ProductSeeder::class,
+            CustomerSeeder::class,
+            RestockSeeder::class,
+            OrderSeeder::class,
+            ExpenseSeeder::class,
+            QuotationInvoiceSeeder::class,
         ]);
     }
 }

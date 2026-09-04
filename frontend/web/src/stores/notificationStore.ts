@@ -15,7 +15,9 @@ export interface HeaderNotification {
 }
 
 export const useNotificationStore = defineStore('notification', () => {
-  // Fallback initial sample data if backend is empty / initial load
+  // Fallback shown only when backend is unreachable on initial load.
+  // Keep this minimal – role-appropriate filtering happens server-side.
+  // Only include notifications relevant to the lowest-privilege role (SELLER).
   const defaultFallbackNotifications: HeaderNotification[] = [
     {
       id: 'n-1',
@@ -25,24 +27,7 @@ export const useNotificationStore = defineStore('notification', () => {
       variant: 'warning',
       unread: true,
       to: '/inventory',
-    },
-    {
-      id: 'n-2',
-      title: 'Restock Batch #RS-9942 Verified',
-      desc: 'Inbound shipment from TechSupply Co. added 120 items.',
-      time: '38m ago',
-      variant: 'info',
-      unread: true,
-      to: '/restock',
-    },
-    {
-      id: 'n-3',
-      title: 'POS Register Sync Complete',
-      desc: 'Register #1 recorded 18 checkout sales ($1,480.00).',
-      time: '2h ago',
-      variant: 'success',
-      unread: false,
-      to: '/orders',
+      type: 'low_stock',
     },
   ]
 

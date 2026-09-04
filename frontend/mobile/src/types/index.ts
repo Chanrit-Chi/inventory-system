@@ -1066,3 +1066,29 @@ export interface TeamDailySettlementSummary {
   sellers: TeamSellerStatusItem[]
 }
 
+export interface PushTokenPayload {
+  token: string
+  device_name?: string | null
+  device_type?: string | null
+  platform?: 'android' | 'ios' | 'web' | 'unknown' | null | string
+}
+
+export type RegisterPushTokenPayload = PushTokenPayload
+
+export interface PushTokenRecord {
+  id: string
+  user_id: string
+  token: string
+  device_name?: string | null
+  platform?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface UsePushNotificationsResult {
+  expoPushToken: string | null
+  permissionStatus: import('expo-notifications').PermissionStatus | 'undetermined'
+  isRegistered: boolean
+  registerDevice: () => Promise<string | null>
+}
+

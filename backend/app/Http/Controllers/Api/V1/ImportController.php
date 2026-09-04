@@ -30,7 +30,7 @@ class ImportController extends BaseApiController
         $updateExisting = (bool) $request->input('update_existing', false);
         $actor          = $request->user();
 
-        set_time_limit(180);
+        set_time_limit(600);
 
         $result = $this->importService->importProducts($file, $actor, $updateExisting);
 

@@ -11,6 +11,8 @@ use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -243,5 +245,86 @@ class ProductImportTest extends TestCase
         $res2->assertOk();
         $res2->assertJsonPath('data.skipped', 1);
         $this->assertStringContainsString('Duplicate product', $res2->json('data.errors.0.message'));
+    }
+
+    public function test_product_import_with_image_url_downloads_and_sets_image(): void
+    {
+        Storage::fake('public');
+
+        $fakeImageData = 'FAKE_IMAGE_BINARY_DATA_FOR_TESTING_' . str_repeat('A', 200);
+        $imageUrl = 'https://www.appsheet.com/template/gettablefileurl?appName=TestApp&tableName=ProductList&fileName=ProductList_Images/test.jpg';
+
+        Http::fake([
+            $imageUrl => Http::response($fakeImageData, 200, ['Content-Type' => 'image/jpeg']),
+        ]);
+
+        $headers = ['name', 'sku', 'purchase_price', 'selling_price', 'picture'];
+        $rows = [
+            ['Camera Lens', 'LENS-001', '50.00', '120.00', $imageUrl],
+        ];
+
+        $file = $this->createExcelFile($headers, $rows);
+
+        $res = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/v1/import/products', ['file' => $file]);
+
+        $res->assertOk();
+        $res->assertJsonPath('data.imported', 1);
+
+        $product = Product::where('name', 'Camera Lens')->first();
+        $this->assertNotNull($product);
+        $this->assertNotNull($product->image_url);
+        $this->assertStringContainsString('/storage/products/', $product->image_url);
+
+        // Verify file was actually saved to public storage
+        $filename = basename(parse_url($product->image_url, PHP_URL_PATH));
+        Storage::disk('public')->assertExists("products/{$filename}");
+    }
+
+    public function test_updating_existing_product_attaches_image(): void
+    {
+        Storage::fake('public');
+
+        // Create product without image
+        $product = Product::create([
+            'name'           => 'Wireless Keyboard',
+            'sku'            => 'KEY-001',
+            'purchase_price' => '20.00',
+            'cost_price'     => '20.00',
+            'selling_price'  => '45.00',
+            'image_url'      => null,
+            'is_active'      => true,
+        ]);
+
+        $fakeImageData = 'FAKE_IMAGE_BINARY_DATA_FOR_KEYBOARD_' . str_repeat('B', 200);
+        $imageUrl = 'https://www.appsheet.com/template/gettablefileurl?appName=TestApp&tableName=ProductList&fileName=ProductList_Images/keyboard.jpg';
+
+        Http::fake([
+            $imageUrl => Http::response($fakeImageData, 200, ['Content-Type' => 'image/jpeg']),
+        ]);
+
+        // Re-import with update_existing = true and Picture column
+        $headers = ['name', 'sku', 'purchase_price', 'selling_price', 'image'];
+        $rows = [
+            ['Wireless Keyboard', 'KEY-001', '20.00', '45.00', $imageUrl],
+        ];
+
+        $file = $this->createExcelFile($headers, $rows);
+
+        $res = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/v1/import/products', [
+                'file' => $file,
+                'update_existing' => true,
+            ]);
+
+        $res->assertOk();
+        $res->assertJsonPath('data.updated', 1);
+
+        $product->refresh();
+        $this->assertNotNull($product->image_url);
+        $this->assertStringContainsString('/storage/products/', $product->image_url);
+
+        $filename = basename(parse_url($product->image_url, PHP_URL_PATH));
+        Storage::disk('public')->assertExists("products/{$filename}");
     }
 }

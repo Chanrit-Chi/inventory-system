@@ -16,6 +16,7 @@ import type { UserAccount } from '../types'
 
 const TOKEN_KEY = '@kc_inventory_token'
 const USER_KEY = '@kc_inventory_user'
+export const PUSH_TOKEN_KEY = '@kc_inventory_push_token'
 
 interface AuthContextValue {
   currentUser: UserAccount | null
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reason ||
       'You have been signed out because your account was logged into from another device or your session expired.'
     setSessionExpiredMessage(msg)
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]).catch(() => null)
+    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY, PUSH_TOKEN_KEY]).catch(() => null)
     queryClient.clear()
 
     if (!isAlertingRef.current) {
@@ -130,6 +131,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      // Before calling logoutUser(), retrieve savedPushToken from AsyncStorage.
+      // If present, call deregisterPushToken(savedPushToken) inside try/catch so network failure never blocks logout.
+      try {
+        const savedPushToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY)
+        if (savedPushToken) {
+          const { deregisterPushToken } = await import('../api/endpoints')
+          await deregisterPushToken(savedPushToken)
+          await AsyncStorage.removeItem(PUSH_TOKEN_KEY).catch(() => null)
+        }
+      } catch (pushErr) {
+        console.warn('Push token deregistration on logout warning:', pushErr)
+      }
+
+      // Then call logoutUser().
       const { logoutUser } = await import('../api/endpoints')
       await logoutUser()
     } catch (err) {
@@ -140,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null)
       setCurrentUser(null)
       try {
-        await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY])
+        await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY, PUSH_TOKEN_KEY])
       } catch {
         // Ignore storage removal errors
       }

@@ -84,6 +84,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { queryClient, asyncStoragePersister } from './src/api/queryClient'
 import { queryKeys } from './src/api/queryKeys'
 import { ErrorBoundary } from './src/components/ErrorBoundary'
+import { NotificationHandler } from './src/components/NotificationHandler'
 import { ToastProvider } from './src/context/ToastContext'
 
 export default function App() {
@@ -100,6 +101,7 @@ export default function App() {
                 <PurchaseOrderProvider>
                   <ModalManagerProvider>
                     <ToastProvider>
+                      <NotificationHandler />
                       <AppShell />
                     </ToastProvider>
                   </ModalManagerProvider>

@@ -258,6 +258,14 @@ class User extends Authenticatable
         return $this->hasMany(Payroll::class, 'user_id');
     }
 
+    /**
+     * Push notification tokens associated with this user.
+     */
+    public function pushTokens(): HasMany
+    {
+        return $this->hasMany(PushToken::class, 'user_id');
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

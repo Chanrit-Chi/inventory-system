@@ -321,7 +321,7 @@ class VariantGeneratorService
                 if ($oldVar->stockMovements()->count() === 0 && $oldVar->orderItems()->count() === 0) {
                     $oldVar->forceDelete();
                 } else {
-                    $oldVar->update(['is_active' => false]);
+                    $oldVar->delete();
                 }
             }
         }
