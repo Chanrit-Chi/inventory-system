@@ -61,7 +61,7 @@ const trendClass = computed(() => {
   <div
     :class="cn(
       'rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs flex flex-col gap-3',
-      'transition-all duration-150 hover:shadow-sm hover:border-border-strong hover:-translate-y-px',
+      'transition-colors transition-shadow duration-150 hover:shadow-sm hover:border-border-strong',
       $attrs.class as string,
     )"
   >
@@ -70,16 +70,16 @@ const trendClass = computed(() => {
         <component :is="icon" v-if="typeof icon !== 'string' && icon" class="w-4 h-4 sm:w-5 sm:h-5" />
         <span v-else>{{ icon }}</span>
       </div>
-      <span v-if="trend" :class="cn('inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold border', trendClass)">
+      <span v-if="trend" :class="cn('inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide border', trendClass)">
         <TrendingUp v-if="trendVariant === 'up'" class="w-3 h-3" />
         <TrendingDown v-else-if="trendVariant === 'down'" class="w-3 h-3" />
         {{ trend }}
       </span>
     </div>
     <div class="flex flex-col gap-0.5 sm:gap-1">
-      <span class="text-xl sm:text-2xl font-bold tracking-tight tabular-nums text-foreground leading-tight font-sans">{{ value }}</span>
-      <span class="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider line-clamp-1">{{ label }}</span>
-      <span v-if="sub" class="text-[11px] sm:text-xs text-muted-foreground line-clamp-1">{{ sub }}</span>
+      <span class="text-xl sm:text-2xl font-bold tracking-normal tabular-nums text-foreground leading-tight font-sans">{{ value }}</span>
+      <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wider line-clamp-1">{{ label }}</span>
+      <span v-if="sub" class="text-xs text-muted-foreground line-clamp-1">{{ sub }}</span>
     </div>
   </div>
 </template>

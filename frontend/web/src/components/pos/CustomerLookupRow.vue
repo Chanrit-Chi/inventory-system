@@ -251,7 +251,7 @@ function handleReset() {
               </span>
             </div>
 
-            <div class="text-[9.5px] text-muted-foreground font-mono">
+            <div class="text-[10px] text-muted-foreground font-mono">
               Spent ${{ (parseFloat(String(cust.total_spent || 0)) || 0).toFixed(2) }} • {{ cust.total_purchased ?? 0 }} {{ (cust.total_purchased ?? 0) === 1 ? 'order' : 'orders' }}
             </div>
           </div>
@@ -273,22 +273,22 @@ function handleReset() {
       class="grid grid-cols-3 divide-x divide-border rounded-xl bg-surface-subtle border border-border py-2 px-3 text-center shadow-2xs animate-in fade-in-0 duration-150"
     >
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">POINTS</div>
-        <div class="text-xs font-black text-primary font-mono mt-0.5">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">POINTS</div>
+        <div class="text-xs font-bold text-primary font-mono mt-0.5">
           ⭐ {{ pointsEstimate.toLocaleString() }}
         </div>
       </div>
 
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">LIFETIME SPENT</div>
-        <div class="text-xs font-black text-foreground font-mono mt-0.5">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">LIFETIME SPENT</div>
+        <div class="text-xs font-bold text-foreground font-mono mt-0.5">
           ${{ resolvedLoyalty.totalSpent.toFixed(2) }}
         </div>
       </div>
 
       <div class="px-1">
-        <div class="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">ORDERS</div>
-        <div class="text-xs font-black text-foreground font-mono mt-0.5">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">ORDERS</div>
+        <div class="text-xs font-bold text-foreground font-mono mt-0.5">
           {{ resolvedLoyalty.totalPurchased }} {{ resolvedLoyalty.totalPurchased === 1 ? 'sale' : 'sales' }}
         </div>
       </div>

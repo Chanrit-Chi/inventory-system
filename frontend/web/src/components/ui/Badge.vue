@@ -74,7 +74,7 @@ const dotColorClass = computed(() => {
 <template>
   <span
     :class="cn(
-      'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap leading-tight transition-colors shadow-2xs select-none',
+      'inline-flex items-center justify-center gap-1.5 px-2.5 py-1 min-h-[22px] rounded-full text-xs font-semibold border whitespace-nowrap leading-none tracking-[0.02em] transition-colors shadow-2xs select-none',
       variantClass,
       props.class,
       $attrs.class as string,

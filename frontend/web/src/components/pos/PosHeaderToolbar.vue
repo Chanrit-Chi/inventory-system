@@ -422,7 +422,8 @@ const formatMoney = (amount: number): string => {
   color: #924C00;
   border-radius: var(--radius-full);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   line-height: 1;
 }

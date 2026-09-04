@@ -241,8 +241,9 @@ onUnmounted(() => {
 }
 
 .theme-system-tag {
-  font-size: 9.5px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 1px 5px;
   border-radius: var(--radius-full, 9999px);
   background: var(--color-muted, #F0EAE1);

@@ -562,8 +562,8 @@ function handleLogout() {
 .sidebar-brand-name {
   font-family: var(--font-display, 'Poppins', sans-serif);
   font-weight: 700;
-  font-size: 15.5px;
-  letter-spacing: -0.02em;
+  font-size: 16px;
+  letter-spacing: -0.01em;
   color: var(--color-foreground, #1A1C1C);
   line-height: 1.2;
 }
@@ -592,7 +592,7 @@ function handleLogout() {
 }
 
 .sidebar-group-header {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -680,8 +680,8 @@ function handleLogout() {
 }
 
 .sidebar-nav-badge {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   padding: 1px 6px;
   border-radius: 9999px;
   white-space: nowrap;
@@ -820,7 +820,7 @@ function handleLogout() {
 }
 
 .sidebar-user-name {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
   white-space: nowrap;
@@ -829,7 +829,7 @@ function handleLogout() {
 }
 
 .sidebar-user-role {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
   overflow: hidden;

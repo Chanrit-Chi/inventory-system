@@ -600,8 +600,8 @@ onUnmounted(() => {
 
 .header-search-kbd {
   font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   background-color: var(--color-card, #FFFFFF);
   border: 1px solid var(--color-border, #E8E2D9);
   border-radius: 4px;
@@ -622,7 +622,7 @@ onUnmounted(() => {
   border-radius: 10px;
   border: 1px solid var(--color-border, #E8E2D9);
   background: var(--color-surface-subtle, #FAF7F2);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
   cursor: pointer;
@@ -669,7 +669,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -760,8 +760,8 @@ onUnmounted(() => {
   position: absolute;
   top: -4px;
   right: -4px;
-  min-width: 17px;
-  height: 17px;
+  min-width: 18px;
+  height: 18px;
   padding: 0 4px;
   border-radius: 9999px;
   background-color: var(--color-cta, #FF8800);
@@ -803,14 +803,15 @@ onUnmounted(() => {
 }
 
 .header-notifications-title {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--color-foreground, #1A1C1C);
 }
 
 .header-unread-count-pill {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 1px 6px;
   border-radius: 9999px;
   background: var(--color-cta-muted, #FFE4CC);
@@ -818,7 +819,7 @@ onUnmounted(() => {
 }
 
 .header-mark-all-btn {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--color-primary, #924C00);
   background: transparent;
@@ -924,19 +925,19 @@ onUnmounted(() => {
 }
 
 .header-notif-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
 }
 
 .header-notif-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--color-muted-foreground, #6B6358);
   line-height: 1.35;
 }
 
 .header-notif-time {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--color-muted-foreground, #8C8275);
   margin-top: 2px;
 }
@@ -977,7 +978,7 @@ onUnmounted(() => {
 }
 
 .header-notif-empty-title {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
 }
@@ -1043,14 +1044,14 @@ onUnmounted(() => {
 }
 
 .header-user-name {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
   line-height: 1.2;
 }
 
 .header-user-role {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--color-muted-foreground, #6B6358);
 }
 
@@ -1117,8 +1118,9 @@ onUnmounted(() => {
 .header-user-role-badge {
   display: inline-block;
   margin-top: 4px;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 1px 6px;
   border-radius: 9999px;
   background: var(--color-cta-muted, #FFE4CC);
@@ -1141,7 +1143,7 @@ onUnmounted(() => {
   border-radius: 8px;
   color: var(--color-secondary-foreground, #574335);
   text-decoration: none;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   transition: all 140ms ease;
 }
@@ -1167,7 +1169,7 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   width: 100%;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 140ms ease;

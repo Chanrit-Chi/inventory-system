@@ -9,9 +9,9 @@ import { cva, type VariantProps } from 'class-variance-authority'
  */
 export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 rounded-md font-medium ' +
-    'transition-all duration-150 ease-out whitespace-nowrap select-none ' +
+    'transition-colors transition-shadow duration-150 ease-out whitespace-nowrap select-none leading-none ' +
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ' +
-    'disabled:opacity-50 disabled:pointer-events-none active:translate-y-0 hover:-translate-y-px cursor-pointer',
+    'disabled:opacity-50 disabled:pointer-events-none cursor-pointer',
   {
     variants: {
       variant: {

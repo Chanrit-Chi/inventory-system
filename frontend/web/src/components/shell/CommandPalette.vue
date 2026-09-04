@@ -806,7 +806,7 @@ onUnmounted(() => {
 .command-palette-esc-badge {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 2px 7px;
   border-radius: 6px;
   background: var(--color-muted, #F0EAE1);
@@ -910,7 +910,7 @@ onUnmounted(() => {
 }
 
 .command-palette-item-title {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-foreground, #1A1C1C);
   white-space: nowrap;
@@ -923,8 +923,9 @@ onUnmounted(() => {
 }
 
 .command-palette-item-badge {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 1px 6px;
   border-radius: 9999px;
   background: var(--color-cta-muted, #FFE4CC);
@@ -937,7 +938,7 @@ onUnmounted(() => {
 }
 
 .command-palette-item-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--color-muted-foreground, #6B6358);
   white-space: nowrap;
   overflow: hidden;
@@ -954,7 +955,7 @@ onUnmounted(() => {
 .command-palette-shortcut-badge {
   font-family: var(--font-mono, monospace);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--color-muted, #F0EAE1);
@@ -964,7 +965,7 @@ onUnmounted(() => {
 
 .command-palette-route-path {
   font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--color-muted-foreground, #8C8275);
 }
 
@@ -1009,7 +1010,7 @@ onUnmounted(() => {
 }
 
 .command-palette-empty-desc {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--color-muted-foreground, #6B6358);
   max-width: 360px;
   line-height: 1.4;
@@ -1022,7 +1023,7 @@ onUnmounted(() => {
   padding: 10px 18px;
   border-top: 1px solid var(--color-border, #E8E2D9);
   background-color: var(--color-surface-subtle, #FAF7F2);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--color-muted-foreground, #6B6358);
 }
 

@@ -1002,7 +1002,7 @@ onMounted(async () => {
                         <span>{{ getStaffDept(p) }}</span>
                         <template v-if="p.user?.is_on_probation">
                           <span>•</span>
-                          <Badge variant="warning" class="text-[9.5px] px-1.5 py-0 font-medium leading-tight">
+                          <Badge variant="warning" class="text-[10px] px-1.5 py-0 font-medium leading-tight">
                             Probation
                           </Badge>
                         </template>
@@ -1064,7 +1064,7 @@ onMounted(async () => {
                 </TableCell>
 
                 <!-- Net Payout -->
-                <TableCell class="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 text-right">
+                <TableCell class="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-right">
                   {{ formatMoney(p.total_net_pay || p.total_net) }}
                 </TableCell>
 
@@ -1327,7 +1327,7 @@ onMounted(async () => {
                         <span>{{ s.department || 'General' }}</span>
                         <template v-if="s.is_on_probation">
                           <span>•</span>
-                          <Badge variant="warning" class="text-[9.5px] px-1.5 py-0 font-medium leading-tight">
+                          <Badge variant="warning" class="text-[10px] px-1.5 py-0 font-medium leading-tight">
                             Probation (Mo {{ Math.min(3, (s.seniority_months ?? 0) + 1) }}/3)
                           </Badge>
                         </template>

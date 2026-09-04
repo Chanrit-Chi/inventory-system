@@ -406,12 +406,13 @@ onMounted(() => {
                     <span class="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
                       {{ product.name }}
                     </span>
-                    <span
+                    <Badge
                       v-if="product.category"
-                      class="px-1.5 py-0.2 rounded-md bg-cta-muted text-primary border border-border-strong text-[11px] font-semibold shrink-0"
+                      variant="primary"
+                      class="text-[11px] px-1.5 py-0.5 rounded-md shrink-0"
                     >
                       {{ product.category.name }}
-                    </span>
+                    </Badge>
                     <span class="text-[11px] text-muted-foreground font-medium shrink-0">
                       ({{ product.variants.length }} var{{ product.variants.length === 1 ? '' : 's' }} · {{ isExpanded(product.id) ? 'Hide' : 'Show' }})
                     </span>
@@ -466,6 +467,7 @@ onMounted(() => {
                     <RouterLink
                       v-if="productStats(product).low > 0 || productStats(product).out > 0"
                       to="/restock"
+                      class="inline-flex"
                     >
                       <Button
                         size="sm"
@@ -554,6 +556,7 @@ onMounted(() => {
                       <RouterLink
                         v-if="variant.quantity_on_hand <= variant.reorder_level"
                         to="/restock"
+                        class="inline-flex"
                       >
                         <Button
                           size="sm"
@@ -609,7 +612,7 @@ onMounted(() => {
     <div class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <h3 class="font-display font-bold text-sm text-foreground">Stock Movement Types & Audit Reference</h3>
-        <Badge variant="success" class="text-[10px]">ACID Audit Ledger</Badge>
+        <Badge variant="success" class="text-xs">ACID Audit Ledger</Badge>
       </div>
       <div class="flex flex-wrap gap-2">
         <Badge variant="success" class="text-xs">RESTOCK (Supplier Intake)</Badge>

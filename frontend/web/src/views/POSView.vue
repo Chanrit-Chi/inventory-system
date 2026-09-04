@@ -1348,7 +1348,7 @@ defineExpose({
                 </h4>
 
                 <!-- SKU Code (High-Contrast, Clear Monospace) -->
-                <div class="text-[10.5px] font-mono text-muted-foreground truncate font-medium">
+                <div class="text-[11px] font-mono text-muted-foreground truncate font-medium">
                   SKU: <span class="font-semibold text-foreground/80">{{ product.sku || product.variants?.[0]?.sku || '—' }}</span>
                 </div>
               </div>
@@ -1464,7 +1464,7 @@ defineExpose({
         <span class="text-[10px] font-bold">Held</span>
         <span
           v-if="posStore.heldOrders.length > 0"
-          class="absolute -top-1 right-1 w-4 h-4 rounded-full bg-cta text-cta-foreground text-[9px] font-mono font-black flex items-center justify-center shadow-xs"
+          class="absolute -top-1 right-1 w-4 h-4 rounded-full bg-cta text-cta-foreground text-[10px] font-mono font-bold flex items-center justify-center shadow-xs"
         >
           {{ posStore.heldOrders.length }}
         </span>

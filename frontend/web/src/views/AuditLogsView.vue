@@ -318,7 +318,7 @@ onMounted(loadLogs)
             v-model="selectedCategory"
             :options="categoryOptions"
             placeholder="All Categories"
-            class="h-9 w-44 sm:w-48 bg-surface text-xs"
+            class="h-9.5 w-44 sm:w-52 bg-surface text-xs sm:text-sm font-medium"
             @change="onCategoryChange"
           />
 
@@ -327,7 +327,7 @@ onMounted(loadLogs)
             v-model="selectedDatePreset"
             :options="datePresetOptions"
             placeholder="All Time"
-            class="h-9 w-36 sm:w-40 bg-surface text-xs"
+            class="h-9.5 w-40 sm:w-48 bg-surface text-xs sm:text-sm font-medium"
             @change="onDatePresetChange"
           />
 

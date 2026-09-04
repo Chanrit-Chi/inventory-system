@@ -253,12 +253,11 @@ const formatMoney = (amount: number | string | undefined): string => {
   overflow: hidden;
   cursor: pointer;
   border: 1px solid var(--color-border);
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
   position: relative;
 }
 
 .product-card:hover {
-  transform: translateY(-4px);
   box-shadow: var(--shadow-lg);
   border-color: var(--color-cta);
 }
@@ -297,13 +296,11 @@ const formatMoney = (amount: number | string | undefined): string => {
   right: 10px;
   padding: 3px 8px;
   border-radius: var(--radius-full);
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   border: 1px solid transparent;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   z-index: 2;
   transition: all var(--transition-smooth, 200ms ease);
@@ -350,10 +347,10 @@ const formatMoney = (amount: number | string | undefined): string => {
 }
 
 .product-category {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.04em;
   color: var(--color-primary);
   margin-bottom: 4px;
   white-space: nowrap;

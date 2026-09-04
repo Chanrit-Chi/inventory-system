@@ -17,6 +17,7 @@ import {
   Phone,
   Key,
   Check,
+  CheckCircle2,
   Calculator,
   Briefcase,
   DollarSign,
@@ -73,6 +74,8 @@ interface UserAccount {
   department?: string | null
   hire_date?: string | null
   probation_exempt?: boolean
+  is_on_probation?: boolean
+  seniority_months?: number
   notes?: string | null
   base_salary?: number | string | null
   salary_reason?: string | null
@@ -204,6 +207,28 @@ const formThirteenthMonthAccrual = computed(() => {
   const sal = parseFloat(userForm.base_salary)
   if (isNaN(sal) || sal <= 0) return '0.00'
   return (sal / 12).toFixed(2)
+})
+
+// Check if staff hire date is older than 3 months (probation completed naturally)
+const isProbationNaturallyCompleted = computed(() => {
+  if (!userForm.hire_date) return false
+  const hire = new Date(userForm.hire_date)
+  if (isNaN(hire.getTime())) return false
+
+  const probationEndDate = new Date(hire)
+  probationEndDate.setMonth(probationEndDate.getMonth() + 3)
+
+  return probationEndDate <= new Date()
+})
+
+const formSeniorityMonths = computed(() => {
+  if (!userForm.hire_date) return 0
+  const hire = new Date(userForm.hire_date)
+  if (isNaN(hire.getTime())) return 0
+
+  const now = new Date()
+  const diffMonths = (now.getFullYear() - hire.getFullYear()) * 12 + (now.getMonth() - hire.getMonth())
+  return Math.max(0, diffMonths)
 })
 
 // Raise Modal State
@@ -844,7 +869,7 @@ async function loadPerformanceData() {
 }
 
 watch(perfPeriod, () => {
-  if (isDetailModalOpen.value && detailTab.value === 'performance') {
+  if (isDetailModalOpen.value) {
     loadPerformanceData()
   }
 })
@@ -1820,19 +1845,45 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Waive Probation / Seniority Waiver -->
-            <div class="rounded-lg border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 flex items-start gap-2.5">
+            <!-- Waive Probation / Seniority Status -->
+            <div
+              v-if="isProbationNaturallyCompleted"
+              class="rounded-xl border border-success-border bg-success-bg p-3 flex items-start gap-3 shadow-xs"
+            >
+              <div class="w-7 h-7 rounded-full bg-emerald-500/15 dark:bg-emerald-400/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
+                <CheckCircle2 :size="16" class="stroke-[2.5]" />
+              </div>
+              <div class="space-y-1 text-xs">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-success-text text-xs">
+                    Probation Completed (Full Benefits Active)
+                  </span>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-800 dark:bg-emerald-700 text-white shadow-xs tracking-tight">
+                    {{ formSeniorityMonths }}+ mos seniority
+                  </span>
+                </div>
+                <p class="text-xs text-success-text/90 leading-relaxed">
+                  Hired on <span class="font-semibold">{{ fmtDateOnly(userForm.hire_date) }}</span> (over 3 months ago). 3-month probation has been completed naturally; sales incentives, commissions, and 13th-month accruals are fully active.
+                </p>
+              </div>
+            </div>
+
+            <!-- New Staff Within 3-Month Probation Window -->
+            <div
+              v-else
+              class="rounded-xl border border-warning-border bg-warning-bg p-3 flex items-start gap-3 shadow-xs"
+            >
               <input
                 id="form-user-probation-exempt"
                 v-model="userForm.probation_exempt"
                 type="checkbox"
-                class="mt-0.5 rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                class="mt-1 rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer shrink-0"
               />
-              <div class="text-xs">
-                <label for="form-user-probation-exempt" class="font-semibold text-foreground cursor-pointer select-none">
+              <div class="space-y-1 text-xs">
+                <label for="form-user-probation-exempt" class="font-bold text-warning-text cursor-pointer select-none block">
                   Waive 3-Month Probation (Grant Full Benefits Immediately)
                 </label>
-                <p class="text-3xs text-muted-foreground mt-0.5">
+                <p class="text-xs text-warning-text/90 leading-relaxed">
                   Enable for special or senior hires to immediately unlock sales incentives, commissions, and 13th-month reserve accruals from Day 1 without waiting 3 months.
                 </p>
               </div>
@@ -1968,173 +2019,184 @@ onMounted(() => {
 
     <!-- ============ STAFF DETAIL & PERFORMANCE MODAL ============ -->
     <Dialog :open="isDetailModalOpen" @update:open="(val) => { if (!val) isDetailModalOpen = false; }">
-      <DialogContent class="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader v-if="detailUser">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-cta-muted text-primary border border-border-strong flex items-center justify-center font-bold text-sm">
-              {{ getInitials(detailUser.name) }}
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <DialogTitle class="font-display text-base">{{ detailUser.name }}</DialogTitle>
-                <Badge :variant="getRoleVariant(detailUser.role)" class="font-mono text-3xs font-bold">{{ detailUser.role }}</Badge>
+      <DialogContent class="sm:max-w-3xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader v-if="detailUser" class="pb-2 border-b border-border">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-full bg-cta-muted text-primary border border-border-strong flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                {{ getInitials(detailUser.name) }}
               </div>
-              <DialogDescription class="text-xs">
-                {{ detailUser.email }} {{ detailUser.phone ? `· ${detailUser.phone}` : '' }} · {{ detailUser.department || 'Main Counter' }}
-              </DialogDescription>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <DialogTitle class="font-display text-base font-bold text-foreground">{{ detailUser.name }}</DialogTitle>
+                  <Badge :variant="getRoleVariant(detailUser.role)" class="font-mono text-3xs font-bold">{{ detailUser.role }}</Badge>
+                  <Badge :variant="detailUser.is_active !== false && detailUser.isActive !== false ? 'success' : 'neutral'" class="text-3xs">
+                    {{ detailUser.is_active !== false && detailUser.isActive !== false ? 'Active' : 'Inactive' }}
+                  </Badge>
+                </div>
+                <DialogDescription class="text-xs text-muted-foreground mt-0.5">
+                  {{ detailUser.email }} {{ detailUser.phone ? `· ${detailUser.phone}` : '' }} · {{ detailUser.department || 'Main Counter' }}
+                </DialogDescription>
+              </div>
             </div>
+
+            <Button variant="outline" size="sm" class="h-8 px-3 text-xs font-semibold gap-1.5 border-border bg-surface hover:bg-surface-subtle shrink-0" @click="openRaiseModal">
+              <TrendingUp :size="13" class="text-emerald-600 dark:text-emerald-400" />
+              <span>Give Salary Raise</span>
+            </Button>
           </div>
         </DialogHeader>
 
-        <!-- Modal Tabs -->
-        <div class="flex border-b border-border gap-2 text-xs font-semibold">
-          <button
-            type="button"
-            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'overview' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
-            @click="detailTab = 'overview'"
-          >
-            Overview & Stats
-          </button>
-          <button
-            type="button"
-            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'performance' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
-            @click="detailTab = 'performance'; loadPerformanceData();"
-          >
-            Sales Analytics
-          </button>
-          <button
-            type="button"
-            class="px-3 py-2 border-b-2 transition-colors cursor-pointer"
-            :class="detailTab === 'salary' ? 'border-cta text-primary font-bold' : 'border-transparent text-muted-foreground hover:text-foreground'"
-            @click="detailTab = 'salary'"
-          >
-            Compensation & Raises
-          </button>
-        </div>
+        <div v-if="detailUser" class="py-2 space-y-4">
+          <!-- 1. Compensation & Benefit Package -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+              <DollarSign :size="14" class="text-emerald-600 dark:text-emerald-400" />
+              <span>Compensation & Benefit Package</span>
+            </h4>
 
-        <div v-if="detailUser" class="py-2">
-          <!-- Overview Tab -->
-          <div v-if="detailTab === 'overview'" class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Total Sales Closed</span>
-                <span class="text-base font-bold font-mono text-foreground">${{ (detailUser.stats?.total_sales || 0).toFixed(2) }}</span>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div class="p-3.5 rounded-xl border border-border bg-card flex flex-col gap-1">
+                <span class="text-xs font-medium text-muted-foreground">Monthly Base Salary</span>
+                <div class="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  {{ fmtMoney(detailUser.base_salary) }}
+                </div>
               </div>
-              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Orders Processed</span>
-                <span class="text-base font-bold font-mono text-foreground">{{ detailUser.stats?.total_orders || 0 }}</span>
+              <div class="p-3.5 rounded-xl border border-border bg-card flex flex-col gap-1">
+                <span class="text-xs font-medium text-muted-foreground">Daily Rate (26d)</span>
+                <div class="text-lg font-bold font-mono text-foreground">
+                  ${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 26).toFixed(2) }}
+                </div>
               </div>
-              <div class="p-3 rounded-lg border border-border bg-surface flex flex-col gap-1">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base Salary</span>
-                <span class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{{ fmtMoney(detailUser.base_salary) }}</span>
+              <div class="p-3.5 rounded-xl border border-border bg-card flex flex-col gap-1">
+                <span class="text-xs font-medium text-muted-foreground">13th Mo. Reserve</span>
+                <div class="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  +${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 12).toFixed(2) }}<span class="text-xs font-normal text-muted-foreground">/mo</span>
+                </div>
               </div>
             </div>
 
-            <div class="rounded-lg border border-border bg-card p-3 space-y-2 text-xs">
-              <div class="flex justify-between py-1 border-b border-border/50">
-                <span class="text-muted-foreground">Hire Date</span>
-                <span class="font-mono font-medium">{{ fmtDateOnly(detailUser.hire_date) }}</span>
+            <div v-if="detailUser.salary_reason" class="p-2.5 rounded-lg bg-surface-subtle border border-border/70 text-xs flex items-center gap-2">
+              <span class="text-muted-foreground font-semibold text-xs shrink-0">Adjustment Note:</span>
+              <span class="text-foreground font-medium text-xs">{{ detailUser.salary_reason }}</span>
+            </div>
+          </div>
+
+          <!-- 2. Employment & Tenure Details -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider">
+              <Briefcase :size="14" class="text-primary" />
+              <span>Employment & Tenure</span>
+            </h4>
+
+            <div class="rounded-xl border border-border bg-card p-3.5 space-y-2 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                <div class="flex justify-between py-1 border-b border-border/50 items-center">
+                  <span class="text-muted-foreground font-medium">Hire Date</span>
+                  <span class="font-mono font-semibold text-foreground text-xs">{{ fmtDateOnly(detailUser.hire_date) }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border/50 items-center">
+                  <span class="text-muted-foreground font-medium">Probation & Benefits</span>
+                  <Badge
+                    v-if="detailUser.is_on_probation"
+                    variant="warning"
+                    class="text-xs font-medium px-2 py-0.5"
+                  >
+                    On Probation (Base Salary Only)
+                  </Badge>
+                  <Badge
+                    v-else
+                    variant="success"
+                    class="text-xs font-medium px-2 py-0.5"
+                  >
+                    {{ (detailUser.seniority_months ?? 0) >= 3 ? 'Completed' : 'Waived (Day 1)' }} — Full Benefits
+                  </Badge>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border/50 items-center">
+                  <span class="text-muted-foreground font-medium">Department / Branch</span>
+                  <span class="font-semibold text-foreground text-xs">{{ detailUser.department || 'Main Counter' }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border/50 items-center">
+                  <span class="text-muted-foreground font-medium">Seniority</span>
+                  <span class="font-mono font-semibold text-foreground text-xs">{{ detailUser.seniority_months ?? 0 }} Months</span>
+                </div>
               </div>
-              <div class="flex justify-between py-1 border-b border-border/50">
-                <span class="text-muted-foreground">Department / Branch</span>
-                <span class="font-medium">{{ detailUser.department || 'Main Counter' }}</span>
-              </div>
-              <div class="flex justify-between py-1 border-b border-border/50">
-                <span class="text-muted-foreground">Account Status</span>
-                <Badge :variant="detailUser.is_active !== false && detailUser.isActive !== false ? 'success' : 'neutral'" class="text-3xs">
-                  {{ detailUser.is_active !== false && detailUser.isActive !== false ? 'Active' : 'Inactive' }}
-                </Badge>
-              </div>
-              <div v-if="detailUser.notes" class="pt-1">
-                <span class="text-muted-foreground block text-3xs font-bold uppercase mb-1">Employment Notes</span>
-                <p class="text-xs text-foreground bg-surface-subtle p-2 rounded border border-border/60">{{ detailUser.notes }}</p>
+
+              <div v-if="detailUser.notes" class="pt-2">
+                <span class="text-muted-foreground block text-xs font-semibold mb-1">Employment Notes</span>
+                <p class="text-xs text-foreground bg-surface-subtle p-2.5 rounded-lg border border-border/60">{{ detailUser.notes }}</p>
               </div>
             </div>
           </div>
 
-          <!-- Performance Tab -->
-          <div v-else-if="detailTab === 'performance'" class="space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-foreground">Sales Performance</span>
-              <div class="inline-flex rounded-md border border-border bg-surface p-0.5 text-xs font-semibold">
+          <!-- 3. Sales Analytics & Performance -->
+          <div class="space-y-3 pt-1">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <h4 class="text-xs font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider shrink-0">
+                <BarChart2 :size="14" class="text-primary" />
+                <span>Sales Performance & Activity</span>
+                <RefreshCw v-if="perfLoading" :size="12" class="animate-spin text-muted-foreground ml-1" />
+              </h4>
+
+              <!-- Readable Date Filter Tabs (guaranteed single row & steady dimensions) -->
+              <div class="inline-flex items-center rounded-lg border border-border bg-surface-subtle p-1 gap-1 shrink-0 overflow-x-auto max-w-full">
                 <button
-                  v-for="p in (['today', '7d', '30d', 'month', 'year'] as const)"
-                  :key="p"
+                  v-for="p in [
+                    { label: 'Today', val: 'today' },
+                    { label: '7 Days', val: '7d' },
+                    { label: '30 Days', val: '30d' },
+                    { label: 'This Month', val: 'month' },
+                    { label: 'This Year', val: 'year' },
+                  ]"
+                  :key="p.val"
                   type="button"
-                  class="px-2 py-0.5 rounded text-3xs transition-all cursor-pointer uppercase font-mono"
-                  :class="perfPeriod === p ? 'bg-card shadow-2xs text-primary font-bold' : 'text-muted-foreground hover:text-foreground'"
-                  @click="perfPeriod = p"
+                  class="h-7.5 px-3 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer select-none flex items-center border"
+                  :class="perfPeriod === p.val
+                    ? 'bg-card text-foreground font-bold shadow-xs border-border ring-1 ring-black/5 dark:ring-white/10'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-surface'"
+                  @click="perfPeriod = p.val as any"
                 >
-                  {{ p }}
+                  {{ p.label }}
                 </button>
               </div>
             </div>
 
-            <div v-if="perfLoading" class="py-6 flex justify-center">
-              <RefreshCw :size="20" class="animate-spin text-muted-foreground" />
-            </div>
+            <!-- Steady Stat Cards Container (zero layout shift / jump on tab click) -->
+            <div class="relative">
+              <!-- Non-destructive loading overlay: keeps height and scroll position rock steady -->
+              <div
+                v-if="perfLoading"
+                class="absolute inset-0 bg-card/60 backdrop-blur-[0.5px] rounded-xl flex items-center justify-center z-10 transition-opacity duration-150"
+              >
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border shadow-xs text-xs font-medium text-foreground">
+                  <RefreshCw :size="13" class="animate-spin text-primary" />
+                  <span>Updating metrics...</span>
+                </div>
+              </div>
 
-            <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Revenue Generated</span>
-                <div class="text-base font-bold font-mono text-primary mt-0.5">
-                  ${{ (perfData?.total_revenue ?? perfData?.total_sales ?? 0).toFixed(2) }}
+              <div
+                class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 transition-opacity duration-150"
+                :class="{ 'opacity-60': perfLoading }"
+              >
+                <div class="p-3.5 rounded-xl border border-border bg-card min-h-[76px] flex flex-col justify-between">
+                  <span class="text-xs font-medium text-muted-foreground block">Revenue Generated</span>
+                  <div class="text-lg font-bold font-mono text-primary mt-1">
+                    ${{ (perfData?.total_revenue ?? perfData?.total_sales ?? 0).toFixed(2) }}
+                  </div>
+                </div>
+                <div class="p-3.5 rounded-xl border border-border bg-card min-h-[76px] flex flex-col justify-between">
+                  <span class="text-xs font-medium text-muted-foreground block">Orders Completed</span>
+                  <div class="text-lg font-bold font-mono text-foreground mt-1">
+                    {{ perfData?.total_orders ?? 0 }}
+                  </div>
+                </div>
+                <div class="p-3.5 rounded-xl border border-border bg-card min-h-[76px] flex flex-col justify-between">
+                  <span class="text-xs font-medium text-muted-foreground block">Est. Ticket Size</span>
+                  <div class="text-lg font-bold font-mono text-foreground mt-1">
+                    ${{ ((perfData?.total_sales ?? 0) / Math.max(perfData?.total_orders ?? 1, 1)).toFixed(2) }}
+                  </div>
                 </div>
               </div>
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Orders Completed</span>
-                <div class="text-base font-bold font-mono text-foreground mt-0.5">
-                  {{ perfData?.total_orders ?? 0 }}
-                </div>
-              </div>
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Est. Ticket Size</span>
-                <div class="text-base font-bold font-mono text-foreground mt-0.5">
-                  ${{ ((perfData?.total_sales ?? 0) / Math.max(perfData?.total_orders ?? 1, 1)).toFixed(2) }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Salary & Raises Tab -->
-          <div v-else class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h4 class="text-xs font-bold text-foreground">Compensation Package</h4>
-                <p class="text-[11px] text-muted-foreground">Current base salary & benefit accruals.</p>
-              </div>
-              <Button variant="primary" size="sm" class="h-7 px-3 text-xs font-bold" @click="openRaiseModal">
-                <TrendingUp :size="12" class="mr-1" />
-                <span>Give Salary Raise</span>
-              </Button>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Monthly Base</span>
-                <div class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  {{ fmtMoney(detailUser.base_salary) }}
-                </div>
-              </div>
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">Daily Rate (26d)</span>
-                <div class="text-base font-bold font-mono text-foreground mt-0.5">
-                  ${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 26).toFixed(2) }}
-                </div>
-              </div>
-              <div class="p-3 rounded-lg border border-border bg-card">
-                <span class="text-3xs text-muted-foreground uppercase font-bold">13th Mo. Reserve</span>
-                <div class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  +${{ ((parseFloat(String(detailUser.base_salary || 0)) || 0) / 12).toFixed(2) }}/mo
-                </div>
-              </div>
-            </div>
-
-            <div v-if="detailUser.salary_reason" class="p-3 rounded-lg bg-surface border border-border text-xs">
-              <span class="text-muted-foreground text-3xs uppercase font-bold block mb-0.5">Latest Adjustment Reason</span>
-              <span class="text-foreground font-medium">{{ detailUser.salary_reason }}</span>
             </div>
           </div>
         </div>
