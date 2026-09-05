@@ -54,7 +54,7 @@ class ProductController extends BaseApiController
             $query->where('category_id', $request->input('category_id'));
         }
 
-        $perPage = min((int) $request->input('per_page', 15), 200);
+        $perPage = min((int) $request->input('per_page', 15), 2000);
         $products = $query->latest()->paginate($perPage > 0 ? $perPage : 15);
 
         return $this->paginatedResponse($products);

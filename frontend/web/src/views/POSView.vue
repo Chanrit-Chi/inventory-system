@@ -979,6 +979,34 @@ async function loadProducts(showLoader = true) {
   if (showLoader) productsLoading.value = true
 
   try {
+      // Fetch all products across all pages (POS needs the full catalog)
+      async function fetchAllProducts(): Promise<Product[]> {
+        const PAGE_SIZE = 200
+        const firstRes = await api.get<{ data: Product[]; meta?: { last_page?: number } }>(
+          '/products',
+          { params: { per_page: PAGE_SIZE, page: 1 } }
+        )
+        const firstData = (firstRes.data as any)?.data ?? firstRes.data ?? []
+        const items: Product[] = Array.isArray(firstData) ? [...firstData] : []
+        const lastPage = (firstRes.data as any)?.meta?.last_page ?? 1
+        if (lastPage > 1) {
+          const pageNums = Array.from({ length: lastPage - 1 }, (_, i) => i + 2)
+          const pageResults = await Promise.all(
+            pageNums.map((pg) =>
+              api
+                .get<{ data: Product[] }>('/products', { params: { per_page: PAGE_SIZE, page: pg } })
+                .then((r) => {
+                  const d = (r.data as any)?.data ?? r.data ?? []
+                  return Array.isArray(d) ? d : []
+                })
+                .catch(() => [] as Product[])
+            )
+          )
+          for (const pageItems of pageResults) items.push(...pageItems)
+        }
+        return items
+      }
+
     const [
       prodRes,
       catRes,
@@ -987,7 +1015,7 @@ async function loadProducts(showLoader = true) {
       deliveryCompaniesRes,
       deliveryZonesRes,
     ] = await Promise.allSettled([
-      api.get<{ data: Product[] }>('/products?per_page=200'),
+      fetchAllProducts(),
       api.get<{ data: Category[] }>('/categories'),
       api.get<{ data: SalesChannel[] }>('/sales-channels'),
       api.get<StaffMember[]>('/staff-members'),
@@ -996,12 +1024,12 @@ async function loadProducts(showLoader = true) {
     ])
 
     if (prodRes.status === 'fulfilled') {
-      const rawProd = (prodRes.value.data as any)?.data ?? prodRes.value.data ?? []
-      products.value = Array.isArray(rawProd) ? rawProd : []
+      products.value = prodRes.value
     } else {
       console.error('Failed to fetch products:', prodRes.reason)
       toast.error('Failed to load product catalog')
     }
+
 
     if (catRes.status === 'fulfilled') {
       const rawCat = (catRes.value.data as any)?.data ?? catRes.value.data ?? []
