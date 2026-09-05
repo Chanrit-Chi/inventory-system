@@ -15,6 +15,7 @@ export const queryKeys = {
   products: {
     all: ['products'] as const,
     list: (filters?: any) => ['products', 'list', filters ?? EMPTY_FILTERS] as const,
+    infinite: (filters?: any) => ['products', 'infinite', filters ?? EMPTY_FILTERS] as const,
     detail: (id: string) => ['products', 'detail', id] as const,
     search: (term: string) => ['products', 'search', term] as const,
     barcode: (barcode: string) => ['products', 'barcode', barcode] as const,
@@ -49,6 +50,7 @@ export const queryKeys = {
   orders: {
     all: ['orders'] as const,
     list: (filters?: any) => ['orders', 'list', filters ?? EMPTY_FILTERS] as const,
+    infinite: (filters?: any) => ['orders', 'infinite', filters ?? EMPTY_FILTERS] as const,
     detail: (id: string) => ['orders', 'detail', id] as const,
   },
 

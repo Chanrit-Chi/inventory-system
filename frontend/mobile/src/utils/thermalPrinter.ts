@@ -210,6 +210,79 @@ function getDivider(maxCols: number, char = '-'): string {
 }
 
 /**
+ * Clean any Unicode spaces (like \u202F narrow no-break space, \u00A0 non-breaking space)
+ * and non-ASCII invisible characters that cause garbage characters on thermal printers.
+ */
+export function sanitizeThermalText(text: string): string {
+  if (!text) return ''
+  return text
+    // Replace non-breaking spaces, narrow no-break spaces, and other Unicode spaces with standard ASCII space
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    // Remove zero-width characters and directional formatting marks
+    .replace(/[\u200B-\u200D\u200E\u200F\uFEFF]/g, '')
+}
+
+/**
+ * Format a Date object or timestamp into clean ASCII format for thermal receipts
+ * e.g., "Sep 5, 2026, 01:39 PM" with standard ASCII space before AM/PM.
+ */
+export function formatReceiptDateTime(dateInput?: string | number | Date | null): string {
+  if (!dateInput) return formatReceiptDateTime(new Date())
+  const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput
+  if (isNaN(d.getTime())) return formatReceiptDateTime(new Date())
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const month = months[d.getMonth()]
+  const day = d.getDate()
+  const year = d.getFullYear()
+
+  let hours = d.getHours()
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12
+  hours = hours ? hours : 12
+  const hoursStr = String(hours).padStart(2, '0')
+
+  return `${month} ${day}, ${year}, ${hoursStr}:${minutes} ${ampm}`
+}
+
+/**
+ * Format a Date object or timestamp into clean ASCII time for thermal receipts
+ * e.g., "01:39 PM" with standard ASCII space before AM/PM.
+ */
+export function formatReceiptTime(dateInput?: string | number | Date | null): string {
+  if (!dateInput) return formatReceiptTime(new Date())
+  const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput
+  if (isNaN(d.getTime())) return formatReceiptTime(new Date())
+
+  let hours = d.getHours()
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12
+  hours = hours ? hours : 12
+  const hoursStr = String(hours).padStart(2, '0')
+
+  return `${hoursStr}:${minutes} ${ampm}`
+}
+
+/**
+ * Format a Date object or timestamp into clean ASCII date
+ * e.g., "Sep 5, 2026"
+ */
+export function formatReceiptDate(dateInput?: string | number | Date | null): string {
+  if (!dateInput) return formatReceiptDate(new Date())
+  const d = typeof dateInput === 'string' || typeof dateInput === 'number' ? new Date(dateInput) : dateInput
+  if (isNaN(d.getTime())) return formatReceiptDate(new Date())
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const month = months[d.getMonth()]
+  const day = d.getDate()
+  const year = d.getFullYear()
+
+  return `${month} ${day}, ${year}`
+}
+
+/**
  * Build ESC/POS Byte Stream / Command String for 58mm / 80mm Thermal Printer
  */
 export function buildEscPosCommands(order: Order, config: PrinterConfig): string {
@@ -247,15 +320,7 @@ export function buildEscPosCommands(order: Order, config: PrinterConfig): string
 
   // 3. Order Metadata (Left aligned)
   buffer += ESC_POS.ALIGN_LEFT
-  const orderDate = order.created_at
-    ? new Date(order.created_at).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : new Date().toLocaleString()
+  const orderDate = formatReceiptDateTime(order.created_at)
 
   buffer += `Order #: #${order.order_number}\n`
   buffer += `Date   : ${orderDate}\n`
@@ -344,7 +409,7 @@ export function buildEscPosCommands(order: Order, config: PrinterConfig): string
     buffer += ESC_POS.CUT_PAPER
   }
 
-  return buffer
+  return sanitizeThermalText(buffer)
 }
 
 /**
@@ -402,11 +467,9 @@ export function buildKitchenEscPosCommands(order: Order, device: PrinterDevice):
   buffer += `ORDER #${order.order_number}\n`
   buffer += ESC_POS.NORMAL_TEXT + ESC_POS.BOLD_OFF
 
-  const orderDate = order.created_at
-    ? new Date(order.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const orderTime = formatReceiptTime(order.created_at)
 
-  buffer += `Time: ${orderDate} | Channel: ${order.channel?.name || order.channel_id || 'POS'}\n`
+  buffer += `Time: ${orderTime} | Channel: ${order.channel?.name || order.channel_id || 'POS'}\n`
   if (order.customer?.name) {
     buffer += `Customer: ${order.customer.name}\n`
   }
@@ -450,7 +513,7 @@ export function buildKitchenEscPosCommands(order: Order, device: PrinterDevice):
     buffer += ESC_POS.CUT_PAPER
   }
 
-  return buffer
+  return sanitizeThermalText(buffer)
 }
 
 /**
@@ -474,15 +537,7 @@ export async function printHtmlThermalReceipt(
   const tax = parseFloat(String(order.tax_amount || '0'))
   const paymentMethod = order.payments?.[0]?.payment_method || 'Cash'
 
-  const orderDate = order.created_at
-    ? new Date(order.created_at).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : new Date().toLocaleString()
+  const orderDate = formatReceiptDateTime(order.created_at)
 
   const itemRows = items
     .map((it, idx) => {
@@ -770,15 +825,7 @@ export async function shareReceipt(order: Order, customConfig?: Partial<PrinterC
   const paymentMethod = order.payments?.[0]?.payment_method || 'Cash'
   const items = order.items || []
 
-  const orderDate = order.created_at
-    ? new Date(order.created_at).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : new Date().toLocaleString()
+  const orderDate = formatReceiptDateTime(order.created_at)
 
   const itemLinesHtml = items
     .map((it, idx) => {
@@ -972,7 +1019,7 @@ export async function shareInvoice(invoice: Invoice, customConfig?: Partial<Prin
             </div>
             <div class="meta-col" style="text-align: right;">
               <span class="meta-label">Date Issued</span>
-              <span class="meta-value" style="font-weight: 500;">${new Date().toLocaleDateString('en-US')}</span>
+              <span class="meta-value" style="font-weight: 500;">${formatReceiptDate(invoice.createdAt || invoice.created_at)}</span>
               <span class="meta-label" style="margin-top: 10px;">Due Date</span>
               <span class="meta-value" style="color: #DC2626;">${invoice.due_date || 'Due on Receipt'}</span>
             </div>
@@ -1086,7 +1133,7 @@ export function buildInvoiceEscPosCommands(invoice: Invoice, config: PrinterConf
 
   buffer += `Invoice #: #${invNumber}\n`
   if (ordNumber) buffer += `Order Ref: #${ordNumber}\n`
-  buffer += `Date     : ${new Date(invoice.createdAt || invoice.created_at || Date.now()).toLocaleDateString()}\n`
+  buffer += `Date     : ${formatReceiptDate(invoice.createdAt || invoice.created_at)}\n`
   buffer += `Due Date : ${dueDate}\n`
   buffer += `Status   : ${status}\n`
   buffer += `Customer : ${cName}${cPhone ? ` (${cPhone})` : ''}\n`
@@ -1139,7 +1186,7 @@ export function buildInvoiceEscPosCommands(invoice: Invoice, config: PrinterConf
     buffer += ESC_POS.CUT_PAPER
   }
 
-  return buffer
+  return sanitizeThermalText(buffer)
 }
 
 /**
@@ -1229,7 +1276,7 @@ export async function printHtmlInvoiceReceipt(
         <div class="divider-solid"></div>
         <div class="row"><span>Invoice #:</span><span class="bold">#${invNumber}</span></div>
         ${ordNumber ? `<div class="row"><span>Order Ref:</span><span>#${ordNumber}</span></div>` : ''}
-        <div class="row"><span>Date:</span><span>${new Date(invoice.createdAt || invoice.created_at || Date.now()).toLocaleDateString()}</span></div>
+        <div class="row"><span>Date:</span><span>${formatReceiptDate(invoice.createdAt || invoice.created_at)}</span></div>
         <div class="row"><span>Due Date:</span><span>${dueDate}</span></div>
         <div class="row"><span>Status:</span><span class="bold">${status}</span></div>
         <div class="row"><span>Customer:</span><span>${cName}</span></div>
@@ -1360,7 +1407,7 @@ export function buildSellerDailySlipEscPosCommands(
   buffer += ESC_POS.ALIGN_LEFT
   buffer += `Status: ${summary.is_confirmed ? 'CONFIRMED' : 'PENDING SIGN-OFF'}\n`
   if (summary.settlement?.confirmed_at) {
-    buffer += `Signed At: ${summary.settlement.confirmed_at}\n`
+    buffer += `Signed At: ${formatReceiptDateTime(summary.settlement.confirmed_at)}\n`
   }
   buffer += `${'-'.repeat(maxCols)}\n`
 
@@ -1390,7 +1437,7 @@ export function buildSellerDailySlipEscPosCommands(
     buffer += ESC_POS.CUT_PAPER
   }
 
-  return buffer
+  return sanitizeThermalText(buffer)
 }
 
 /**

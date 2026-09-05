@@ -9,6 +9,7 @@ import {
   Bike,
 } from 'lucide-vue-next'
 import { usePrintStore } from '@/stores/printStore'
+import { useToast } from '@/composables/useToast'
 import { getTierDetails } from '@/utils/loyalty'
 import Badge from '@/components/ui/Badge.vue'
 import SocialPlatformIcon, { getPlatformMeta } from './SocialPlatformIcon.vue'
@@ -98,6 +99,7 @@ const emit = defineEmits<{
 }>()
 
 const printStore = usePrintStore()
+const toast = useToast()
 
 const orderNumber = computed(() => {
   if (!props.order) return 'ORD-00000'
@@ -140,7 +142,10 @@ function isCashPayment(method: string | null | undefined): boolean {
 async function handlePrint() {
   if (props.order?.id) {
     try {
-      await printStore.printReceipt(props.order.id)
+      const res = await printStore.printReceipt(props.order.id, props.order)
+      if (res?.directPrint) {
+        toast.success(res.message || 'Receipt sent to thermal printer')
+      }
     } catch {
       window.print()
     }

@@ -2,12 +2,10 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { uploadMedia } from '../../../api/endpoints'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { useCollapsibleHeader } from '../../../hooks/useCollapsibleHeader'
-import { useProducts, useCategories, useAttributes, ProductFilters } from '../../../hooks/queries/useProductsQuery'
+import { useInfiniteProducts, useCategories, useAttributes } from '../../../hooks/queries/useProductsQuery'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../../../api/queryKeys'
 import type { Product, ProductCategory, AttributeTaxonomy, ScannedAttributeValue } from '../../../types'
-
-const CATALOG_PRODUCT_FILTERS: ProductFilters = { include_inactive: true }
 
 export function useProductCatalog() {
   const queryClient = useQueryClient()
@@ -17,15 +15,66 @@ export function useProductCatalog() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED'>('ALL')
   const [refreshing, setRefreshing] = useState(false)
 
-  const {
-    data: rawProducts,
-    isLoading: productsLoading,
-    error: productsError,
-    refetch: refetchProducts,
-  } = useProducts(CATALOG_PRODUCT_FILTERS)
-
   const { data: rawCategories, refetch: refetchCategories } = useCategories()
   const { data: rawAttributes, refetch: refetchAttributes } = useAttributes()
+
+  const [managedCategories, setManagedCategories] = useState<ProductCategory[]>([])
+  const [managedAttributes, setManagedAttributes] = useState<AttributeTaxonomy[]>([])
+
+  const resolvedCategoryId = useMemo(() => {
+    if (categoryFilter === 'ALL' || categoryFilter === 'NEEDS_BARCODE') return undefined
+    const match = managedCategories.find(
+      (c) => c.name.toLowerCase() === categoryFilter.toLowerCase()
+    )
+    return match?.id
+  }, [categoryFilter, managedCategories])
+
+  const resolvedIsActive = useMemo(() => {
+    if (statusFilter === 'ACTIVE') return true
+    if (statusFilter === 'DEACTIVATED') return false
+    return undefined
+  }, [statusFilter])
+
+  const catalogFilters = useMemo(
+    () => ({
+      search: debouncedSearch.trim() || undefined,
+      category_id: resolvedCategoryId,
+      is_active: resolvedIsActive,
+      include_inactive: statusFilter === 'ALL' || statusFilter === 'DEACTIVATED',
+      per_page: 20,
+    }),
+    [debouncedSearch, resolvedCategoryId, resolvedIsActive, statusFilter]
+  )
+
+  const {
+    data: infiniteProductsData,
+    isLoading: productsLoading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage: hasMore,
+    error: productsError,
+    fetchNextPage,
+    refetch: refetchProducts,
+  } = useInfiniteProducts(catalogFilters)
+
+  const rawProducts = useMemo(() => {
+    if (!infiniteProductsData?.pages) return []
+    const items: Product[] = []
+    const seen = new Set<string>()
+    for (const page of infiniteProductsData.pages) {
+      const pageItems: Product[] = Array.isArray(page)
+        ? page
+        : Array.isArray(page?.data)
+        ? page.data
+        : (page as any)?.data?.data ?? []
+      for (const item of pageItems) {
+        if (item && item.id && !seen.has(item.id)) {
+          seen.add(item.id)
+          items.push(item)
+        }
+      }
+    }
+    return items
+  }, [infiniteProductsData])
 
   const [products, setProducts] = useState<Product[]>([])
 
@@ -37,9 +86,6 @@ export function useProductCatalog() {
       setProducts(rawProducts)
     }
   }, [rawProducts])
-
-  const [managedCategories, setManagedCategories] = useState<ProductCategory[]>([])
-  const [managedAttributes, setManagedAttributes] = useState<AttributeTaxonomy[]>([])
 
   const prevRawCategoriesRef = useRef<ProductCategory[] | undefined>(undefined)
   useEffect(() => {
@@ -106,17 +152,25 @@ export function useProductCatalog() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.allSettled([
-      refetchProducts(),
+      queryClient.resetQueries({ queryKey: queryKeys.products.infinite(catalogFilters) }).then(() => refetchProducts()),
       refetchCategories(),
       refetchAttributes(),
     ])
     syncPendingOfflinePhotos()
     setRefreshing(false)
-  }, [refetchProducts, refetchCategories, refetchAttributes, syncPendingOfflinePhotos])
+  }, [queryClient, catalogFilters, refetchProducts, refetchCategories, refetchAttributes, syncPendingOfflinePhotos])
 
   const loadProducts = useCallback(() => {
-    refetchProducts()
-  }, [refetchProducts])
+    queryClient.resetQueries({ queryKey: queryKeys.products.infinite(catalogFilters) }).then(() => {
+      refetchProducts()
+    })
+  }, [queryClient, catalogFilters, refetchProducts])
+
+  const loadMoreProducts = useCallback(() => {
+    if (hasMore && !loadingMore && !productsLoading) {
+      fetchNextPage()
+    }
+  }, [hasMore, loadingMore, productsLoading, fetchNextPage])
 
   const loadTaxonomyData = useCallback(() => {
     refetchCategories()
@@ -177,10 +231,11 @@ export function useProductCatalog() {
     search, setSearch,
     categoryFilter, setCategoryFilter,
     statusFilter, setStatusFilter,
-    loading, refreshing,
+    loading, loadingMore, hasMore: Boolean(hasMore),
+    refreshing,
     catalogError,
     filteredProducts, filterCategoryOptions, missingBarcodeCount,
-    loadProducts, loadTaxonomyData, onRefresh,
+    loadProducts, loadMoreProducts, loadTaxonomyData, onRefresh,
     pendingOfflinePhotosRef, syncPendingOfflinePhotos,
     headerTranslateY, headerOpacity, onScroll, onLayoutHeader, headerHeight,
   }

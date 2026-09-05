@@ -25,6 +25,9 @@ export interface PosProductCatalogGridProps {
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
   onRetry: () => void
   onSelectProduct: (prod: Product) => void
+  onLoadMore?: () => void
+  loadingMore?: boolean
+  hasMore?: boolean
 }
 
 export const PosProductCatalogGrid: React.FC<PosProductCatalogGridProps> = ({
@@ -37,6 +40,9 @@ export const PosProductCatalogGrid: React.FC<PosProductCatalogGridProps> = ({
   onScroll,
   onRetry,
   onSelectProduct,
+  onLoadMore,
+  loadingMore = false,
+  hasMore = false,
 }) => {
   return (
     <View style={styles.gridContainer}>
@@ -81,9 +87,28 @@ export const PosProductCatalogGrid: React.FC<PosProductCatalogGridProps> = ({
               />
             ) : undefined
           }
+          onEndReached={onLoadMore}
+          onEndReachedThreshold={0.4}
           renderItem={({ item }) => (
             <ProductCard product={item} onPress={() => onSelectProduct(item)} />
           )}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                  Loading more products...
+                </Text>
+              </View>
+            ) : !hasMore && products.length > 0 ? (
+              <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+                <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                  All products loaded
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </View>

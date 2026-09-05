@@ -56,6 +56,31 @@ class Order extends Model
         ];
     }
 
+    public static function generateOrderNumber(?string $year = null): string
+    {
+        $year = $year ?: date('Y');
+        $prefix = "ORD-{$year}-";
+
+        $latest = self::withTrashed()
+            ->where('order_number', 'like', "{$prefix}%")
+            ->orderByRaw('LENGTH(order_number) DESC')
+            ->orderByDesc('order_number')
+            ->lockForUpdate()
+            ->first();
+
+        $nextSeq = 1;
+        if ($latest && preg_match('/-(\d+)$/', $latest->order_number, $matches)) {
+            $nextSeq = (int) $matches[1] + 1;
+        }
+
+        do {
+            $candidate = sprintf('ORD-%s-%05d', $year, $nextSeq);
+            $nextSeq++;
+        } while (self::withTrashed()->where('order_number', $candidate)->exists());
+
+        return $candidate;
+    }
+
     public function setStatusAttribute($value): void
     {
         if ($value instanceof \App\Enums\OrderStatus) {

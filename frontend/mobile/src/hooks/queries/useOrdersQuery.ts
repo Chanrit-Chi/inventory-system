@@ -1,4 +1,5 @@
-﻿import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { queryKeys } from '../../api/queryKeys'
 import {
   getOrders,
@@ -32,6 +33,38 @@ export function useOrders(filters?: OrderFilters) {
         return raw as Order[]
       }
       return (raw as { data?: Order[] })?.data ?? []
+    },
+    staleTime: 1000 * 60, // 1 min
+  })
+}
+
+/**
+ * Infinite scroll query for orders list with pagination
+ */
+export function useInfiniteOrders(filters?: Omit<OrderFilters, 'page'>) {
+  const queryKey = useMemo(
+    () => queryKeys.orders.infinite(filters),
+    [filters?.search, filters?.status, filters?.date_from, filters?.date_to, filters?.per_page]
+  )
+
+  return useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await getOrders({ ...filters, page: pageParam as number })
+      return res
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const meta = lastPage?.meta
+      if (!meta) {
+        const dataLength = Array.isArray(lastPage?.data)
+          ? lastPage.data.length
+          : Array.isArray(lastPage)
+          ? lastPage.length
+          : 0
+        return dataLength >= (filters?.per_page ?? 15) ? undefined : undefined
+      }
+      return meta.current_page < meta.last_page ? meta.current_page + 1 : undefined
     },
     staleTime: 1000 * 60, // 1 min
   })

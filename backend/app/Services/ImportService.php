@@ -674,10 +674,11 @@ class ImportService
             $deliveryCost   = (float) ($meta['delivery_cost'] ?? 0);
             $totalDiscount  = array_sum(array_column($orderItems, 'discount_amount'));
             $finalAmount    = $subtotal + $deliveryCost;
+            $orderYear      = date('Y', strtotime((string) $orderDate));
 
             $order = new Order();
             $order->forceFill([
-                'order_number'    => 'IMP-' . strtoupper(Str::random(8)),
+                'order_number'    => Order::generateOrderNumber($orderYear),
                 'channel_id'      => $channel->id,
                 'sales_channel_id'=> $channel->id,
                 'customer_id'     => $customer?->id,

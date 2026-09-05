@@ -519,16 +519,31 @@ export async function restockInventory(payload: RestockPayload): Promise<ApiResp
   return response.data
 }
 
+export interface BackendHealthData {
+  status: string
+  version: string
+  app: string
+  timestamp?: string
+  server_time?: string
+  database?: string
+  database_driver?: string
+  database_status?: string
+  database_latency_ms?: number
+  queue_driver?: string
+  cache_driver?: string
+  environment?: string
+  php_version?: string
+  laravel_version?: string
+  timezone?: string
+  debug_mode?: boolean
+}
+
 /**
  * Check backend system health and diagnostics
  * GET /api/v1/health
  */
-export async function getHealth(): Promise<
-  ApiResponse<{ status: string; version: string; app: string; database?: string }>
-> {
-  const response = await apiClient.get<
-    ApiResponse<{ status: string; version: string; app: string; database?: string }>
-  >('/health')
+export async function getHealth(): Promise<ApiResponse<BackendHealthData>> {
+  const response = await apiClient.get<ApiResponse<BackendHealthData>>('/health')
   return response.data
 }
 
@@ -647,7 +662,7 @@ export async function deleteExpense(id: string): Promise<ApiResponse<null>> {
  * Fetch customers directory
  * GET /api/v1/customers
  */
-export async function fetchCustomers(params?: { search?: string; page?: number }): Promise<ApiResponse<PaginatedData<Customer> | Customer[]>> {
+export async function fetchCustomers(params?: { search?: string; page?: number; per_page?: number }): Promise<ApiResponse<PaginatedData<Customer> | Customer[]>> {
   const response = await apiClient.get<ApiResponse<PaginatedData<Customer> | Customer[]>>('/customers', { params })
   return response.data
 }
@@ -1003,10 +1018,17 @@ export async function sendRawPrint(payload: {
   port?: number
   data: string
 }): Promise<ApiResponse<{ message: string }>> {
+  // Normalize Unicode spaces (such as \u202F narrow no-break space before AM/PM,
+  // \u00A0 non-breaking space, etc.) to standard ASCII space so thermal printers
+  // don't print corrupt/unknown characters.
+  const cleanData = (payload.data || '')
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    .replace(/[\u200B-\u200D\u200E\u200F\uFEFF]/g, '')
+
   // Convert the ESC/POS string (which contains raw bytes) to Base64
   // so control characters survive the JSON round-trip intact.
   const encoded = btoa(
-    encodeURIComponent(payload.data).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+    encodeURIComponent(cleanData).replace(/%([0-9A-F]{2})/g, (_, p1) =>
       String.fromCharCode(parseInt(p1, 16))
     )
   )
@@ -1127,8 +1149,8 @@ export async function deleteSupplier(id: string): Promise<{ success: boolean; me
  * Fetch payrolls for a given month and year
  * GET /api/v1/payrolls
  */
-export async function fetchPayrolls(params?: { month?: number, year?: number }): Promise<ApiResponse<import('../types').Payroll[]>> {
-  const response = await apiClient.get<ApiResponse<import('../types').Payroll[]>>('/payrolls', { params })
+export async function fetchPayrolls(params?: { month?: number, year?: number, page?: number, per_page?: number }): Promise<ApiResponse<import('../types').Payroll[] | PaginatedData<import('../types').Payroll>>> {
+  const response = await apiClient.get<ApiResponse<import('../types').Payroll[] | PaginatedData<import('../types').Payroll>>>('/payrolls', { params })
   return response.data
 }
 

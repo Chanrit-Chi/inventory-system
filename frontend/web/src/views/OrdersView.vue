@@ -202,11 +202,21 @@ async function confirmCancelOrder() {
   }
 }
 
-function printReceipt(orderId: string) {
+async function printReceipt(orderId: string) {
   if (!orderId) return
-  printStore.printReceipt(orderId)
-  showPrintReceipt.value = true
-  toast.success('Print command sent to thermal printer')
+  try {
+    const order = orderStore.selectedOrder?.id === orderId ? orderStore.selectedOrder : undefined
+    const res = await printStore.printReceipt(orderId, order)
+    showPrintReceipt.value = true
+    if (res?.directPrint) {
+      toast.success(res.message || 'Receipt sent to thermal printer')
+    } else {
+      toast.success('Print preview opened')
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Could not print receipt'
+    toast.error(msg)
+  }
 }
 
 function printReceiptForSelected() {

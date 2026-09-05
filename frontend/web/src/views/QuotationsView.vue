@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useQuotationStore, type Quotation } from '@/stores/quotationStore'
+import { usePrintStore } from '@/stores/printStore'
 import {
   FileText,
   Search,
@@ -14,6 +15,7 @@ import {
   Eye,
   ShoppingBag,
   X,
+  Printer,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -210,9 +212,21 @@ const handleCreateQuotation = async () => {
   }
 }
 
+const printStore = usePrintStore()
+
 const openDetailModal = (quotation: Quotation) => {
   selectedQuotation.value = quotation
   showDetailModal.value = true
+}
+
+const handlePrintQuotation = async (quotation: Quotation) => {
+  try {
+    const res = await printStore.printQuotation(quotation.id, quotation)
+    toast.success(res.message || 'Quotation printed')
+  } catch (err) {
+    const e = err as { message?: string }
+    toast.error(e.message || 'Failed to print quotation')
+  }
 }
 
 const handleUpdateStatus = async (quotation: Quotation, newStatus: Quotation['status']) => {
@@ -434,6 +448,10 @@ onMounted(() => {
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex items-center justify-end gap-1.5">
+                  <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs gap-1" title="Print Quotation" @click="handlePrintQuotation(q)">
+                    <Printer :size="13" />
+                    <span>Print</span>
+                  </Button>
                   <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs gap-1" @click="openDetailModal(q)">
                     <Eye :size="13" />
                     <span>View</span>
@@ -609,6 +627,17 @@ onMounted(() => {
           <Button variant="ghost" size="sm" class="text-destructive hover:bg-destructive/10 mr-auto text-xs" @click="openDeleteModal(selectedQuotation!)">
             <Trash2 :size="13" class="mr-1" />
             <span>Delete</span>
+          </Button>
+
+          <Button
+            v-if="selectedQuotation"
+            variant="outline"
+            size="sm"
+            class="text-xs gap-1 mr-1.5"
+            @click="handlePrintQuotation(selectedQuotation)"
+          >
+            <Printer :size="13" />
+            <span>Print Quote</span>
           </Button>
 
           <Button

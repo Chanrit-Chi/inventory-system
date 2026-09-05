@@ -20,6 +20,20 @@ jest.mock('@expo/vector-icons', () => ({
   Ionicons: (props: any) => ({ type: 'Ionicons', props }),
 }))
 
+jest.mock('expo-av', () => ({
+  Audio: {
+    setAudioModeAsync: jest.fn().mockResolvedValue(true),
+    Sound: {
+      createAsync: jest.fn().mockResolvedValue({
+        sound: {
+          replayAsync: jest.fn().mockResolvedValue(true),
+          unloadAsync: jest.fn().mockResolvedValue(true),
+        },
+      }),
+    },
+  },
+}))
+
 jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn().mockResolvedValue(true),
 }))
@@ -664,6 +678,48 @@ describe('Continuous Barcode Scanning Suite', () => {
       expect(preset.deliveryAddress).toBe('Borey Peng Huoth, Chbar Ampov')
       expect(preset.customerName).toBe('Dara Chan')
       expect(preset.customerPhone).toBe('098765432')
+    })
+  })
+
+  describe('Scanner Audio Feedback - Beep & Error Sounds', () => {
+    it('preloads scanner audio and replays cached beep on successful scan', async () => {
+      const { playScanBeep, preloadScannerSounds, setSoundEnabled, unloadScannerSounds } = require('../utils/scannerSound')
+      const { Audio } = require('expo-av')
+
+      await unloadScannerSounds()
+      setSoundEnabled(true)
+      await preloadScannerSounds()
+      expect(Audio.Sound.createAsync).toHaveBeenCalled()
+
+      const created = await Audio.Sound.createAsync.mock.results[0]?.value
+      await playScanBeep()
+      expect(created.sound.replayAsync).toHaveBeenCalled()
+    })
+
+    it('plays error sound on failed/inactive item scan', async () => {
+      const { playScanErrorSound, unloadScannerSounds } = require('../utils/scannerSound')
+      const { Audio } = require('expo-av')
+
+      await unloadScannerSounds()
+      await playScanErrorSound()
+      expect(Audio.Sound.createAsync).toHaveBeenCalled()
+    })
+
+    it('respects setSoundEnabled(false) to mute sound when disabled', async () => {
+      const { playScanBeep, setSoundEnabled, isSoundEnabled, unloadScannerSounds } = require('../utils/scannerSound')
+      const { Audio } = require('expo-av')
+
+      await unloadScannerSounds()
+      setSoundEnabled(false)
+      expect(isSoundEnabled()).toBe(false)
+      const callCountBefore = Audio.Sound.createAsync.mock.calls.length
+
+      await playScanBeep()
+      // Should not initiate new playback
+      expect(Audio.Sound.createAsync.mock.calls.length).toBe(callCountBefore)
+
+      setSoundEnabled(true)
+      expect(isSoundEnabled()).toBe(true)
     })
   })
 })

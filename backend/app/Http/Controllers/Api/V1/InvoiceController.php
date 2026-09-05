@@ -7,6 +7,7 @@ use App\Http\Requests\Api\V1\RecordInvoicePaymentRequest;
 use App\Http\Requests\Api\V1\StoreInvoiceRequest;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\StoreSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,6 +97,30 @@ class InvoiceController extends BaseApiController
     {
         $invoice = Invoice::with(['customer', 'order', 'items', 'payments', 'user:id,name'])->findOrFail($id);
         return $this->successResponse($invoice);
+    }
+
+    /**
+     * GET /api/v1/invoices/{id}/receipt
+     *
+     * Serves printable thermal invoice HTML or JSON.
+     */
+    public function receipt(Request $request, string $id)
+    {
+        $invoice = Invoice::with(['customer', 'order', 'items', 'payments', 'user:id,name'])->findOrFail($id);
+
+        $accept = (string) $request->header('Accept', '');
+        $wantsJson = $request->query('format') === 'json' ||
+            ($accept === 'application/json' || (str_contains($accept, 'application/json') && !str_contains($accept, 'text/html')));
+        if ($wantsJson) {
+            return $this->successResponse($invoice);
+        }
+
+        $setting = StoreSetting::current();
+
+        return response()->view('receipts.invoice', [
+            'invoice' => $invoice,
+            'setting' => $setting,
+        ])->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     /**

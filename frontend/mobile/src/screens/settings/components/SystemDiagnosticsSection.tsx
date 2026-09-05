@@ -4,8 +4,12 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import Constants from 'expo-constants'
+import * as Device from 'expo-device'
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../SettingsScreen.styles'
 
@@ -15,6 +19,16 @@ export interface HealthStatus {
   version?: string
   app?: string
   database?: string
+  databaseDriver?: string
+  databaseStatus?: string
+  databaseLatencyMs?: number
+  latencyMs?: number
+  lastChecked?: string
+  serverTime?: string
+  environment?: string
+  phpVersion?: string
+  laravelVersion?: string
+  queueDriver?: string
 }
 
 export interface SystemDiagnosticsSectionProps {
@@ -34,6 +48,10 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
   onCheckBackendHealth,
   onSyncOffline,
 }) => {
+  const { isDeviceOnline, isBackendReachable } = useNetworkStatus()
+  const appVersion = Constants.expoConfig?.version || '1.0.0'
+  const deviceModel = Device.modelName || (Platform.OS === 'ios' ? 'iOS Device' : 'Android Device')
+
   return (
     <>
       <View style={styles.sectionHeaderRow}>
@@ -57,10 +75,12 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
                 color={healthStatus.connected ? tokens.colors.statusSuccess : tokens.colors.statusError}
               />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.diagnosticLabel}>Backend API Connectivity</Text>
               <Text style={styles.diagnosticSub}>
-                {healthStatus.status} ({healthStatus.version}) • {healthStatus.database}
+                {healthStatus.status}
+                {healthStatus.latencyMs !== undefined ? ` • ${healthStatus.latencyMs}ms latency` : ''}
+                {healthStatus.lastChecked ? ` (checked ${healthStatus.lastChecked})` : ''}
               </Text>
             </View>
           </View>
@@ -70,6 +90,7 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
             onPress={onCheckBackendHealth}
             disabled={healthLoading}
             activeOpacity={0.7}
+            accessibilityLabel="Refresh system diagnostics"
           >
             {healthLoading ? (
               <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
@@ -77,6 +98,36 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
               <Ionicons name="refresh" size={16} color={tokens.colors.primaryContainer} />
             )}
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Database & Server Runtime */}
+        <View style={styles.diagnosticRow}>
+          <View style={styles.diagnosticLeft}>
+            <View
+              style={[
+                styles.diagnosticIconCircle,
+                healthStatus.connected ? styles.diagSuccess : styles.diagError,
+              ]}
+            >
+              <Ionicons
+                name="server"
+                size={18}
+                color={healthStatus.connected ? tokens.colors.statusSuccess : tokens.colors.statusError}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.diagnosticLabel}>Database & Core Services</Text>
+              <Text style={styles.diagnosticSub}>
+                {healthStatus.databaseDriver
+                  ? `${healthStatus.databaseDriver.toUpperCase()} (${healthStatus.databaseStatus || 'online'}${healthStatus.databaseLatencyMs !== undefined ? ` • ${healthStatus.databaseLatencyMs}ms` : ''})`
+                  : (healthStatus.database || 'Database Online')}
+                {healthStatus.queueDriver ? ` • Queue: ${healthStatus.queueDriver}` : ''}
+                {healthStatus.environment ? ` • ${healthStatus.environment}` : ''}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -96,7 +147,7 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
                 color={pendingCount > 0 ? tokens.colors.statusPending : tokens.colors.statusSuccess}
               />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.diagnosticLabel}>Offline Sync Queue</Text>
               <Text style={styles.diagnosticSub}>
                 {pendingCount === 0
@@ -124,15 +175,21 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
 
         <View style={styles.divider} />
 
-        {/* App Version Info */}
+        {/* App Version & Network Info */}
         <View style={styles.diagnosticRow}>
           <View style={styles.diagnosticLeft}>
-            <View style={[styles.diagnosticIconCircle, styles.diagNeutral]}>
-              <Ionicons name="phone-portrait-outline" size={18} color={tokens.colors.secondary} />
+            <View style={[styles.diagnosticIconCircle, isDeviceOnline ? styles.diagSuccess : styles.diagWarning]}>
+              <Ionicons
+                name={isDeviceOnline ? 'phone-portrait-outline' : 'wifi-outline'}
+                size={18}
+                color={isDeviceOnline ? tokens.colors.statusSuccess : tokens.colors.statusPending}
+              />
             </View>
-            <View>
-              <Text style={styles.diagnosticLabel}>KC Shop Mobile</Text>
-              <Text style={styles.diagnosticSub}>Version 1.0.0 (Build 2026.08.22)</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.diagnosticLabel}>KC Shop Mobile Client</Text>
+              <Text style={styles.diagnosticSub}>
+                v{appVersion} • {deviceModel} • {isDeviceOnline ? 'Network Connected' : 'Device Offline'}
+              </Text>
             </View>
           </View>
         </View>

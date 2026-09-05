@@ -16,7 +16,7 @@ import {
   updateOrder,
 } from '../../../api/endpoints'
 import { useAuth } from '../../../context/AuthContext'
-import { useProducts } from '../../../hooks/queries/useProductsQuery'
+import { useProducts, useInfiniteProducts } from '../../../hooks/queries/useProductsQuery'
 import { useCart } from '../../../hooks/useCart'
 import { useBarcodeScan } from '../../../hooks/useBarcodeScan'
 import { useCustomerLookup } from '../../../hooks/useCustomerLookup'
@@ -78,6 +78,9 @@ interface UsePosScreenReturn {
   refreshing: boolean
   setRefreshing: (v: boolean) => void
   onRefresh: () => Promise<void>
+  loadMoreProducts: () => void
+  loadingMoreProducts: boolean
+  hasMoreProducts: boolean
 
   // Channels
   channels: SalesChannel[]
@@ -228,11 +231,24 @@ export function usePosScreen({
   const [refreshing, setRefreshing] = useState(false)
 
   const {
-    data: queryProducts,
+    data: infiniteProductsData,
     isLoading: isLoadingQueryProducts,
     error: queryProductsError,
+    fetchNextPage: fetchNextProductsPage,
+    hasNextPage: hasMoreProducts,
+    isFetchingNextPage: loadingMoreProducts,
     refetch: refetchProducts,
-  } = useProducts({ per_page: 200 })
+  } = useInfiniteProducts({ per_page: 50 })
+
+  const queryProducts = useMemo(() => {
+    return infiniteProductsData?.pages?.flatMap((page) => page.data) ?? []
+  }, [infiniteProductsData])
+
+  const loadMoreProducts = useCallback(() => {
+    if (hasMoreProducts && !loadingMoreProducts) {
+      fetchNextProductsPage()
+    }
+  }, [hasMoreProducts, loadingMoreProducts, fetchNextProductsPage])
 
   // Auto-sync products and categories when query cache updates
   const prevRawProductsRef = useRef<Product[] | undefined>(undefined)
@@ -272,6 +288,7 @@ export function usePosScreen({
     mode: 'cart',
     blockInactive: true,
     closeScannerOnFound: false,
+    debounceMs: 2500,
     onFoundVariant: (variant, product) => {
       return addVariantToCart(variant, product?.name ?? 'Product', product?.image_url)
     },
@@ -899,6 +916,9 @@ export function usePosScreen({
     refreshing,
     setRefreshing,
     onRefresh,
+    loadMoreProducts,
+    loadingMoreProducts,
+    hasMoreProducts,
 
     // Channels
     channels,

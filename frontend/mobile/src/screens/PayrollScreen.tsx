@@ -58,6 +58,9 @@ export default function PayrollScreen() {
   const [users, setUsers] = useState<UserAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
 
   // Modals state
   const [generateVisible, setGenerateVisible] = useState(false)
@@ -214,28 +217,80 @@ export default function PayrollScreen() {
     }
   }, [reservesYear, reservesMonth])
 
-  const loadData = useCallback(async () => {
-    try {
-      const [res, usersData] = await Promise.all([
-        fetchPayrolls(),
-        fetchUsers(),
-      ])
-      if (res && (res.success || res.data)) {
-        const list = res.data ?? (Array.isArray(res) ? res : [])
-        setPayrolls(Array.isArray(list) ? list : [])
-      }
-      if (Array.isArray(usersData)) {
-        setUsers(usersData)
-        if (usersData.length > 0 && !selectedUser) {
-          setSelectedUser(usersData[0].id)
+  const loadData = useCallback(
+    async (pageNum = 1, isLoadMore = false) => {
+      try {
+        if (!isLoadMore) {
+          setLoading(true)
+        } else {
+          setLoadingMore(true)
         }
+        const payrollsParams: { month?: number; year?: number; page?: number; per_page?: number } = {
+          page: pageNum,
+          per_page: 20,
+        }
+        if (filterMonth !== 'ALL') payrollsParams.month = filterMonth
+        if (filterYear !== 'ALL') payrollsParams.year = filterYear
+
+        const [res, usersData] = await Promise.all([
+          fetchPayrolls(payrollsParams),
+          fetchUsers(),
+        ])
+
+        let list: Payroll[] = []
+        let meta: any = null
+        if (res) {
+          const resData = (res as any).data
+          if (Array.isArray(resData)) {
+            list = resData
+          } else if (resData && typeof resData === 'object' && 'data' in resData && Array.isArray(resData.data)) {
+            list = resData.data
+            meta = resData
+          } else if (Array.isArray(res)) {
+            list = res
+          }
+          if (!meta && (res as any).meta) {
+            meta = (res as any).meta
+          }
+        }
+
+        if (isLoadMore) {
+          setPayrolls((prev) => {
+            const seen = new Set(prev.map((p) => p.id))
+            const fresh = list.filter((p) => !seen.has(p.id))
+            return [...prev, ...fresh]
+          })
+        } else {
+          setPayrolls(list)
+        }
+        setPage(pageNum)
+        if (meta && typeof meta.current_page === 'number' && typeof meta.last_page === 'number') {
+          setHasMore(meta.current_page < meta.last_page)
+        } else {
+          setHasMore(list.length >= 20)
+        }
+
+        if (Array.isArray(usersData)) {
+          setUsers(usersData)
+          if (usersData.length > 0 && !selectedUser) {
+            setSelectedUser(usersData[0].id)
+          }
+        }
+        // Preload 13th month reserves in background
+        if (!isLoadMore) {
+          loadCompanyReserves(false)
+        }
+      } catch (err: unknown) {
+        console.warn('Failed to load payroll data:', err)
+        if (!isLoadMore) setPayrolls([])
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
+        setRefreshing(false)
       }
-      // Preload 13th month reserves in background
-      loadCompanyReserves(false)
-    } catch (err: unknown) {
-      console.warn('Failed to load payroll data:', err)
-    }
-  }, [selectedUser, loadCompanyReserves])
+    },
+    [filterMonth, filterYear, selectedUser, loadCompanyReserves]
+  )
 
   useEffect(() => {
     if (activePayrollTab === 'thirteenthMonth') {
@@ -244,14 +299,13 @@ export default function PayrollScreen() {
   }, [activePayrollTab, loadCompanyReserves])
 
   useEffect(() => {
-    setLoading(true)
-    loadData().finally(() => setLoading(false))
+    loadData(1, false)
   }, [loadData])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.allSettled([
-      loadData(),
+      loadData(1, false),
       loadCompanyReserves(true),
     ])
     setRefreshing(false)
@@ -796,7 +850,12 @@ export default function PayrollScreen() {
               maxToRenderPerBatch={10}
               windowSize={5}
               removeClippedSubviews={Platform.OS === 'android'}
-              contentContainerStyle={styles.listContent}
+              onEndReached={() => {
+                if (!loading && !loadingMore && hasMore && filteredPayrolls.length > 0) {
+                  loadData(page + 1, true)
+                }
+              }}
+              onEndReachedThreshold={0.4}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               ListHeaderComponent={
                 <PayrollFilterBar
@@ -816,6 +875,23 @@ export default function PayrollScreen() {
                   canManage={Boolean(can('payroll:manage'))}
                   payrolls={filteredPayrolls}
                 />
+              }
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                    <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                      Loading more payroll records...
+                    </Text>
+                  </View>
+                ) : !hasMore && filteredPayrolls.length > 0 ? (
+                  <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+                    <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                      All payroll records loaded
+                    </Text>
+                  </View>
+                ) : null
               }
               ListEmptyComponent={
                 <View style={styles.empty}>

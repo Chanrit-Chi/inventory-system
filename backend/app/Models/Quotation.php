@@ -41,11 +41,29 @@ class Quotation extends Model
         ];
     }
 
-    public static function generateQuotationNumber(): string
+    public static function generateQuotationNumber(?string $year = null): string
     {
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)->count() + 1;
-        return sprintf('QT-%s-%04d', $year, $count);
+        $year = $year ?: date('Y');
+        $prefix = "QT-{$year}-";
+
+        $latest = self::withTrashed()
+            ->where('quotation_number', 'like', "{$prefix}%")
+            ->orderByRaw('LENGTH(quotation_number) DESC')
+            ->orderByDesc('quotation_number')
+            ->lockForUpdate()
+            ->first();
+
+        $nextSeq = 1;
+        if ($latest && preg_match('/-(\d+)$/', $latest->quotation_number, $matches)) {
+            $nextSeq = (int) $matches[1] + 1;
+        }
+
+        do {
+            $candidate = sprintf('QT-%s-%05d', $year, $nextSeq);
+            $nextSeq++;
+        } while (self::withTrashed()->where('quotation_number', $candidate)->exists());
+
+        return $candidate;
     }
 
     public function customer(): BelongsTo

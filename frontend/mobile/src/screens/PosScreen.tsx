@@ -52,6 +52,9 @@ export default function PosScreen({
     productsError,
     refreshing,
     onRefresh,
+    loadMoreProducts,
+    loadingMoreProducts,
+    hasMoreProducts,
     // Scanner & Variant Picker
     scannerOpen,
     setScannerOpen,
@@ -180,6 +183,9 @@ export default function PosScreen({
             onScroll={onScroll}
             onRetry={onRefresh}
             onSelectProduct={handleSelectProduct}
+            onLoadMore={loadMoreProducts}
+            loadingMore={loadingMoreProducts}
+            hasMore={hasMoreProducts}
           />
 
           {/* Floating Cart Bottom Bar */}

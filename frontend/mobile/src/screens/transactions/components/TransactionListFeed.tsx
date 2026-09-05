@@ -29,6 +29,8 @@ export interface TransactionListFeedProps {
   dateLabel: string
   summary: { totalSales: number; completedCount: number; avgBasket: number }
   loadingMore: boolean
+  hasMore?: boolean
+  onLoadMore?: () => void
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
   onRefresh: () => void
   onSelectOrder?: (order: Order) => void
@@ -46,6 +48,8 @@ export const TransactionListFeed: React.FC<TransactionListFeedProps> = ({
   dateLabel,
   summary,
   loadingMore,
+  hasMore,
+  onLoadMore,
   onScroll,
   onRefresh,
   onSelectOrder,
@@ -73,6 +77,7 @@ export const TransactionListFeed: React.FC<TransactionListFeedProps> = ({
           colors={[tokens.colors.primaryContainer]}
         />
       }
+      onEndReached={onLoadMore}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={
         <>
@@ -98,14 +103,12 @@ export const TransactionListFeed: React.FC<TransactionListFeedProps> = ({
               <Text style={styles.summaryLabel}>TOTAL REVENUE</Text>
               <Text style={styles.summaryValue}>${summary.totalSales.toFixed(2)}</Text>
             </View>
-            <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>PAID ORDERS</Text>
+              <Text style={styles.summaryLabel}>ORDERS</Text>
               <Text style={styles.summaryValue}>{summary.completedCount}</Text>
             </View>
-            <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>AVG BASKET</Text>
+              <Text style={styles.summaryLabel}>AVG. BASKET</Text>
               <Text style={styles.summaryValue}>${summary.avgBasket.toFixed(2)}</Text>
             </View>
           </View>
@@ -119,14 +122,14 @@ export const TransactionListFeed: React.FC<TransactionListFeedProps> = ({
           </View>
         </>
       }
-      renderItem={({ item }) => (
-        <TransactionCard order={item} onPress={onSelectOrder} />
+      renderItem={({ item: order }) => (
+        <TransactionCard order={order} onPress={() => onSelectOrder?.(order)} />
       )}
       ListEmptyComponent={
         loading && !refreshing ? (
-          <View style={styles.centerLoading}>
-            <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
-            <Text style={styles.centerLoadingText}>Loading transactions...</Text>
+          <View style={styles.emptyCard}>
+            <ActivityIndicator size="large" color={tokens.colors.primaryContainer} />
+            <Text style={styles.loadingText}>Loading transactions...</Text>
           </View>
         ) : fetchError ? (
           <ServerErrorState
@@ -157,6 +160,11 @@ export const TransactionListFeed: React.FC<TransactionListFeedProps> = ({
           <View style={styles.loadingMoreRow}>
             <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
             <Text style={styles.loadingMoreText}>Loading more transactions...</Text>
+          </View>
+        ) : !hasMore && orders.length > 0 ? (
+          <View style={styles.loadingMoreRow}>
+            <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+            <Text style={styles.loadingMoreText}>All transactions loaded</Text>
           </View>
         ) : null
       }

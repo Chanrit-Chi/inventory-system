@@ -378,4 +378,10 @@ export const styles = StyleSheet.create({
     color: tokens.colors.secondary,
     fontWeight: '600',
   },
+  loadingText: {
+    fontSize: 13,
+    color: tokens.colors.secondary,
+    fontWeight: '500',
+    marginTop: 8,
+  },
 })

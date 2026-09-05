@@ -11,6 +11,7 @@ import {
   LayoutChangeEvent,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
@@ -31,6 +32,9 @@ interface ProductCatalogTabProps {
   search: string
   setSearch: (v: string) => void
   loading?: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
+  onLoadMore?: () => void
   refreshing: boolean
   catalogError?: string | null
   onRefresh: () => void
@@ -56,6 +60,9 @@ export function ProductCatalogTab({
   search,
   setSearch,
   loading = false,
+  loadingMore = false,
+  hasMore = false,
+  onLoadMore,
   refreshing,
   catalogError,
   onRefresh,
@@ -196,6 +203,8 @@ export function ProductCatalogTab({
             windowSize={5}
             removeClippedSubviews={true}
             showsVerticalScrollIndicator={false}
+            onEndReached={onLoadMore}
+            onEndReachedThreshold={0.4}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -212,6 +221,19 @@ export function ProductCatalogTab({
                 onQuickScanBarcode={handleQuickScanFromCard}
               />
             )}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.footerLoader}>
+                  <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                  <Text style={styles.footerLoaderText}>Loading more products...</Text>
+                </View>
+              ) : !hasMore && filteredProducts.length > 0 ? (
+                <View style={styles.footerLoader}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+                  <Text style={styles.footerLoaderText}>All products loaded</Text>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               loading && !refreshing ? null : catalogError ? (
                 <ServerErrorState

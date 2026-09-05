@@ -110,17 +110,7 @@ class CheckoutService
                 }
 
                 // --- Generate order number ---
-                $orderNumber = null;
-                for ($attempt = 0; $attempt < 5; $attempt++) {
-                    $candidate = 'ORD-' . strtoupper(Str::random(10));
-                    if (!Order::where('order_number', $candidate)->exists()) {
-                        $orderNumber = $candidate;
-                        break;
-                    }
-                }
-                if ($orderNumber === null) {
-                    $orderNumber = 'ORD-' . strtoupper(Str::random(16));
-                }
+                $orderNumber = Order::generateOrderNumber();
 
                 // --- Upsert customer ---
                 $customerId = null;

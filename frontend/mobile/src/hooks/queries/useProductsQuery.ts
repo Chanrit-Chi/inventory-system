@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../../api/queryKeys'
 import {
   getProducts,
@@ -50,6 +50,44 @@ export function useProducts(filters?: ProductFilters) {
 }
 
 /**
+ * Infinite scroll query for product catalog with pagination
+ */
+export function useInfiniteProducts(filters?: Omit<ProductFilters, 'page'>) {
+  const queryKey = useMemo(
+    () => queryKeys.products.infinite(filters),
+    [
+      filters?.search,
+      filters?.category_id,
+      filters?.is_active,
+      filters?.include_inactive,
+      filters?.per_page,
+    ]
+  )
+
+  return useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await getProducts({ ...filters, page: pageParam as number })
+      return res
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const meta = lastPage?.meta
+      if (!meta) {
+        const dataLength = Array.isArray(lastPage?.data)
+          ? lastPage.data.length
+          : Array.isArray(lastPage)
+          ? lastPage.length
+          : 0
+        return dataLength >= (filters?.per_page ?? 15) ? undefined : undefined
+      }
+      return meta.current_page < meta.last_page ? meta.current_page + 1 : undefined
+    },
+    staleTime: 1000 * 60 * 2, // 2 mins
+  })
+}
+
+/**
  * Fetch single product detail by ID from cache or API
  */
 export function useProduct(id: string | null | undefined) {
@@ -59,12 +97,20 @@ export function useProduct(id: string | null | undefined) {
     queryKey: queryKeys.products.detail(id ?? ''),
     queryFn: async () => {
       if (!id) return null
-      // Look up in existing products list cache first for instant load
-      const allLists = queryClient.getQueriesData<Product[]>({ queryKey: queryKeys.products.all })
-      for (const [, list] of allLists) {
-        if (Array.isArray(list)) {
-          const found = list.find((p) => p.id === id)
+      // Look up in existing products list and infinite cache first for instant load
+      const allQueries = queryClient.getQueriesData<any>({ queryKey: queryKeys.products.all })
+      for (const [, queryData] of allQueries) {
+        if (Array.isArray(queryData)) {
+          const found = queryData.find((p: Product) => p.id === id)
           if (found) return found
+        } else if (queryData && Array.isArray(queryData.pages)) {
+          for (const page of queryData.pages) {
+            const items = Array.isArray(page) ? page : page?.data
+            if (Array.isArray(items)) {
+              const found = items.find((p: Product) => p.id === id)
+              if (found) return found
+            }
+          }
         }
       }
       const res = await getProducts({ search: id })

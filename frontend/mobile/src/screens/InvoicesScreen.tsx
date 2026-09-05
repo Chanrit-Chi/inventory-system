@@ -3,6 +3,8 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
+  Platform,
   Alert,
   ActivityIndicator,
   RefreshControl,
@@ -17,6 +19,7 @@ import { useBarcodeScan } from '../hooks/useBarcodeScan'
 import { matchSearch } from '../utils/searchHelper'
 import { usePermissions } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
+import { useDebounce } from '../hooks/useDebounce'
 import {
   fetchInvoices,
   recordInvoicePayment,
@@ -60,9 +63,13 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
   const { can } = usePermissions()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [recordingPayment, setRecordingPayment] = useState(false)
 
   // Selected Invoice for details
@@ -287,22 +294,53 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
   const [payMethod, setPayMethod] = useState<'ABA QR' | 'Cash' | 'Card'>('ABA QR')
   const [payRef, setPayRef] = useState('')
 
-  const loadInvoices = useCallback(async () => {
+  const loadInvoices = useCallback(async (pageNum = 1, isLoadMore = false) => {
     try {
-      setLoading(true)
-      const res = await fetchInvoices()
-      if (res && res.data) {
-        const list = Array.isArray(res.data) ? res.data : res.data.data || []
-        setInvoices(list)
+      if (pageNum === 1) {
+        setLoading(true)
       } else {
-        setInvoices([])
+        setLoadingMore(true)
+      }
+      const res = await fetchInvoices({
+        page: pageNum,
+        per_page: 20,
+        search: debouncedSearch.trim() || undefined,
+        status: statusFilter === 'ALL' ? undefined : statusFilter.toLowerCase(),
+      })
+      const resData = res?.data
+      let list: Invoice[] = []
+      let meta = (res as any)?.meta
+      if (Array.isArray(resData)) {
+        list = resData
+      } else if (resData && typeof resData === 'object' && 'data' in resData && Array.isArray((resData as any).data)) {
+        list = (resData as any).data
+        if (!meta && 'current_page' in resData) {
+          meta = resData as any
+        }
+      }
+      if (isLoadMore) {
+        setInvoices((prev) => {
+          const seen = new Set(prev.map((i) => i.id))
+          const fresh = list.filter((i) => !seen.has(i.id))
+          return [...prev, ...fresh]
+        })
+      } else {
+        setInvoices(list)
+      }
+      setPage(pageNum)
+      if (meta) {
+        setHasMore(meta.current_page < meta.last_page)
+      } else {
+        setHasMore(list.length >= 20)
       }
     } catch {
-      setInvoices([])
+      if (!isLoadMore) setInvoices([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
+      setRefreshing(false)
     }
-  }, [])
+  }, [debouncedSearch, statusFilter])
 
   const handleShareInvoice = async (invoice: Invoice) => {
     try {
@@ -390,12 +428,12 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
   }, [selectedInvoice])
 
   useEffect(() => {
-    loadInvoices()
+    loadInvoices(1, false)
   }, [loadInvoices])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
-    loadInvoices()
+    loadInvoices(1, false)
   }, [loadInvoices])
 
   const filteredInvoices = useMemo(() => {
@@ -405,78 +443,50 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
       const match = matchSearch(
         search,
         getInvoiceNumber(inv),
-        getCustomerName(inv),
-        getCustomerPhone(inv),
-        getOrderNumber(inv),
-        inv.notes,
-        itemNames,
-        itemSkus
+        inv.customerName || '',
+        inv.customerPhone || '',
+        inv.notes || '',
+        ...itemNames,
+        ...itemSkus
       )
-      const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter
+      const st = (inv.status || '').toUpperCase()
+      const matchStatus = statusFilter === 'ALL' || st === statusFilter
       return match && matchStatus
     })
   }, [invoices, search, statusFilter])
 
   const handleOpenRecordPayment = (inv: Invoice) => {
     setSelectedInvoice(inv)
-    setPayAmount(getBalanceDue(inv).toFixed(2))
+    setPayAmount(String(inv.balanceDue || ''))
+    setPayMethod('ABA QR')
     setPayRef('')
     setPaymentModalOpen(true)
   }
 
-  const handleRecordPaymentSubmit = async () => {
+  const handleRecordPayment = async () => {
     if (!selectedInvoice) return
-    const amount = parseFloat(payAmount)
-    if (isNaN(amount) || amount <= 0) {
+    const amt = parseFloat(payAmount)
+    if (isNaN(amt) || amt <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid payment amount.')
       return
     }
-
+    setRecordingPayment(true)
     try {
-      setRecordingPayment(true)
       const res = await recordInvoicePayment(selectedInvoice.id, {
-        amount,
+        amount: amt,
         payment_method: payMethod,
-        transaction_ref: payRef || undefined,
+        transaction_ref: payRef.trim() || undefined,
       })
-
-      if (res && res.data && res.data.invoice) {
-        const updated = res.data.invoice
-        setInvoices((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
-        setSelectedInvoice(updated)
-      } else {
-        const newPayment: InvoicePaymentRecord = {
-          id: `pay-${Date.now()}`,
-          amount,
-          paymentMethod: payMethod,
-          transactionRef: payRef || `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-          paidAt: new Date().toISOString(),
-          recordedBy: 'Current Cashier',
-        }
-
-        const newPaid = getAmountPaid(selectedInvoice) + amount
-        const newBalance = Math.max(0, getTotalAmount(selectedInvoice) - newPaid)
-        const newStatus: InvoiceStatus = newBalance === 0 ? 'PAID' : 'PARTIAL'
-
-        const updatedInvoice: Invoice = {
-          ...selectedInvoice,
-          amountPaid: newPaid,
-          amount_paid: newPaid,
-          balanceDue: newBalance,
-          balance_due: newBalance,
-          status: newStatus,
-          payments: [newPayment, ...getPayments(selectedInvoice)],
-        }
-
-        setInvoices((prev) => prev.map((i) => (i.id === selectedInvoice.id ? updatedInvoice : i)))
-        setSelectedInvoice(updatedInvoice)
+      const updatedInv = res.data?.invoice || (res.data as any)
+      if (updatedInv) {
+        setInvoices((prev) => prev.map((i) => (i.id === updatedInv.id ? updatedInv : i)))
+        setSelectedInvoice(updatedInv)
       }
-
       setPaymentModalOpen(false)
-      showToast(`Recorded payment of $${amount.toFixed(2)} via ${payMethod}.`, 'success')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record payment.'
-      showToast(msg, 'error')
+      showToast('Payment recorded successfully.', 'success')
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Could not record payment.'
+      Alert.alert('Payment Failed', msg)
     } finally {
       setRecordingPayment(false)
     }
@@ -495,10 +505,22 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
       />
 
       {/* Invoice List */}
-      <ScrollView
+      <FlatList
         style={styles.list}
+        data={filteredInvoices}
+        keyExtractor={(inv) => inv.id}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        onEndReached={() => {
+          if (!loading && !loadingMore && hasMore && filteredInvoices.length > 0) {
+            loadInvoices(page + 1, true)
+          }
+        }}
+        onEndReachedThreshold={0.4}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -507,31 +529,48 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
             colors={[tokens.colors.primaryContainer]}
           />
         }
-      >
-        {loading && !refreshing ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
-            <Text style={styles.loadingText}>Loading invoices from server...</Text>
-          </View>
-        ) : filteredInvoices.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={48} color={tokens.colors.secondaryFixedDim} />
-            <Text style={styles.emptyTitle}>No Invoices Found</Text>
-            <Text style={styles.emptyText}>Invoices generated from completed orders will appear here.</Text>
-          </View>
-        ) : (
-          filteredInvoices.map((inv) => (
-            <InvoiceCardItem
-              key={inv.id}
-              invoice={inv}
-              canRecordPayment={Boolean(can('invoices:record-payment'))}
-              onSelect={(selected) => setSelectedInvoice(selected)}
-              onQuickPay={handleOpenRecordPayment}
-              onQuickPrint={handlePrintInvoice}
-            />
-          ))
+        renderItem={({ item: inv }) => (
+          <InvoiceCardItem
+            key={inv.id}
+            invoice={inv}
+            canRecordPayment={Boolean(can('invoices:record-payment'))}
+            onSelect={(selected) => setSelectedInvoice(selected)}
+            onQuickPay={handleOpenRecordPayment}
+            onQuickPrint={handlePrintInvoice}
+          />
         )}
-      </ScrollView>
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                Loading more invoices...
+              </Text>
+            </View>
+          ) : !hasMore && filteredInvoices.length > 0 ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                All invoices loaded
+              </Text>
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          loading && !refreshing ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+              <Text style={styles.loadingText}>Loading invoices from server...</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="receipt-outline" size={48} color={tokens.colors.secondaryFixedDim} />
+              <Text style={styles.emptyTitle}>No Invoices Found</Text>
+              <Text style={styles.emptyText}>Invoices generated from completed orders will appear here.</Text>
+            </View>
+          )
+        }
+      />
 
       {/* Invoice Details Modal */}
       <InvoiceDetailModal
@@ -551,7 +590,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = () => {
         onCloseDetail={() => setSelectedInvoice(null)}
         onOpenRecordPayment={handleOpenRecordPayment}
         onClosePaymentModal={() => setPaymentModalOpen(false)}
-        onRecordPaymentSubmit={handleRecordPaymentSubmit}
+        onRecordPaymentSubmit={handleRecordPayment}
         onPrintInvoice={handlePrintInvoice}
         onShareInvoice={handleShareInvoice}
       />

@@ -54,11 +54,29 @@ class Invoice extends Model
         });
     }
 
-    public static function generateInvoiceNumber(): string
+    public static function generateInvoiceNumber(?string $year = null): string
     {
-        $year = date('Y');
-        $count = self::whereYear('created_at', $year)->count() + 1;
-        return sprintf('INV-%s-%04d', $year, $count);
+        $year = $year ?: date('Y');
+        $prefix = "INV-{$year}-";
+
+        $latest = self::withTrashed()
+            ->where('invoice_number', 'like', "{$prefix}%")
+            ->orderByRaw('LENGTH(invoice_number) DESC')
+            ->orderByDesc('invoice_number')
+            ->lockForUpdate()
+            ->first();
+
+        $nextSeq = 1;
+        if ($latest && preg_match('/-(\d+)$/', $latest->invoice_number, $matches)) {
+            $nextSeq = (int) $matches[1] + 1;
+        }
+
+        do {
+            $candidate = sprintf('INV-%s-%05d', $year, $nextSeq);
+            $nextSeq++;
+        } while (self::withTrashed()->where('invoice_number', $candidate)->exists());
+
+        return $candidate;
     }
 
     public function order(): BelongsTo

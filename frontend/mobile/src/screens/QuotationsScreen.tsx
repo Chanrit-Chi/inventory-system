@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   Alert,
   ActivityIndicator,
   RefreshControl,
@@ -11,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import { usePermissions } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
+import { useDebounce } from '../hooks/useDebounce'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { quotationSchema, QuotationFormValues } from '../utils/validation'
@@ -57,9 +59,13 @@ export const QuotationsScreen: React.FC<QuotationsScreenProps> = ({
   const { can } = usePermissions()
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   // Selected Quotation for details modal
@@ -232,31 +238,64 @@ export const QuotationsScreen: React.FC<QuotationsScreenProps> = ({
     setCatalogOpen(false)
   }
 
-  const loadQuotations = useCallback(async () => {
-    try {
-      setLoading(true)
-      const res = await fetchQuotations()
-      if (res && res.data) {
-        const list = Array.isArray(res.data) ? res.data : res.data?.data || []
-        setQuotations(list)
-      } else {
-        setQuotations([])
+  const loadQuotations = useCallback(
+    async (pageNum = 1, isLoadMore = false) => {
+      try {
+        if (!isLoadMore) {
+          setLoading(true)
+        } else {
+          setLoadingMore(true)
+        }
+        const res = await fetchQuotations({
+          page: pageNum,
+          per_page: 20,
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+        })
+        const resData = res?.data
+        let list: Quotation[] = []
+        let meta = (res as any)?.meta
+        if (Array.isArray(resData)) {
+          list = resData
+        } else if (resData && typeof resData === 'object' && 'data' in resData && Array.isArray((resData as any).data)) {
+          list = (resData as any).data
+          if (!meta && 'current_page' in resData) {
+            meta = resData as any
+          }
+        }
+        if (isLoadMore) {
+          setQuotations((prev) => {
+            const seen = new Set(prev.map((q) => q.id))
+            const fresh = list.filter((q) => !seen.has(q.id))
+            return [...prev, ...fresh]
+          })
+        } else {
+          setQuotations(list)
+        }
+        setPage(pageNum)
+        if (meta) {
+          setHasMore(meta.current_page < meta.last_page)
+        } else {
+          setHasMore(list.length >= 20)
+        }
+      } catch {
+        if (!isLoadMore) setQuotations([])
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
+        setRefreshing(false)
       }
-    } catch {
-      setQuotations([])
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
+    },
+    [debouncedSearch, statusFilter]
+  )
 
   useEffect(() => {
-    loadQuotations()
+    loadQuotations(1, false)
   }, [loadQuotations])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
-    loadQuotations()
+    loadQuotations(1, false)
   }, [loadQuotations])
 
   const filteredQuotes = useMemo(() => {
@@ -435,10 +474,18 @@ export const QuotationsScreen: React.FC<QuotationsScreenProps> = ({
       />
 
       {/* Quotations List */}
-      <ScrollView
+      <FlatList
+        data={filteredQuotes}
+        keyExtractor={(item) => item.id}
         style={styles.list}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        onEndReached={() => {
+          if (!loading && !loadingMore && hasMore && filteredQuotes.length > 0) {
+            loadQuotations(page + 1, true)
+          }
+        }}
+        onEndReachedThreshold={0.4}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -447,30 +494,47 @@ export const QuotationsScreen: React.FC<QuotationsScreenProps> = ({
             colors={[tokens.colors.primaryContainer]}
           />
         }
-      >
-        {loading && !refreshing ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
-            <Text style={styles.loadingText}>Loading quotations from server...</Text>
-          </View>
-        ) : filteredQuotes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={48} color={tokens.colors.secondaryFixedDim} />
-            <Text style={styles.emptyTitle}>No Quotations Found</Text>
-            <Text style={styles.emptyText}>Create a new price quotation for your customers.</Text>
-          </View>
-        ) : (
-          filteredQuotes.map((quote) => (
-            <QuotationCardItem
-              key={quote.id}
-              quote={quote}
-              onSelectQuote={setSelectedQuote}
-              onConvertQuote={handleConvertQuote}
-              canConvert={Boolean(can('pos:checkout')) || Boolean(can('quotations:create'))}
-            />
-          ))
+        renderItem={({ item: quote }) => (
+          <QuotationCardItem
+            key={quote.id}
+            quote={quote}
+            onSelectQuote={setSelectedQuote}
+            onConvertQuote={handleConvertQuote}
+            canConvert={Boolean(can('pos:checkout')) || Boolean(can('quotations:create'))}
+          />
         )}
-      </ScrollView>
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                Loading more quotations...
+              </Text>
+            </View>
+          ) : !hasMore && filteredQuotes.length > 0 ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                All quotations loaded
+              </Text>
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          loading && !refreshing ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+              <Text style={styles.loadingText}>Loading quotations from server...</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={48} color={tokens.colors.secondaryFixedDim} />
+              <Text style={styles.emptyTitle}>No Quotations Found</Text>
+              <Text style={styles.emptyText}>Create a new price quotation for your customers.</Text>
+            </View>
+          )
+        }
+      />
 
       {/* Quote Details Modal */}
       <QuotationDetailModal

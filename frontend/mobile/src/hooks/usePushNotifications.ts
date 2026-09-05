@@ -41,7 +41,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
   /**
    * Configure notification channel, request permissions, and acquire Expo push token.
-   * Safe to call on simulators/emulators without crashing.
+   * Safe to call on simulators/emulators and Expo Go without crashing.
    */
   const registerDevice = useCallback(async (): Promise<string | null> => {
     // 1. Guard against non-physical devices (emulators/simulators)
@@ -52,7 +52,20 @@ export function usePushNotifications(): UsePushNotificationsResult {
       return null
     }
 
-    // 2. Configure Android Notification Channel (required for Android 8.0+)
+    // 2. Guard against Expo Go on Android (SDK 53+ removed remote push notifications from Expo Go)
+    const isExpoGo =
+      (Constants as any)?.appOwnership === 'expo' ||
+      (Constants as any)?.executionEnvironment === 'storeClient'
+    if (Platform.OS === 'android' && isExpoGo) {
+      if (isDev) {
+        console.log(
+          '[usePushNotifications] Android remote push notifications require a Development Build (unsupported in Expo Go since SDK 53). Skipping token acquisition.'
+        )
+      }
+      return null
+    }
+
+    // 3. Configure Android Notification Channel (required for Android 8.0+)
     if (Platform.OS === 'android') {
       try {
         await Notifications.setNotificationChannelAsync('default', {
@@ -66,7 +79,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       }
     }
 
-    // 3. Permission flow: check existing permissions, request if not granted
+    // 4. Permission flow: check existing permissions, request if not granted
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync()
       let finalStatus = existingStatus
@@ -85,15 +98,26 @@ export function usePushNotifications(): UsePushNotificationsResult {
         return null
       }
 
-      // 4. Retrieve Expo push token with EAS project ID
-      const projectId = getEasProjectId()
-      const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId })
-      const token = tokenResponse.data
+      // 5. Retrieve Expo push token with EAS project ID
+      try {
+        const projectId = getEasProjectId()
+        const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId })
+        const token = tokenResponse.data
 
-      setExpoPushToken(token)
-      return token
-    } catch (tokenErr) {
-      console.warn('[usePushNotifications] Error acquiring Expo push token:', tokenErr)
+        setExpoPushToken(token)
+        return token
+      } catch (tokenErr: any) {
+        if (tokenErr?.message && tokenErr.message.includes('removed from Expo Go')) {
+          if (isDev) {
+            console.log('[usePushNotifications] Push notifications are not supported in Expo Go on Android.')
+          }
+          return null
+        }
+        console.warn('[usePushNotifications] Error acquiring Expo push token:', tokenErr)
+        return null
+      }
+    } catch (permErr) {
+      console.warn('[usePushNotifications] Error requesting notification permissions:', permErr)
       return null
     }
   }, [])

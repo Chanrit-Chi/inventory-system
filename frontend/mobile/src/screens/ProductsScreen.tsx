@@ -87,10 +87,11 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     search, setSearch,
     categoryFilter, setCategoryFilter,
     statusFilter, setStatusFilter,
-    loading, refreshing,
+    loading, loadingMore, hasMore,
+    refreshing,
     catalogError,
     filteredProducts, filterCategoryOptions, missingBarcodeCount,
-    loadProducts, onRefresh,
+    loadProducts, loadMoreProducts, onRefresh,
     headerTranslateY, headerOpacity, onScroll, onLayoutHeader, headerHeight,
   } = useProductCatalog()
 
@@ -585,6 +586,9 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           search={search}
           setSearch={setSearch}
           loading={loading}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          onLoadMore={loadMoreProducts}
           refreshing={refreshing}
           catalogError={catalogError}
           onRefresh={onRefresh}

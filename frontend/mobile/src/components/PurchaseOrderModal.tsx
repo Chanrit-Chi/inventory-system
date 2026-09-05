@@ -323,6 +323,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
     setScannerOpen,
     loading: scanLoading,
     handleScanCode,
+    lastFeedback: scanFeedback,
+    triggerFeedback,
   } = useBarcodeScan({
     mode: 'purchase-order',
     customToast: showToast,
@@ -336,6 +338,11 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
               : i
           )
         )
+        triggerFeedback({
+          message: `+1 ${existingItem.productName}`,
+          type: 'success',
+          timestamp: Date.now(),
+        })
         showToast(`+1 ${existingItem.productName}`)
         return true
       }
@@ -657,12 +664,30 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
       />
 
       {/* Barcode Camera Scanner Modal */}
-        <CameraScannerModal
-          visible={scannerOpen}
-          onClose={() => setScannerOpen(false)}
-          onScanCode={async (code) => { await handleScanCode(code) }}
-          isLoading={scanLoading}
-        />
+      <CameraScannerModal
+        visible={scannerOpen}
+        title="PO Barcode Scanner"
+        subtitle={`${poItems.reduce((sum, it) => sum + (it.quantity || 1), 0)} items • Tap list to pause & edit`}
+        primaryActionLabel="Done & Review"
+        primaryActionIcon="checkmark-circle-outline"
+        onClose={() => setScannerOpen(false)}
+        onPrimaryAction={() => setScannerOpen(false)}
+        onScanCode={async (code) => { await handleScanCode(code) }}
+        isLoading={scanLoading}
+        scannedItems={poItems.map((it) => ({
+          id: it.id,
+          name: it.productName,
+          sku: it.sku,
+          quantity: it.quantity,
+          priceOrCost: it.unitCost,
+          imageUrl: it.imageUrl,
+        }))}
+        totalCount={poItems.reduce((sum, it) => sum + (it.quantity || 1), 0)}
+        totalValue={poItems.reduce((sum, it) => sum + (it.totalCost || 0), 0)}
+        onUpdateItemQuantity={(id, delta) => handleUpdateItemQty(id, delta)}
+        onRemoveItem={(id) => setPoItems((prev) => prev.filter((it) => it.id !== id))}
+        feedback={scanFeedback}
+      />
 
         {/* Product Catalog Picker Modal */}
         <ProductPickerModal

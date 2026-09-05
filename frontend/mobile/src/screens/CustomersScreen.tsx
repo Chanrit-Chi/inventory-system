@@ -23,6 +23,7 @@ import { ControlledInput } from '../components/ControlledInput'
 import { fetchCustomers, getCustomerDetails } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
+import { useDebounce } from '../hooks/useDebounce'
 import { SearchBar } from '../components/SearchBar'
 import { matchSearch } from '../utils/searchHelper'
 import { getChannelPlatformMeta } from '../components/TransactionCard'
@@ -99,8 +100,12 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   const { can } = usePermissions()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
 
   // Details Modal
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
@@ -139,34 +144,61 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
     defaultValues: { name: '', phone: '', address: '', email: '', preferred_delivery_company: '' },
   })
 
-  const loadCustomers = useCallback(async (query = '') => {
-    setLoading(true)
+  const loadCustomers = useCallback(async (query = '', pageNum = 1, isLoadMore = false) => {
+    if (pageNum === 1) {
+      setLoading(true)
+    } else {
+      setLoadingMore(true)
+    }
     try {
-      const res = await fetchCustomers({ search: query })
+      const res = await fetchCustomers({
+        search: query.trim() || undefined,
+        page: pageNum,
+        per_page: 25,
+      })
       const resData = res.data
+      let list: Customer[] = []
+      let meta = (res as any).meta
       if (Array.isArray(resData)) {
-        setCustomers(resData)
+        list = resData
       } else if (resData && typeof resData === 'object' && 'data' in resData && Array.isArray((resData as PaginatedData<Customer>).data)) {
-        setCustomers((resData as PaginatedData<Customer>).data)
+        list = (resData as PaginatedData<Customer>).data
+        if (!meta && 'current_page' in resData) {
+          meta = resData as any
+        }
+      }
+      if (isLoadMore) {
+        setCustomers((prev) => {
+          const seen = new Set(prev.map((c) => c.id))
+          const fresh = list.filter((c) => !seen.has(c.id))
+          return [...prev, ...fresh]
+        })
       } else {
-        setCustomers([])
+        setCustomers(list)
+      }
+      setPage(pageNum)
+      if (meta) {
+        setHasMore(meta.current_page < meta.last_page)
+      } else {
+        setHasMore(list.length >= 25)
       }
     } catch {
-      setCustomers([])
+      if (!isLoadMore) setCustomers([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
       setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
-    loadCustomers()
-  }, [loadCustomers])
+    loadCustomers(debouncedSearch, 1, false)
+  }, [debouncedSearch, loadCustomers])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
-    loadCustomers(search)
-  }, [loadCustomers, search])
+    loadCustomers(debouncedSearch, 1, false)
+  }, [debouncedSearch, loadCustomers])
 
   const [sortBy, setSortBy] = useState<'spent' | 'orders' | 'name'>('spent')
 
@@ -303,6 +335,12 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
+        onEndReached={() => {
+          if (!loading && !loadingMore && hasMore && customers.length > 0) {
+            loadCustomers(debouncedSearch, page + 1, true)
+          }
+        }}
+        onEndReachedThreshold={0.4}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -321,6 +359,23 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
             }}
           />
         )}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                Loading more customers...
+              </Text>
+            </View>
+          ) : !hasMore && customers.length > 0 ? (
+            <View style={{ paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="checkmark-circle-outline" size={14} color={tokens.colors.secondary} />
+              <Text style={{ fontSize: 13, color: tokens.colors.secondary, fontFamily: tokens.fonts.medium }}>
+                All customers loaded
+              </Text>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           loading && !refreshing && customers.length === 0 ? (
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>

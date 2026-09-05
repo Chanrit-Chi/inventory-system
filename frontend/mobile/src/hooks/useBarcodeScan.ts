@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef } from 'react'
-import { Alert } from 'react-native'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { Alert, Vibration } from 'react-native'
 import { scanBarcode } from '../api/endpoints'
 import type { ScanResult, ScannedProduct, ScannedVariant } from '../types'
+import { playScanBeep, playScanErrorSound, preloadScannerSounds } from '../utils/scannerSound'
 
 export interface ScanFeedback {
   message: string
@@ -39,7 +40,7 @@ export function useBarcodeScan(options: UseBarcodeScanOptions = {}) {
     autoAlertOnError = false,
     blockInactive = false,
     closeScannerOnFound = false,
-    debounceMs = 1200,
+    debounceMs = 2500,
     customToast,
   } = options
 
@@ -52,6 +53,10 @@ export function useBarcodeScan(options: UseBarcodeScanOptions = {}) {
   const lastScannedCode = useRef<string>('')
   const lastScannedTime = useRef<number>(0)
 
+  useEffect(() => {
+    preloadScannerSounds()
+  }, [])
+
   const triggerFeedback = useCallback((feedback: ScanFeedback) => {
     setLastFeedback(feedback)
     if (onFeedback) {
@@ -60,9 +65,21 @@ export function useBarcodeScan(options: UseBarcodeScanOptions = {}) {
     if (customToast && feedback.type === 'success') {
       customToast(feedback.message)
     }
+    try {
+      if (feedback.type === 'success') {
+        Vibration.vibrate(70)
+        playScanBeep()
+      } else if (feedback.type === 'error' || feedback.type === 'warning') {
+        Vibration.vibrate([0, 50, 50, 50])
+        playScanErrorSound()
+      }
+    } catch {
+      // Safe fallback in simulators/unsupported environments
+    }
   }, [onFeedback, customToast])
 
   const openScanner = useCallback(() => {
+    preloadScannerSounds()
     setScannerOpen(true)
   }, [])
 

@@ -28,7 +28,7 @@ import { StoreHeaderCard } from './settings/components/StoreHeaderCard'
 import { PrinterStationsSection } from './settings/components/PrinterStationsSection'
 import { PrinterDeviceModal } from './settings/components/PrinterDeviceModal'
 import { StoreBrandingSection } from './settings/components/StoreBrandingSection'
-import { SystemDiagnosticsSection } from './settings/components/SystemDiagnosticsSection'
+import { SystemDiagnosticsSection, HealthStatus } from './settings/components/SystemDiagnosticsSection'
 import { UserAccountSection } from './settings/components/UserAccountSection'
 
 export interface SettingsScreenProps {
@@ -75,13 +75,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
 
   // Backend Health Diagnostics State
   const [healthLoading, setHealthLoading] = useState(false)
-  const [healthStatus, setHealthStatus] = useState<{
-    connected: boolean
-    status?: string
-    version?: string
-    app?: string
-    database?: string
-  }>({
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>({
     connected: false,
     status: 'Checking...',
     version: '...',
@@ -93,23 +87,39 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const checkBackendHealth = useCallback(async () => {
     try {
       setHealthLoading(true)
+      const start = Date.now()
       const res = await getHealth()
+      const elapsed = Date.now() - start
       if (res && res.data) {
         setHealthStatus({
           connected: true,
-          status: res.data.status || 'Operational',
-          version: res.data.version || 'v1.4.2',
+          status: res.data.status === 'healthy' ? 'Operational' : (res.data.status || 'Operational'),
+          version: res.data.version || 'v1.0.0',
           app: res.data.app || 'KC Shop Core',
-          database: res.data.database || 'Connected',
+          database: res.data.database_driver
+            ? `${res.data.database_driver.toUpperCase()} (${res.data.database_status || 'connected'})`
+            : res.data.database || 'Connected',
+          databaseDriver: res.data.database_driver || res.data.database,
+          databaseStatus: res.data.database_status || 'connected',
+          databaseLatencyMs: res.data.database_latency_ms,
+          latencyMs: elapsed,
+          lastChecked: new Date().toLocaleTimeString(),
+          serverTime: res.data.server_time,
+          environment: res.data.environment,
+          phpVersion: res.data.php_version,
+          laravelVersion: res.data.laravel_version,
+          queueDriver: res.data.queue_driver,
         })
       }
     } catch {
       setHealthStatus({
         connected: false,
         status: 'Offline / Unreachable',
-        version: 'v1.4.2 (Local Cache)',
-        app: 'KC Inventory Core',
+        version: 'Local Cache',
+        app: 'KC Shop Core',
         database: 'Offline Queue Active',
+        databaseStatus: 'disconnected',
+        lastChecked: new Date().toLocaleTimeString(),
       })
     } finally {
       setHealthLoading(false)

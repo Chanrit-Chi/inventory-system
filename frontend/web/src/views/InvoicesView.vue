@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useInvoiceStore, type Invoice } from '@/stores/invoiceStore'
+import { usePrintStore } from '@/stores/printStore'
 import { useToast } from '@/composables/useToast'
 import {
   Receipt,
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Printer,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -95,9 +97,21 @@ async function loadInvoices() {
   }
 }
 
+const printStore = usePrintStore()
+
 function viewInvoice(inv: Invoice) {
   selectedInvoice.value = inv
   showDetailModal.value = true
+}
+
+async function handlePrintInvoice(inv: Invoice) {
+  try {
+    const res = await printStore.printInvoice(inv.id, inv)
+    toast.success(res.message || 'Invoice printed')
+  } catch (err) {
+    const e = err as { message?: string }
+    toast.error(e.message || 'Failed to print invoice')
+  }
 }
 
 function openPayment(inv: Invoice) {
@@ -312,6 +326,10 @@ onMounted(loadInvoices)
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex items-center justify-end gap-1.5">
+                  <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs gap-1" title="Print Invoice" @click="handlePrintInvoice(inv)">
+                    <Printer :size="13" />
+                    <span>Print</span>
+                  </Button>
                   <Button variant="ghost" size="sm" class="h-8 px-2.5 text-xs gap-1" @click="viewInvoice(inv)">
                     <Eye :size="13" />
                     <span>View</span>
@@ -426,8 +444,12 @@ onMounted(loadInvoices)
           </div>
         </div>
 
-        <DialogFooter class="mt-4">
-          <Button variant="outline" @click="showDetailModal = false">Close</Button>
+        <DialogFooter class="mt-4 flex items-center justify-between sm:justify-between">
+          <Button v-if="selectedInvoice" variant="outline" size="sm" class="gap-1.5" @click="handlePrintInvoice(selectedInvoice)">
+            <Printer :size="14" />
+            <span>Print Invoice</span>
+          </Button>
+          <Button variant="outline" size="sm" @click="showDetailModal = false">Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -77,6 +77,16 @@ interface HealthStatus {
   app: string
   database: string
   latency: string
+  lastChecked?: string
+  databaseDriver?: string
+  databaseStatus?: string
+  databaseLatency?: string
+  queueDriver?: string
+  cacheDriver?: string
+  environment?: string
+  phpVersion?: string
+  laravelVersion?: string
+  serverTime?: string
 }
 
 interface CurrentUser {
@@ -431,11 +441,23 @@ async function checkBackendHealth() {
     const data = res.data?.data ?? res.data
     healthStatus.value = {
       connected: true,
-      status: data?.status || 'Operational',
+      status: data?.status === 'healthy' ? 'Operational' : (data?.status || 'Operational'),
       version: data?.version || 'v1.0.0',
       app: data?.app || 'KC Shop Core',
-      database: data?.database || 'Connected',
+      database: data?.database_driver
+        ? `${data.database_driver.toUpperCase()} (${data.database_status || 'connected'})`
+        : (data?.database || 'Connected'),
+      databaseDriver: data?.database_driver || data?.database || 'sqlite',
+      databaseStatus: data?.database_status || 'connected',
+      databaseLatency: data?.database_latency_ms !== undefined ? `${data.database_latency_ms}ms` : undefined,
+      queueDriver: data?.queue_driver || 'sync',
+      cacheDriver: data?.cache_driver || 'file',
+      environment: data?.environment || 'production',
+      phpVersion: data?.php_version,
+      laravelVersion: data?.laravel_version,
+      serverTime: data?.server_time,
       latency: `${elapsed}ms`,
+      lastChecked: new Date().toLocaleTimeString(),
     }
   } catch {
     const elapsed = Math.round(performance.now() - start)
@@ -446,6 +468,7 @@ async function checkBackendHealth() {
       app: 'KC Shop Core',
       database: 'Offline Queue Active',
       latency: `${elapsed}ms (timeout)`,
+      lastChecked: new Date().toLocaleTimeString(),
     }
   } finally {
     healthLoading.value = false
@@ -1081,14 +1104,14 @@ const userInitials = (name: string | undefined): string => {
         <StatCard
           label="Backend API Service"
           :value="healthStatus.status || 'Active'"
-          :sub="`Latency: ${healthStatus.latency} • Last checked: ${new Date().toLocaleTimeString()}`"
+          :sub="`Latency: ${healthStatus.latency} • Last checked: ${healthStatus.lastChecked || 'Just now'}`"
           :icon="Server"
           :icon-variant="healthStatus.connected ? 'success' : 'warning'"
         />
         <StatCard
           label="Database Engine"
           :value="healthStatus.database || 'Active'"
-          sub="Connection state: Online • Queue driver: Database"
+          :sub="`State: ${healthStatus.databaseStatus || 'Online'}${healthStatus.databaseLatency ? ' (' + healthStatus.databaseLatency + ')' : ''} • Queue: ${healthStatus.queueDriver || 'sync'}`"
           :icon="Database"
           :icon-variant="healthStatus.connected ? 'success' : 'warning'"
         />
@@ -1098,9 +1121,11 @@ const userInitials = (name: string | undefined): string => {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="font-display font-bold text-base text-foreground">Application Build & Runtime Details</h3>
-            <p class="text-xs text-muted-foreground mt-0.5">Platform runtime identifiers and API endpoints.</p>
+            <p class="text-xs text-muted-foreground mt-0.5">Platform runtime identifiers, server environment, and active drivers.</p>
           </div>
-          <Badge variant="neutral" class="font-mono text-xs">v{{ healthStatus.version }}</Badge>
+          <Badge :variant="healthStatus.connected ? 'success' : 'neutral'" class="font-mono text-xs">
+            {{ healthStatus.environment ? healthStatus.environment.toUpperCase() : 'PRODUCTION' }}
+          </Badge>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1109,12 +1134,26 @@ const userInitials = (name: string | undefined): string => {
             <span class="font-semibold text-foreground">{{ healthStatus.app }}</span>
           </div>
           <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Build Version</span>
-            <span class="font-mono font-semibold text-foreground">{{ healthStatus.version }}</span>
+            <span class="text-muted-foreground font-semibold">Framework Runtime</span>
+            <span class="font-mono font-semibold text-foreground">
+              {{ healthStatus.phpVersion ? `PHP ${healthStatus.phpVersion} (Laravel ${healthStatus.laravelVersion || '12'})` : `Laravel API (${healthStatus.version})` }}
+            </span>
           </div>
           <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
             <span class="text-muted-foreground font-semibold">API Base Path</span>
             <code class="font-mono text-primary text-xs">/api/v1</code>
+          </div>
+          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
+            <span class="text-muted-foreground font-semibold">Queue Driver</span>
+            <span class="font-mono text-foreground font-semibold">{{ healthStatus.queueDriver || 'sync' }}</span>
+          </div>
+          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
+            <span class="text-muted-foreground font-semibold">Cache Driver</span>
+            <span class="font-mono text-foreground font-semibold">{{ healthStatus.cacheDriver || 'file' }}</span>
+          </div>
+          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
+            <span class="text-muted-foreground font-semibold">Server Clock</span>
+            <span class="font-mono text-foreground text-[11px]">{{ healthStatus.serverTime || new Date().toISOString() }}</span>
           </div>
         </div>
 

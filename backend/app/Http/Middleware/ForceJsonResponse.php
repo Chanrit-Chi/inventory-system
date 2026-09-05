@@ -14,6 +14,14 @@ class ForceJsonResponse
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Allow HTML rendering for printable receipt views (orders, invoices, quotations)
+        if (
+            ($request->is('*orders/*/receipt*') || $request->is('*invoices/*/receipt*') || $request->is('*quotations/*/receipt*')) &&
+            ($request->header('Accept') === 'text/html' || str_contains($request->header('Accept', ''), 'text/html') || $request->query('format') === 'html')
+        ) {
+            return $next($request);
+        }
+
         $request->headers->set('Accept', 'application/json');
 
         return $next($request);

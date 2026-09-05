@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { useDebounce } from '../hooks/useDebounce'
 import { useCollapsibleHeader } from '../hooks/useCollapsibleHeader'
-import { useOrders } from '../hooks/queries/useOrdersQuery'
+import { useInfiniteOrders } from '../hooks/queries/useOrdersQuery'
 import { matchSearch } from '../utils/searchHelper'
 import type { Order } from '../types'
 import { styles } from './transactions/TransactionsScreen.styles'
@@ -54,7 +54,6 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [loadingMore] = useState(false)
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500)
 
@@ -73,18 +72,42 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
   }, [dateRange, singleDate, customFrom, customTo])
 
   const {
-    data: queryOrders,
+    data: infiniteOrdersData,
     isLoading: isQueryOrdersLoading,
+    isFetchingNextPage: loadingMore,
+    hasNextPage: hasMore,
     error: queryOrdersError,
+    fetchNextPage,
     refetch: refetchOrders,
-  } = useOrders({
-    page: 1,
-    per_page: 50,
+  } = useInfiniteOrders({
+    per_page: 25,
     search: debouncedSearchQuery.trim() || undefined,
     status: statusFilter === 'ALL' ? undefined : statusFilter.toLowerCase(),
     date_from: activeDateBounds.from,
     date_to: activeDateBounds.to,
   })
+
+  const queryOrders = useMemo(() => {
+    if (!infiniteOrdersData?.pages) return []
+    const items: Order[] = []
+    const seen = new Set<string>()
+    for (const page of infiniteOrdersData.pages) {
+      const list = Array.isArray(page) ? page : Array.isArray(page?.data) ? page.data : []
+      for (const o of list) {
+        if (o?.id && !seen.has(o.id)) {
+          seen.add(o.id)
+          items.push(o)
+        }
+      }
+    }
+    return items
+  }, [infiniteOrdersData])
+
+  const loadMoreOrders = useCallback(() => {
+    if (hasMore && !loadingMore && !isQueryOrdersLoading) {
+      fetchNextPage()
+    }
+  }, [hasMore, loadingMore, isQueryOrdersLoading, fetchNextPage])
 
   useEffect(() => {
     if (queryOrders && Array.isArray(queryOrders)) {
@@ -293,6 +316,8 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
         dateLabel={getDateLabel()}
         summary={summary}
         loadingMore={loadingMore}
+        hasMore={Boolean(hasMore)}
+        onLoadMore={loadMoreOrders}
         onScroll={onScroll}
         onRefresh={onRefresh}
         onSelectOrder={onSelectOrder}

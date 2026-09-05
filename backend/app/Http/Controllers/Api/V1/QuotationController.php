@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Api\BaseApiController;
 use App\Http\Requests\Api\V1\StoreQuotationRequest;
 use App\Models\Quotation;
+use App\Models\StoreSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,6 +97,30 @@ class QuotationController extends BaseApiController
     {
         $quotation = Quotation::with(['customer', 'items', 'user:id,name'])->findOrFail($id);
         return $this->successResponse($quotation);
+    }
+
+    /**
+     * GET /api/v1/quotations/{id}/receipt
+     *
+     * Serves printable thermal quotation HTML or JSON.
+     */
+    public function receipt(Request $request, string $id)
+    {
+        $quotation = Quotation::with(['customer', 'items', 'user:id,name'])->findOrFail($id);
+
+        $accept = (string) $request->header('Accept', '');
+        $wantsJson = $request->query('format') === 'json' ||
+            ($accept === 'application/json' || (str_contains($accept, 'application/json') && !str_contains($accept, 'text/html')));
+        if ($wantsJson) {
+            return $this->successResponse($quotation);
+        }
+
+        $setting = StoreSetting::current();
+
+        return response()->view('receipts.quotation', [
+            'quotation' => $quotation,
+            'setting'   => $setting,
+        ])->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     /**

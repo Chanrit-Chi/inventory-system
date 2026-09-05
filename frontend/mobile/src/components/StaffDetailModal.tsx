@@ -419,6 +419,42 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                   ) : null}
                 </View>
 
+                <View style={styles.sectionCard}>
+                  <Text style={styles.cardSectionTitle}>LIFETIME METRICS</Text>
+                  <View style={styles.twoColGrid}>
+                    <View style={styles.kpiBox}>
+                      <Text style={styles.kpiLabel}>TOTAL ORDERS</Text>
+                      <Text style={styles.kpiValue}>
+                        {activeUser.stats?.total_orders ?? perfData?.total_orders ?? perfData?.summary?.total_orders ?? 0}
+                      </Text>
+                    </View>
+                    <View style={styles.kpiBox}>
+                      <Text style={styles.kpiLabel}>TOTAL SALES VOLUME</Text>
+                      <Text style={[styles.kpiValue, { color: tokens.colors.primaryContainer }]}>
+                        {formatCurrency(activeUser.stats?.total_sales ?? perfData?.total_revenue ?? perfData?.summary?.total_revenue ?? 0)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.twoColGrid, { marginTop: 8 }]}>
+                    <View style={styles.kpiBox}>
+                      <Text style={styles.kpiLabel}>TOTAL NET SALARY PAID</Text>
+                      <Text style={[styles.kpiValue, { color: tokens.colors.statusSuccess }]}>
+                        {formatCurrency(activeUser.stats?.total_net_paid ?? 0)}
+                      </Text>
+                    </View>
+                    <View style={styles.kpiBox}>
+                      <Text style={styles.kpiLabel}>ACCOUNT CREATED</Text>
+                      <Text style={styles.kpiValue}>
+                        {activeUser.hire_date
+                          ? new Date(activeUser.hire_date).toLocaleDateString()
+                          : activeUser.createdAt || activeUser.created_at
+                          ? new Date(activeUser.createdAt || activeUser.created_at!).toLocaleDateString()
+                          : 'Active Member'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
                 {/* ACCESS & ROLE CAPABILITIES CARD */}
                 <View style={styles.sectionCard}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -456,42 +492,6 @@ export const StaffDetailModal: React.FC<StaffDetailModalProps> = ({
                         )
                       })
                     )}
-                  </View>
-                </View>
-
-                <View style={styles.sectionCard}>
-                  <Text style={styles.cardSectionTitle}>LIFETIME METRICS</Text>
-                  <View style={styles.twoColGrid}>
-                    <View style={styles.kpiBox}>
-                      <Text style={styles.kpiLabel}>TOTAL ORDERS</Text>
-                      <Text style={styles.kpiValue}>
-                        {activeUser.stats?.total_orders ?? perfData?.total_orders ?? perfData?.summary?.total_orders ?? 0}
-                      </Text>
-                    </View>
-                    <View style={styles.kpiBox}>
-                      <Text style={styles.kpiLabel}>TOTAL SALES VOLUME</Text>
-                      <Text style={[styles.kpiValue, { color: tokens.colors.primaryContainer }]}>
-                        {formatCurrency(activeUser.stats?.total_sales ?? perfData?.total_revenue ?? perfData?.summary?.total_revenue ?? 0)}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.twoColGrid, { marginTop: 8 }]}>
-                    <View style={styles.kpiBox}>
-                      <Text style={styles.kpiLabel}>TOTAL NET SALARY PAID</Text>
-                      <Text style={[styles.kpiValue, { color: tokens.colors.statusSuccess }]}>
-                        {formatCurrency(activeUser.stats?.total_net_paid ?? 0)}
-                      </Text>
-                    </View>
-                    <View style={styles.kpiBox}>
-                      <Text style={styles.kpiLabel}>ACCOUNT CREATED</Text>
-                      <Text style={styles.kpiValue}>
-                        {activeUser.hire_date
-                          ? new Date(activeUser.hire_date).toLocaleDateString()
-                          : activeUser.createdAt || activeUser.created_at
-                          ? new Date(activeUser.createdAt || activeUser.created_at!).toLocaleDateString()
-                          : 'Active Member'}
-                      </Text>
-                    </View>
                   </View>
                 </View>
               </View>

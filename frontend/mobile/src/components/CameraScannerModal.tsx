@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera'
 import { tokens } from '../theme/tokens'
+import { preloadScannerSounds } from '../utils/scannerSound'
 
 export interface ScannedPreviewItem {
   id: string
@@ -80,9 +81,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const [permission, requestPermission] = useCameraPermissions()
   const [isTorchOn, setIsTorchOn] = useState(false)
   const [isReviewOpen, setIsReviewOpen] = useState(false)
+  const [isContinuousMode, setIsContinuousMode] = useState(true)
+  const isScanLocked = useRef(false)
 
   // Animated laser line translation
   const laserAnim = useRef(new Animated.Value(0)).current
+
+  // Animated reticle confirmation flash
+  const reticleFlashAnim = useRef(new Animated.Value(0)).current
 
   // Animated feedback banner (in-viewfinder toast)
   const feedbackOpacity = useRef(new Animated.Value(0)).current
@@ -122,10 +128,13 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
   // Reset torch and review dialog on modal close
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
+      preloadScannerSounds()
+    } else {
       setIsTorchOn(false)
       setIsReviewOpen(false)
       setCurrentFeedback(null)
+      isScanLocked.current = false
     }
   }, [visible])
 
@@ -135,6 +144,21 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       setCurrentFeedback(feedback)
       feedbackOpacity.setValue(0)
       feedbackTranslateY.setValue(-12)
+
+      if (feedback.type === 'success') {
+        Animated.sequence([
+          Animated.timing(reticleFlashAnim, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: false,
+          }),
+          Animated.timing(reticleFlashAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: false,
+          }),
+        ]).start()
+      }
 
       Animated.parallel([
         Animated.timing(feedbackOpacity, {
@@ -162,11 +186,20 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
       return () => clearTimeout(timer)
     }
-  }, [feedback, feedbackOpacity, feedbackTranslateY])
+  }, [feedback, feedbackOpacity, feedbackTranslateY, reticleFlashAnim])
 
   const handleBarcodeScanned = (result: BarcodeScanningResult) => {
-    if (isLoading || !result.data) return
+    if (isLoading || isScanLocked.current || isReviewOpen || !result.data) return
+    isScanLocked.current = true
+    setTimeout(() => {
+      isScanLocked.current = false
+    }, 600)
+
     onScanCode(result.data)
+
+    if (!isContinuousMode) {
+      onClose()
+    }
   }
 
   const toggleTorch = () => {
@@ -176,6 +209,16 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const laserTranslateY = laserAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [6, RETICLE_HEIGHT - 10],
+  })
+
+  const reticleBorderColor = reticleFlashAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [tokens.colors.primaryContainer, '#10B981'],
+  })
+
+  const reticleBgColor = reticleFlashAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['transparent', 'rgba(16, 185, 129, 0.16)'],
   })
 
   // Derive counts
@@ -226,13 +269,44 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           </View>
 
           <View style={styles.headerActions}>
+            {/* Mode Toggle Button: Continuous vs Single */}
+            <TouchableOpacity
+              testID="btn-toggle-scan-mode"
+              style={[
+                styles.modeButton,
+                !isContinuousMode && styles.modeButtonSingle,
+              ]}
+              onPress={() => setIsContinuousMode((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isContinuousMode
+                  ? 'Continuous scan active. Tap for single scan.'
+                  : 'Single scan active. Tap for continuous scan.'
+              }
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={isContinuousMode ? 'infinite' : 'checkmark-done'}
+                size={14}
+                color={!isContinuousMode ? '#10B981' : tokens.colors.surfaceBase}
+              />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  !isContinuousMode && styles.modeTextSingle,
+                ]}
+              >
+                {isContinuousMode ? 'Continuous' : 'Single'}
+              </Text>
+            </TouchableOpacity>
+
             {/* Torch Toggle Button */}
             {Boolean(permission?.granted) && (
               <TouchableOpacity
                 testID="btn-toggle-torch"
                 style={[
-                  styles.torchButton,
-                  isTorchOn && styles.torchButtonActive,
+                  styles.iconActionButton,
+                  isTorchOn && styles.iconActionButtonActive,
                 ]}
                 onPress={toggleTorch}
                 accessibilityRole="button"
@@ -241,30 +315,22 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
               >
                 <Ionicons
                   name={isTorchOn ? 'flash' : 'flash-outline'}
-                  size={16}
+                  size={18}
                   color={isTorchOn ? tokens.colors.primaryContainer : tokens.colors.surfaceBase}
                 />
-                <Text
-                  style={[
-                    styles.torchText,
-                    isTorchOn && styles.torchTextActive,
-                  ]}
-                >
-                  {isTorchOn ? 'Torch On' : 'Torch'}
-                </Text>
               </TouchableOpacity>
             )}
 
             {/* Close Button */}
             <TouchableOpacity
               testID="btn-close-scanner"
-              style={styles.closeButton}
+              style={styles.iconActionButton}
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Close scanner"
               activeOpacity={0.75}
             >
-              <Text style={styles.closeButtonText}>✕ Close</Text>
+              <Ionicons name="close" size={20} color={tokens.colors.surfaceBase} />
             </TouchableOpacity>
           </View>
         </View>
@@ -295,7 +361,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 style={StyleSheet.absoluteFill}
                 facing="back"
                 enableTorch={isTorchOn}
-                onBarcodeScanned={handleBarcodeScanned}
+                onBarcodeScanned={isReviewOpen ? undefined : handleBarcodeScanned}
                 barcodeScannerSettings={{
                   barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
                 }}
@@ -351,11 +417,11 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                   <View style={styles.maskSide} />
 
                   {/* Reticle Focus Window */}
-                  <View style={styles.reticle}>
-                    <View style={[styles.corner, styles.topLeft]} />
-                    <View style={[styles.corner, styles.topRight]} />
-                    <View style={[styles.corner, styles.bottomLeft]} />
-                    <View style={[styles.corner, styles.bottomRight]} />
+                  <Animated.View style={[styles.reticle, { backgroundColor: reticleBgColor }]}>
+                    <Animated.View style={[styles.corner, styles.topLeft, { borderColor: reticleBorderColor }]} />
+                    <Animated.View style={[styles.corner, styles.topRight, { borderColor: reticleBorderColor }]} />
+                    <Animated.View style={[styles.corner, styles.bottomLeft, { borderColor: reticleBorderColor }]} />
+                    <Animated.View style={[styles.corner, styles.bottomRight, { borderColor: reticleBorderColor }]} />
 
                     <View style={styles.crosshairH} />
                     <View style={styles.crosshairV} />
@@ -370,7 +436,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                     >
                       <View style={styles.laserGlow} />
                     </Animated.View>
-                  </View>
+                  </Animated.View>
 
                   <View style={styles.maskSide} />
                 </View>
@@ -378,9 +444,15 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 {/* Bottom Mask with Scan Hint */}
                 <View style={styles.maskBottom}>
                   <View style={styles.hintContainer}>
-                    <Ionicons name="scan-outline" size={16} color={tokens.colors.primaryContainer} />
+                    <Ionicons
+                      name={isContinuousMode ? 'scan-outline' : 'checkmark-circle-outline'}
+                      size={16}
+                      color={isContinuousMode ? tokens.colors.primaryContainer : '#10B981'}
+                    />
                     <Text style={styles.hintText}>
-                      Keep scanning barcodes continuously
+                      {isContinuousMode
+                        ? 'Continuous mode • 2.5s duplicate guard active'
+                        : 'Single scan mode • Auto-returns to register'}
                     </Text>
                   </View>
                 </View>
@@ -705,42 +777,45 @@ const styles = StyleSheet.create({
     gap: tokens.spacing.xs + 2,
     flexShrink: 0,
   },
-  torchButton: {
-    minHeight: tokens.touchTarget.minHeight,
-    paddingHorizontal: tokens.spacing.sm + 2,
+  modeButton: {
+    height: 36,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: tokens.borderRadius.pill,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     gap: 4,
   },
-  torchButtonActive: {
-    backgroundColor: tokens.colors.actionPrimaryBg,
-    borderColor: tokens.colors.primaryContainer,
+  modeButtonSingle: {
+    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    borderColor: '#10B981',
   },
-  torchText: {
+  modeButtonText: {
     color: tokens.colors.surfaceBase,
-    fontSize: tokens.typography.caption.fontSize,
+    fontSize: 12,
     fontWeight: '600',
+    includeFontPadding: false,
   },
-  torchTextActive: {
-    color: tokens.colors.primaryContainer,
+  modeTextSingle: {
+    color: '#10B981',
+    fontWeight: '700',
   },
-  closeButton: {
-    minHeight: tokens.touchTarget.minHeight,
-    paddingHorizontal: tokens.spacing.md,
+  iconActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: tokens.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  closeButtonText: {
-    color: tokens.colors.surfaceBase,
-    fontSize: tokens.typography.body.fontSize,
-    fontWeight: '700',
+  iconActionButtonActive: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    borderColor: tokens.colors.primaryContainer,
   },
   cameraWrapper: {
     flex: 1,

@@ -1550,4 +1550,16 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: tokens.colors.onSurface,
   },
+  footerLoader: {
+    paddingVertical: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerLoaderText: {
+    fontSize: 13,
+    color: tokens.colors.secondary,
+    fontFamily: tokens.fonts.medium,
+  },
 })

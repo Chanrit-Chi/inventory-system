@@ -189,6 +189,7 @@ export const PurchaseOrdersScreen: React.FC<PurchaseOrdersScreenProps> = ({
     setScannerOpen,
     loading: scanLoading,
     handleScanCode: handleScanBarcodeForPO,
+    lastFeedback: scanFeedback,
   } = useBarcodeScan({
     mode: 'purchase-order',
     onFoundVariant: (variant, product) => {
@@ -489,11 +490,28 @@ export const PurchaseOrdersScreen: React.FC<PurchaseOrdersScreenProps> = ({
       {/* Barcode Camera Scanner Modal */}
       <CameraScannerModal
         visible={scannerOpen}
+        title="PO Barcode Scanner"
+        subtitle={`${poItems.reduce((sum, it) => sum + (it.quantity || 1), 0)} items • Tap list to pause & edit`}
+        primaryActionLabel="Done & Review"
+        primaryActionIcon="checkmark-circle-outline"
         onClose={() => setScannerOpen(false)}
+        onPrimaryAction={() => setScannerOpen(false)}
         onScanCode={async (code) => {
           await handleScanBarcodeForPO(code)
         }}
         isLoading={scanLoading}
+        scannedItems={poItems.map((it) => ({
+          id: it.id,
+          name: it.productName,
+          sku: it.sku,
+          quantity: it.quantity,
+          priceOrCost: it.unitCost,
+        }))}
+        totalCount={poItems.reduce((sum, it) => sum + (it.quantity || 1), 0)}
+        totalValue={poItems.reduce((sum, it) => sum + (it.totalCost || 0), 0)}
+        onUpdateItemQuantity={(id, delta) => handleUpdateItemQty(id, delta)}
+        onRemoveItem={(id) => setPoItems((prev) => prev.filter((it) => it.id !== id))}
+        feedback={scanFeedback}
       />
 
       {/* Product Catalog Picker Modal */}

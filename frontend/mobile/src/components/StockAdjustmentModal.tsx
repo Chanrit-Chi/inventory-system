@@ -269,6 +269,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
     setScannerOpen,
     loading: scanLoading,
     handleScanCode,
+    lastFeedback: scanFeedback,
   } = useBarcodeScan({
     mode: 'stock-adj',
     onFoundVariant: (variant, product) => {
@@ -778,7 +779,27 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
         primaryActionLabel="Done & Review"
         primaryActionIcon="checkmark-circle-outline"
         onClose={() => setScannerOpen(false)}
+        onPrimaryAction={() => setScannerOpen(false)}
         onScanCode={async (code) => { await handleScanCode(code) }}
+        scannedItems={items.map((it) => ({
+          id: it.id,
+          name: it.product_name + (it.variant_name ? ` (${it.variant_name})` : ''),
+          sku: it.sku,
+          barcode: it.barcode || undefined,
+          quantity: it.new_quantity,
+        }))}
+        totalCount={items.reduce((sum, it) => sum + (it.new_quantity || 0), 0)}
+        onUpdateItemQuantity={(id, delta) => {
+          const it = items.find((x) => x.id === id)
+          if (it) {
+            handleUpdateItemCount(id, it.new_quantity + delta)
+          }
+        }}
+        onRemoveItem={(id) => {
+          setItems((prev) => prev.filter((item) => item.id !== id))
+          showToast('Removed item from adjustment')
+        }}
+        feedback={scanFeedback}
       />
     </Modal>
   )

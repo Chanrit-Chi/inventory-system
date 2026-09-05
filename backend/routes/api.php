@@ -60,6 +60,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/health', [HealthController::class, 'check']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::get('/settings/branding', [StoreSettingController::class, 'getBranding']);
+    Route::get('/orders/{id}/receipt', [OrderController::class, 'receipt']);
+    Route::get('/invoices/{id}/receipt', [InvoiceController::class, 'receipt']);
+    Route::get('/quotations/{id}/receipt', [QuotationController::class, 'receipt']);
 
     // ----------------------------------------------------------------
     // Authenticated API Pipeline (Requires Bearer Token via Sanctum)

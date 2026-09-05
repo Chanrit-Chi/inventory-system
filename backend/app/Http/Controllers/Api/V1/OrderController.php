@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Services\CheckoutService;
 use App\Models\StockMovement;
 use App\Models\Customer;
+use App\Models\StoreSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -113,6 +114,38 @@ class OrderController extends BaseApiController
         ])->findOrFail($id);
 
         return $this->successResponse($order);
+    }
+
+    /**
+     * GET /api/v1/orders/{id}/receipt
+     *
+     * Serves printable thermal receipt HTML for browser preview or JSON if requested.
+     */
+    public function receipt(Request $request, string $id)
+    {
+        $order = Order::with([
+            'customer',
+            'channel',
+            'items.product',
+            'items.variant.attributeValues.attribute',
+            'payments',
+            'user:id,name',
+            'seller:id,name',
+        ])->findOrFail($id);
+
+        $accept = (string) $request->header('Accept', '');
+        $wantsJson = $request->query('format') === 'json' ||
+            ($accept === 'application/json' || (str_contains($accept, 'application/json') && !str_contains($accept, 'text/html')));
+        if ($wantsJson) {
+            return $this->successResponse($order);
+        }
+
+        $setting = StoreSetting::current();
+
+        return response()->view('receipts.thermal', [
+            'order'   => $order,
+            'setting' => $setting,
+        ])->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     /**

@@ -32,6 +32,12 @@ class ProductController extends BaseApiController
             $query->where(fn ($q) =>
                 $q->where('name', 'like', $search)
                   ->orWhere('barcode', 'like', $search)
+                  ->orWhere('sku', 'like', $search)
+                  ->orWhereHas('variants', fn ($vq) =>
+                      $vq->where('name', 'like', $search)
+                        ->orWhere('barcode', 'like', $search)
+                        ->orWhere('sku', 'like', $search)
+                  )
             );
         }
 
