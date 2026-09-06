@@ -172,37 +172,29 @@ describe('Transaction Filter & Sort Logic', () => {
   })
 
   describe('Active Filters Count Calculation', () => {
-    it('counts 0 active filters when all criteria are default', () => {
-      let sortBy: TransactionSortOption = 'DEFAULT'
-      let statusFilter: FilterStatus = 'ALL'
-      let dateRange: DateRangeMode = 'all'
-      let channelFilter: string = 'ALL'
-      let paymentMethodFilter: PaymentMethodFilter = 'ALL'
-
+    function computeActiveFiltersCount(
+      sortBy: TransactionSortOption,
+      statusFilter: FilterStatus,
+      dateRange: DateRangeMode,
+      channelFilter: string,
+      paymentMethodFilter: PaymentMethodFilter
+    ): number {
       let count = 0
       if (sortBy !== 'DEFAULT') count++
       if (statusFilter !== 'ALL') count++
       if (dateRange !== 'all') count++
       if (channelFilter !== 'ALL') count++
       if (paymentMethodFilter !== 'ALL') count++
+      return count
+    }
 
+    it('counts 0 active filters when all criteria are default', () => {
+      const count = computeActiveFiltersCount('DEFAULT', 'ALL', 'all', 'ALL', 'ALL')
       expect(count).toBe(0)
     })
 
     it('counts accurately when multiple filters and custom sort are active', () => {
-      let sortBy: TransactionSortOption = 'AMOUNT_DESC'
-      let statusFilter: FilterStatus = 'COMPLETED'
-      let dateRange: DateRangeMode = '7d'
-      let channelFilter: string = 'Store POS'
-      let paymentMethodFilter: PaymentMethodFilter = 'CASH'
-
-      let count = 0
-      if (sortBy !== 'DEFAULT') count++
-      if (statusFilter !== 'ALL') count++
-      if (dateRange !== 'all') count++
-      if (channelFilter !== 'ALL') count++
-      if (paymentMethodFilter !== 'ALL') count++
-
+      const count = computeActiveFiltersCount('AMOUNT_DESC', 'COMPLETED', '7d', 'Store POS', 'CASH')
       expect(count).toBe(5)
     })
   })
