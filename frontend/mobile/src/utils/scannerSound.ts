@@ -1,8 +1,16 @@
-import { Audio } from 'expo-av'
-import { SCAN_BEEP_DATA_URI, SCAN_ERROR_DATA_URI } from './scannerSoundData'
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio'
 
-let successSound: Audio.Sound | null = null
-let errorSound: Audio.Sound | null = null
+let BEEP_ASSET: any = null
+let ERROR_ASSET: any = null
+try {
+  BEEP_ASSET = require('../../assets/sounds/beep.wav')
+  ERROR_ASSET = require('../../assets/sounds/error.wav')
+} catch {
+  // Graceful fallback for environments where static assets are stubbed
+}
+
+let successPlayer: AudioPlayer | null = null
+let errorPlayer: AudioPlayer | null = null
 let isPreloaded = false
 let soundEnabled = true
 
@@ -18,28 +26,28 @@ export const isSoundEnabled = () => soundEnabled
 export async function preloadScannerSounds(): Promise<void> {
   if (isPreloaded) return
   try {
-    if (Audio?.setAudioModeAsync) {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
+    if (typeof setAudioModeAsync === 'function') {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
       })
     }
 
-    if (!successSound && Audio?.Sound) {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: SCAN_BEEP_DATA_URI },
-        { volume: 1.0 }
-      )
-      successSound = sound
+    if (!successPlayer && typeof createAudioPlayer === 'function') {
+      const player = createAudioPlayer(BEEP_ASSET)
+      if (player) {
+        player.volume = 1.0
+        successPlayer = player
+      }
     }
 
-    if (!errorSound && Audio?.Sound) {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: SCAN_ERROR_DATA_URI },
-        { volume: 0.8 }
-      )
-      errorSound = sound
+    if (!errorPlayer && typeof createAudioPlayer === 'function') {
+      const player = createAudioPlayer(ERROR_ASSET)
+      if (player) {
+        player.volume = 0.8
+        errorPlayer = player
+      }
     }
 
     isPreloaded = true
@@ -54,17 +62,21 @@ export async function preloadScannerSounds(): Promise<void> {
 export async function playScanBeep(): Promise<void> {
   if (!soundEnabled) return
   try {
-    if (successSound) {
-      await successSound.replayAsync()
+    if (successPlayer) {
+      if (typeof successPlayer.seekTo === 'function') {
+        await successPlayer.seekTo(0)
+      }
+      successPlayer.play()
       return
     }
 
-    if (Audio?.Sound) {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: SCAN_BEEP_DATA_URI },
-        { shouldPlay: true, volume: 1.0 }
-      )
-      successSound = sound
+    if (typeof createAudioPlayer === 'function') {
+      const player = createAudioPlayer(BEEP_ASSET)
+      if (player) {
+        player.volume = 1.0
+        player.play()
+        successPlayer = player
+      }
     }
   } catch {
     // Safe silent fallback if audio hardware is busy, muted, or in test environment
@@ -77,17 +89,21 @@ export async function playScanBeep(): Promise<void> {
 export async function playScanErrorSound(): Promise<void> {
   if (!soundEnabled) return
   try {
-    if (errorSound) {
-      await errorSound.replayAsync()
+    if (errorPlayer) {
+      if (typeof errorPlayer.seekTo === 'function') {
+        await errorPlayer.seekTo(0)
+      }
+      errorPlayer.play()
       return
     }
 
-    if (Audio?.Sound) {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: SCAN_ERROR_DATA_URI },
-        { shouldPlay: true, volume: 0.8 }
-      )
-      errorSound = sound
+    if (typeof createAudioPlayer === 'function') {
+      const player = createAudioPlayer(ERROR_ASSET)
+      if (player) {
+        player.volume = 0.8
+        player.play()
+        errorPlayer = player
+      }
     }
   } catch {
     // Safe silent fallback
@@ -99,16 +115,20 @@ export async function playScanErrorSound(): Promise<void> {
  */
 export async function unloadScannerSounds(): Promise<void> {
   try {
-    if (successSound) {
-      await successSound.unloadAsync()
-      successSound = null
+    if (successPlayer) {
+      if (typeof successPlayer.remove === 'function') {
+        successPlayer.remove()
+      }
+      successPlayer = null
     }
-    if (errorSound) {
-      await errorSound.unloadAsync()
-      errorSound = null
+    if (errorPlayer) {
+      if (typeof errorPlayer.remove === 'function') {
+        errorPlayer.remove()
+      }
+      errorPlayer = null
     }
     isPreloaded = false
   } catch {
-    // Ignore unload errors
+    // Silent catch
   }
 }

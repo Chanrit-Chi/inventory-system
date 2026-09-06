@@ -20,18 +20,18 @@ jest.mock('@expo/vector-icons', () => ({
   Ionicons: (props: any) => ({ type: 'Ionicons', props }),
 }))
 
-jest.mock('expo-av', () => ({
-  Audio: {
-    setAudioModeAsync: jest.fn().mockResolvedValue(true),
-    Sound: {
-      createAsync: jest.fn().mockResolvedValue({
-        sound: {
-          replayAsync: jest.fn().mockResolvedValue(true),
-          unloadAsync: jest.fn().mockResolvedValue(true),
-        },
-      }),
-    },
-  },
+const mockAudioPlay = jest.fn()
+const mockAudioSeekTo = jest.fn().mockResolvedValue(true)
+const mockAudioRemove = jest.fn()
+
+jest.mock('expo-audio', () => ({
+  setAudioModeAsync: jest.fn().mockResolvedValue(true),
+  createAudioPlayer: jest.fn(() => ({
+    play: mockAudioPlay,
+    seekTo: mockAudioSeekTo,
+    remove: mockAudioRemove,
+    volume: 1.0,
+  })),
 }))
 
 jest.mock('expo-clipboard', () => ({
@@ -682,41 +682,41 @@ describe('Continuous Barcode Scanning Suite', () => {
   })
 
   describe('Scanner Audio Feedback - Beep & Error Sounds', () => {
-    it('preloads scanner audio and replays cached beep on successful scan', async () => {
+    it('preloads scanner audio and plays cached beep on successful scan', async () => {
       const { playScanBeep, preloadScannerSounds, setSoundEnabled, unloadScannerSounds } = require('../utils/scannerSound')
-      const { Audio } = require('expo-av')
+      const { createAudioPlayer } = require('expo-audio')
 
       await unloadScannerSounds()
       setSoundEnabled(true)
       await preloadScannerSounds()
-      expect(Audio.Sound.createAsync).toHaveBeenCalled()
+      expect(createAudioPlayer).toHaveBeenCalled()
 
-      const created = await Audio.Sound.createAsync.mock.results[0]?.value
       await playScanBeep()
-      expect(created.sound.replayAsync).toHaveBeenCalled()
+      expect(mockAudioPlay).toHaveBeenCalled()
     })
 
     it('plays error sound on failed/inactive item scan', async () => {
       const { playScanErrorSound, unloadScannerSounds } = require('../utils/scannerSound')
-      const { Audio } = require('expo-av')
+      const { createAudioPlayer } = require('expo-audio')
 
       await unloadScannerSounds()
       await playScanErrorSound()
-      expect(Audio.Sound.createAsync).toHaveBeenCalled()
+      expect(createAudioPlayer).toHaveBeenCalled()
+      expect(mockAudioPlay).toHaveBeenCalled()
     })
 
     it('respects setSoundEnabled(false) to mute sound when disabled', async () => {
       const { playScanBeep, setSoundEnabled, isSoundEnabled, unloadScannerSounds } = require('../utils/scannerSound')
-      const { Audio } = require('expo-av')
+      const { createAudioPlayer } = require('expo-audio')
 
       await unloadScannerSounds()
       setSoundEnabled(false)
       expect(isSoundEnabled()).toBe(false)
-      const callCountBefore = Audio.Sound.createAsync.mock.calls.length
+      const callCountBefore = createAudioPlayer.mock.calls.length
 
       await playScanBeep()
       // Should not initiate new playback
-      expect(Audio.Sound.createAsync.mock.calls.length).toBe(callCountBefore)
+      expect(createAudioPlayer.mock.calls.length).toBe(callCountBefore)
 
       setSoundEnabled(true)
       expect(isSoundEnabled()).toBe(true)

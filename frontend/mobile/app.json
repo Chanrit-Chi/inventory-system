@@ -63,7 +63,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
