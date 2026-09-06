@@ -6,9 +6,13 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return response()->json([
         'success' => true,
-        'message' => 'Omnichannel POS and Inventory Management System API',
+        'message' => 'KC Shop POS and Inventory Management System API',
     ]);
 });
 
 Route::get('/health', [HealthController::class, 'check']);
+
+Route::get('/telegram/app', function () {
+    return view('telegram.miniapp');
+});
 
