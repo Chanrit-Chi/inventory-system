@@ -273,5 +273,24 @@ Route::prefix('v1')->group(function () {
             Route::put('/roles/{id}/permissions',       [RoleController::class, 'updatePermissions']);
             Route::get('/permissions',                  [PermissionController::class, 'index']);
         });
+
+        // ============================================================
+        // 6. Telegram Bot Integration (Authenticated)
+        // ============================================================
+        Route::post('/telegram/link-token', [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'generateLinkToken']);
+    });
+
+    // Telegram Bot Webhook (Unauthenticated - secured by VerifyTelegramWebhook middleware)
+    Route::middleware([\App\Http\Middleware\VerifyTelegramWebhook::class, 'throttle:60,1'])
+        ->post('/telegram/webhook', [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'handleWebhook']);
+
+    // Telegram Mini App API Endpoints (Secured by Telegram initData cryptographic signature)
+    Route::prefix('telegram/miniapp')->middleware('throttle:60,1')->group(function () {
+        Route::post('/status',       [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'getMiniAppStatus']);
+        Route::post('/login',        [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'loginFromMiniApp']);
+        Route::post('/unlink',       [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'unlinkFromMiniApp']);
+        Route::post('/dashboard',    [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'getMiniAppDashboard']);
+        Route::post('/scan',         [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'scanBarcodeFromMiniApp']);
+        Route::post('/adjust-stock', [\App\Http\Controllers\Api\V1\TelegramBotController::class, 'adjustStockFromMiniApp']);
     });
 });

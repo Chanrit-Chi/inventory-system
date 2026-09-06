@@ -51,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(StockAdjusted::class, [LogAuditTrailListener::class, 'handle']);
         Event::listen(StockAdjusted::class, [CheckLowStockThresholdListener::class, 'handle']);
         Event::listen(InvoicePaymentRecorded::class, [LogAuditTrailListener::class, 'handle']);
+        Event::listen(LowStockDetected::class, [\App\Listeners\SendLowStockNotificationsListener::class, 'handle']);
 
         // Register observers for automatic audit log syncing
         StockMovement::observe(StockMovementObserver::class);

@@ -266,6 +266,14 @@ class User extends Authenticatable
         return $this->hasMany(PushToken::class, 'user_id');
     }
 
+    /**
+     * Telegram chat IDs associated with this user.
+     */
+    public function telegramChats(): HasMany
+    {
+        return $this->hasMany(TelegramChat::class, 'user_id');
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
