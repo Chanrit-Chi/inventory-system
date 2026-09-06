@@ -78,7 +78,7 @@ class PushNotificationService
             foreach ($chunk as $token) {
                 $message = [
                     'to' => $token,
-                    'title' => $payload['title'] ?? 'OmniPOS Notification',
+                    'title' => $payload['title'] ?? 'KC Shop Notification',
                     'body' => $payload['body'] ?? ($payload['desc'] ?? ''),
                     'data' => $payload['data'] ?? [],
                     'sound' => $payload['sound'] ?? 'default',
