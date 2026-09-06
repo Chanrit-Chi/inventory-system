@@ -32,6 +32,8 @@ import {
 } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../api/queryKeys'
 
 export interface CategoriesAttributesScreenProps {
   onNavigate: (tab: TabType) => void
@@ -42,6 +44,7 @@ export const INITIAL_CATEGORIES: ProductCategory[] = []
 export const INITIAL_ATTRIBUTES: AttributeTaxonomy[] = []
 
 export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProps> = ({ onNavigate }) => {
+  const queryClient = useQueryClient()
   const { showToast } = useToast()
   const { can } = usePermissions()
   const [activeTab, setActiveTab] = useState<'categories' | 'attributes'>('categories')
@@ -207,48 +210,54 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
     const code = data.code?.trim() || data.name.substring(0, 3).toUpperCase()
 
     if (editingCat) {
-      const updated: ProductCategory = {
-        ...editingCat,
-        name: data.name.trim(),
-        code,
-        description: data.description?.trim(),
-      }
-      setCategories(categories.map((c) => (c.id === editingCat.id ? updated : c)))
       try {
-        await updateCategory(editingCat.id, {
+        const res = await updateCategory(editingCat.id, {
           name: data.name.trim(),
           code,
           description: data.description?.trim(),
         })
-      } catch {
-        // Fallback optimistic
+        const serverCat = res?.data
+        const updated: ProductCategory = {
+          ...editingCat,
+          name: data.name.trim(),
+          code,
+          description: data.description?.trim(),
+          id: serverCat?.id || editingCat.id,
+        }
+        setCategories((prev) => prev.map((c) => (c.id === editingCat.id ? updated : c)))
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
+        showToast(`Category "${data.name}" updated.`, 'success')
+        setCatModalOpen(false)
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } }
+        const msg = error.response?.data?.message || 'Failed to update category.'
+        showToast(msg, 'error')
       }
-      showToast(`Category "${data.name}" updated.`, 'success')
     } else {
-      const newCat: ProductCategory = {
-        id: `cat-${Date.now()}`,
-        name: data.name.trim(),
-        code,
-        description: data.description?.trim(),
-        productCount: 0,
-      }
-      setCategories([...categories, newCat])
       try {
         const res = await createCategory({
           name: data.name.trim(),
           code,
           description: data.description?.trim(),
         })
-        if (res?.data?.id) {
-          newCat.id = res.data.id
+        const serverCat = res?.data
+        const newCat: ProductCategory = {
+          id: serverCat?.id || `cat-${Date.now()}`,
+          name: data.name.trim(),
+          code,
+          description: data.description?.trim(),
+          productCount: 0,
         }
-      } catch {
-        // Fallback optimistic
+        setCategories((prev) => [...prev, newCat])
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
+        showToast(`New category "${data.name}" created.`, 'success')
+        setCatModalOpen(false)
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } }
+        const msg = error.response?.data?.message || 'Failed to create category.'
+        showToast(msg, 'error')
       }
-      showToast(`New category "${data.name}" created.`, 'success')
     }
-
-    setCatModalOpen(false)
   }
 
   const handleDeleteCategory = (cat: ProductCategory) => {
@@ -273,6 +282,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
             setCatModalOpen(false)
             try {
               await deleteCategory(cat.id)
+              queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
             } catch (err: unknown) {
               const error = err as { response?: { data?: { message?: string } } }
               const msg = error.response?.data?.message || 'Failed to delete category from server.'
@@ -325,44 +335,50 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
     const code = data.code?.trim() || data.name.substring(0, 3).toUpperCase()
 
     if (editingAttr) {
-      const updated: AttributeTaxonomy = {
-        ...editingAttr,
-        name: data.name.trim(),
-        code,
-        values: finalValues,
-      }
-      setAttributes(attributes.map((a) => (a.id === editingAttr.id ? updated : a)))
       try {
-        await updateAttribute(editingAttr.id, {
+        const res = await updateAttribute(editingAttr.id, {
           name: data.name.trim(),
           code,
           values: finalValues,
         })
-      } catch {
-        // Fallback optimistic
+        const serverAttr = res?.data
+        const updated: AttributeTaxonomy = {
+          ...editingAttr,
+          name: data.name.trim(),
+          code,
+          values: finalValues,
+          id: serverAttr?.id || editingAttr.id,
+        }
+        setAttributes((prev) => prev.map((a) => (a.id === editingAttr.id ? updated : a)))
+        queryClient.invalidateQueries({ queryKey: queryKeys.attributes.all })
+        showToast(`Attribute "${data.name}" updated.`, 'success')
+        setAttrModalOpen(false)
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } }
+        const msg = error.response?.data?.message || 'Failed to update attribute.'
+        showToast(msg, 'error')
       }
-      showToast(`Attribute "${data.name}" updated.`, 'success')
     } else {
-      const newAttr: AttributeTaxonomy = {
-        id: `tax-${Date.now()}`,
-        name: data.name.trim(),
-        code,
-        values: finalValues,
-        productCount: 0,
-      }
-      setAttributes([...attributes, newAttr])
       try {
         const res = await createAttribute({ name: data.name.trim(), code, values: finalValues })
-        if (res?.data?.id) {
-          newAttr.id = res.data.id
+        const serverAttr = res?.data
+        const newAttr: AttributeTaxonomy = {
+          id: serverAttr?.id || `tax-${Date.now()}`,
+          name: data.name.trim(),
+          code,
+          values: finalValues,
+          productCount: 0,
         }
-      } catch {
-        // Fallback optimistic
+        setAttributes((prev) => [...prev, newAttr])
+        queryClient.invalidateQueries({ queryKey: queryKeys.attributes.all })
+        showToast(`New attribute "${data.name}" created.`, 'success')
+        setAttrModalOpen(false)
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } }
+        const msg = error.response?.data?.message || 'Failed to create attribute.'
+        showToast(msg, 'error')
       }
-      showToast(`New attribute "${data.name}" created.`, 'success')
     }
-
-    setAttrModalOpen(false)
   }
 
   const handleDeleteAttribute = (attr: AttributeTaxonomy) => {
@@ -387,6 +403,7 @@ export const CategoriesAttributesScreen: React.FC<CategoriesAttributesScreenProp
             setAttrModalOpen(false)
             try {
               await deleteAttribute(attr.id)
+              queryClient.invalidateQueries({ queryKey: queryKeys.attributes.all })
             } catch (err: unknown) {
               const error = err as { response?: { data?: { message?: string } } }
               const msg = error.response?.data?.message || 'Failed to delete attribute from server.'

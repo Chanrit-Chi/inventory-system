@@ -23,6 +23,8 @@ import { ProductPickerModal, SelectedProductItem } from './ProductPickerModal'
 import { ProductGroupHeader } from './ProductGroupHeader'
 import { CopyableBadge } from './CopyableBadge'
 import { useBarcodeScan } from '../hooks/useBarcodeScan'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../api/queryKeys'
 import { usePermissions } from '../hooks/usePermissions'
 import { useToast } from '../context/ToastContext'
 import { emitGlobalToast } from '../utils/clipboard'
@@ -59,9 +61,11 @@ export const StockInModal: React.FC<StockInModalProps> = ({
   variant,
   onClose,
   onSuccess,
+  onOpenScanner,
   pendingPurchaseOrders = [],
   onLinkPoReceived,
 }) => {
+  const queryClient = useQueryClient()
   const { can } = usePermissions()
   const [items, setItems] = useState<StockInLineItem[]>([])
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
@@ -599,6 +603,9 @@ export const StockInModal: React.FC<StockInModalProps> = ({
       if (selectedPoId && onLinkPoReceived) {
         onLinkPoReceived(selectedPoId)
       }
+
+      await queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all })
       Alert.alert(
         'Intake Completed Successfully',
         `Logged ${totalReceivedUnits} units across ${totalLoggedItems} item(s).\nTotal intake value: $${totalValue.toFixed(2)}.`,

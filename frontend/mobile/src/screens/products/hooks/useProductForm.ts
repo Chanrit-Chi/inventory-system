@@ -35,6 +35,7 @@ export interface UseProductFormProps {
   setDetailProduct: React.Dispatch<React.SetStateAction<Product | null>>
   loadProducts: () => void
   managedCategories: Array<{ id: string; name: string; code?: string }>
+  managedAttributes?: Array<{ id: string; name: string; code?: string; values?: string[] }>
 }
 
 export type ProductFormInstance = ReturnType<typeof useProductForm>
@@ -46,6 +47,7 @@ export function useProductForm({
   setDetailProduct,
   loadProducts,
   managedCategories,
+  managedAttributes,
 }: UseProductFormProps) {
   const queryClient = useQueryClient()
   const [productModalOpen, setProductModalOpen] = useState(false)
@@ -64,7 +66,8 @@ export function useProductForm({
       image_url: '',
       simpleSku: '',
       simpleBarcode: '',
-      simpleStock: '10',
+      simpleStock: '0',
+      variantInitialStock: '10',
       attributesList: [
         { id: 'attr-1', name: 'Color', valuesText: 'Black, White' },
         { id: 'attr-2', name: 'Size', valuesText: 'M, L, XL' },
@@ -217,7 +220,119 @@ export function useProductForm({
   }
 
   const handleRemoveAttribute = (attrId: string) => {
-    setSelectedProductAttributes((prev) => prev.filter((a) => a.id !== attrId))
+    const target = selectedProductAttributes.find((a) => a.id === attrId)
+    const attrName = target?.name || 'Attribute'
+    const valuesCount = target?.selectedValues?.length || 0
+
+    Alert.alert(
+      `Remove "${attrName}" Attribute?`,
+      `This will remove "${attrName}"${valuesCount > 0 ? ` and its ${valuesCount} selected value(s)` : ''} from this product.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setSelectedProductAttributes((prev) => prev.filter((a) => a.id !== attrId))
+          },
+        },
+      ]
+    )
+  }
+
+  const handleRemoveValueFromAttribute = (attrId: string, value: string) => {
+    const target = selectedProductAttributes.find((a) => a.id === attrId)
+    const attrName = target?.name || 'Attribute'
+
+    Alert.alert(
+      `Remove "${value}"?`,
+      `Are you sure you want to remove "${value}" from the ${attrName} options?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setSelectedProductAttributes((prev) =>
+              prev.map((attr) => {
+                if (attr.id === attrId) {
+                  return {
+                    ...attr,
+                    allValues: attr.allValues.filter((v) => v !== value),
+                    selectedValues: attr.selectedValues.filter((v) => v !== value),
+                  }
+                }
+                return attr
+              })
+            )
+          },
+        },
+      ]
+    )
+  }
+
+  // Helper to match combinations to existing variants regardless of attribute ordering
+  const findMatchingVariant = (
+    comb: ScannedAttributeValue[],
+    formVariants: VariantDraft[],
+    dbVariants: ProductVariant[]
+  ): { variant: VariantDraft | ProductVariant; isFormVariant: boolean } | null => {
+    const combTokens = comb
+      .map((c) => c.value_name.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join('|')
+    const combName = comb.map((c) => c.value_name.trim().toLowerCase()).join(' / ')
+
+    // 1. Search in current form variants first (preserves any user edits in modal)
+    for (const fv of formVariants) {
+      if (fv.name.trim().toLowerCase() === combName) {
+        return { variant: fv, isFormVariant: true }
+      }
+      const fvTokensFromAttrs = (fv.attribute_values || [])
+        .map((av: any) => (av.value_name || av.value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .sort()
+        .join('|')
+      if (fvTokensFromAttrs && fvTokensFromAttrs === combTokens) {
+        return { variant: fv, isFormVariant: true }
+      }
+      const fvTokensFromName = (fv.name || '')
+        .split(/[\/\-,\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .sort()
+        .join('|')
+      if (fvTokensFromName && fvTokensFromName === combTokens) {
+        return { variant: fv, isFormVariant: true }
+      }
+    }
+
+    // 2. Search in existing product variants from DB
+    for (const dv of dbVariants) {
+      if (dv.name.trim().toLowerCase() === combName) {
+        return { variant: dv, isFormVariant: false }
+      }
+      const dvTokensFromAttrs = (dv.attribute_values || [])
+        .map((av: any) => (av.value_name || av.value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .sort()
+        .join('|')
+      if (dvTokensFromAttrs && dvTokensFromAttrs === combTokens) {
+        return { variant: dv, isFormVariant: false }
+      }
+      const dvTokensFromName = (dv.name || '')
+        .split(/[\/\-,\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .sort()
+        .join('|')
+      if (dvTokensFromName && dvTokensFromName === combTokens) {
+        return { variant: dv, isFormVariant: false }
+      }
+    }
+
+    return null
   }
 
   // Generate Matrix combinations from database selected attributes
@@ -231,54 +346,154 @@ export function useProductForm({
       return
     }
 
-    const combinations: ScannedAttributeValue[][] = activeAttrs.reduce(
-      (acc, attr) => {
-        const next: ScannedAttributeValue[][] = []
-        acc.forEach((existingComb) => {
-          attr.selectedValues.forEach((val) => {
-            next.push([
-              ...existingComb,
-              { id: `av-${attr.name}-${val}`, value_name: val, attribute: { name: attr.name } },
-            ])
+    const executeMatrixGeneration = () => {
+      const combinations: ScannedAttributeValue[][] = activeAttrs.reduce(
+        (acc, attr) => {
+          const next: ScannedAttributeValue[][] = []
+          acc.forEach((existingComb) => {
+            attr.selectedValues.forEach((val) => {
+              next.push([
+                ...existingComb,
+                { id: `av-${attr.name}-${val}`, value_name: val, attribute: { name: attr.name } },
+              ])
+            })
           })
-        })
-        return next
-      },
-      [[]] as ScannedAttributeValue[][]
-    )
-
-    const baseSkuPrefix = formName
-      ? formName
-          .split(' ')
-          .map((w) => w.substring(0, 3).toUpperCase())
-          .join('-')
-      : 'PROD'
-
-    const generated: VariantDraft[] = combinations.map((comb, idx) => {
-      const name = comb.map((c) => c.value_name).join(' / ')
-      const skuSuffix = comb.map((c) => c.value_name.substring(0, 3).toUpperCase()).join('-')
-      const sku = `${baseSkuPrefix}-${skuSuffix}`
-      const existingVariant = (editingProduct?.variants || []).find(
-        (v) => v.name.toLowerCase() === name.toLowerCase()
+          return next
+        },
+        [[]] as ScannedAttributeValue[][]
       )
-      const barcode = existingVariant?.barcode || ''
 
-      return {
-        id: existingVariant?.id || `var-new-${idx}-${Date.now()}`,
-        name,
-        sku,
-        barcode,
-        stock: existingVariant?.quantity_on_hand ?? 10,
-        priceOverride: existingVariant?.selling_price_override || '',
-        costOverride: existingVariant?.cost_price_override || '',
-        attribute_values: comb,
-      }
-    })
+      const baseSkuPrefix = formName
+        ? formName
+            .split(' ')
+            .map((w) => w.substring(0, 3).toUpperCase())
+            .join('-')
+        : 'PROD'
 
-    replaceVariants(generated)
+      const currentFormVariants = (getValues('variantsList') || []) as VariantDraft[]
+      const dbVariants = (editingProduct?.variants || []) as ProductVariant[]
+      const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+      const initialStockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
+
+      const generated: VariantDraft[] = combinations.map((comb, idx) => {
+        const name = comb.map((c) => c.value_name).join(' / ')
+        const skuSuffix = comb.map((c) => c.value_name.substring(0, 3).toUpperCase()).join('-')
+        const sku = `${baseSkuPrefix}-${skuSuffix}`
+
+        const matchResult = findMatchingVariant(comb, currentFormVariants, dbVariants)
+
+        if (matchResult) {
+          const { variant, isFormVariant } = matchResult
+          const existingStock = isFormVariant
+            ? Number((variant as VariantDraft).stock) || 0
+            : Number((variant as ProductVariant).quantity_on_hand) || 0
+
+          const existingPriceOverride = isFormVariant
+            ? (variant as VariantDraft).priceOverride || ''
+            : (variant as ProductVariant).selling_price_override !== null && (variant as ProductVariant).selling_price_override !== undefined
+            ? String((variant as ProductVariant).selling_price_override)
+            : ''
+
+          const existingCostOverride = isFormVariant
+            ? (variant as VariantDraft).costOverride || ''
+            : (variant as ProductVariant).cost_price_override !== null && (variant as ProductVariant).cost_price_override !== undefined
+            ? String((variant as ProductVariant).cost_price_override)
+            : ''
+
+          return {
+            id: variant.id,
+            name,
+            sku: variant.sku || sku,
+            barcode: variant.barcode || '',
+            stock: existingStock,
+            priceOverride: existingPriceOverride,
+            costOverride: existingCostOverride,
+            attribute_values: comb,
+          }
+        }
+
+        // Truly new variant combination: use custom initial stock (defaults to 10 or user customized value)
+        return {
+          id: `var-new-${idx}-${Date.now()}`,
+          name,
+          sku,
+          barcode: '',
+          stock: initialStockVal,
+          priceOverride: '',
+          costOverride: '',
+          attribute_values: comb,
+        }
+      })
+
+      replaceVariants(generated)
+      Alert.alert(
+        'Matrix Synchronized',
+        `Synchronized ${generated.length} variant combinations with initial stock of ${initialStockVal}. Existing quantities, barcodes, and variant IDs were preserved.`
+      )
+    }
+
+    if (variantsFields.length > 0) {
+      const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+      const initialStockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
+      Alert.alert(
+        'Update Variant Matrix?',
+        `You have ${variantsFields.length} existing variant(s). Updating will sync with selected attributes.\n\nAll existing quantities, barcodes, and variant IDs will be strictly preserved. Any newly added combinations will start with ${initialStockVal} stock.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Update Matrix', onPress: executeMatrixGeneration },
+        ]
+      )
+    } else {
+      executeMatrixGeneration()
+    }
+  }
+
+  // Batch update stock quantity across all configured variants in the table
+  const handleBatchApplyStockToAll = () => {
+    if (variantsFields.length === 0) {
+      Alert.alert('No Variants', 'Please generate or add variants first.')
+      return
+    }
+    const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+    const stockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
+
     Alert.alert(
-      'Matrix Generated',
-      `Generated ${generated.length} variant combinations from database attributes. You can now scan supplier physical barcodes directly.`
+      'Apply Stock to All Variants?',
+      `Set the stock quantity for all ${variantsFields.length} variants to ${stockVal}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply to All',
+          onPress: () => {
+            variantsFields.forEach((_, idx) => {
+              setValue(`variantsList.${idx}.stock`, stockVal)
+            })
+            Alert.alert(
+              'Stock Updated',
+              `Updated all ${variantsFields.length} variants to ${stockVal} stock.`
+            )
+          },
+        },
+      ]
+    )
+  }
+
+  const handleConfirmRemoveVariant = (vIdx: number) => {
+    if (vIdx < 0 || vIdx >= variantsFields.length) return
+    const target = variantsFields[vIdx]
+    const varName = target?.name || `Variant #${vIdx + 1}`
+
+    Alert.alert(
+      'Remove Variant?',
+      `Are you sure you want to remove variant "${varName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeVariant(vIdx),
+        },
+      ]
     )
   }
 
@@ -493,7 +708,8 @@ export function useProductForm({
       image_url: '',
       simpleSku: '',
       simpleBarcode: '',
-      simpleStock: '10',
+      simpleStock: '0',
+      variantInitialStock: '10',
       attributesList: [],
       variantsList: [],
     })
@@ -517,19 +733,43 @@ export function useProductForm({
     if (isVar && prod.variants) {
       prod.variants.forEach((v) => {
         v.attribute_values?.forEach((av) => {
-          const attrName = av.attribute?.name || 'Option'
+          let attrName = av.attribute?.name
+          let attrId = av.attribute?.id
+
+          // If attribute name is missing, attempt to find matching taxonomy in managedAttributes
+          if (!attrName && managedAttributes) {
+            const valCandidate = av.value_name || (av as { value?: string }).value || ''
+            const match = managedAttributes.find((ma) =>
+              ma.id === attrId || (ma.values && valCandidate && ma.values.includes(valCandidate))
+            )
+            if (match) {
+              attrName = match.name
+              attrId = match.id
+            }
+          }
+
+          attrName = attrName || 'Option'
           const val = av.value_name || (av as { value?: string }).value || ''
-          if (!existingAttrsMap[attrName]) {
-            existingAttrsMap[attrName] = {
-              id: av.attribute?.id || `attr-${attrName}`,
-              name: attrName,
+
+          // Link to canonical attribute taxonomy from managedAttributes if available
+          const canonAttr = managedAttributes?.find(
+            (ma) => ma.name.toLowerCase() === attrName.toLowerCase() || (attrId && ma.id === attrId)
+          )
+          const canonicalId = canonAttr?.id || attrId || `attr-${attrName}`
+          const canonicalName = canonAttr?.name || attrName
+
+          if (!existingAttrsMap[canonicalName]) {
+            const presetValues = canonAttr?.values || []
+            existingAttrsMap[canonicalName] = {
+              id: canonicalId,
+              name: canonicalName,
               selected: new Set<string>(),
-              all: new Set<string>(),
+              all: new Set<string>(presetValues),
             }
           }
           if (val) {
-            existingAttrsMap[attrName].selected.add(val)
-            existingAttrsMap[attrName].all.add(val)
+            existingAttrsMap[canonicalName].selected.add(val)
+            existingAttrsMap[canonicalName].all.add(val)
           }
         })
       })
@@ -572,12 +812,13 @@ export function useProductForm({
       simpleSku: !isVar ? prod.sku || firstVar?.sku || '' : '',
       simpleBarcode: !isVar ? prod.barcode || firstVar?.barcode || '' : '',
       simpleStock: !isVar ? String(firstVar?.quantity_on_hand ?? 0) : '0',
+      variantInitialStock: '10',
       attributesList: [],
       variantsList: draftVariants,
     })
 
     setProductModalOpen(true)
-  }, [reset])
+  }, [reset, managedAttributes])
 
   return {
     productModalOpen,
@@ -605,7 +846,9 @@ export function useProductForm({
     handleToggleAttributeValue,
     handleAddCustomValueToAttribute,
     handleRemoveAttribute,
+    handleRemoveValueFromAttribute,
     handleGenerateMatrix,
+    handleBatchApplyStockToAll,
     variantScannerOpen,
     setVariantScannerOpen,
     simpleBarcodeScannerOpen,
@@ -617,6 +860,7 @@ export function useProductForm({
     handleScanCodeForSimpleProduct,
     variantsFields,
     removeVariant,
+    handleConfirmRemoveVariant,
     onSubmit,
     handleOpenCreateProduct,
     handleOpenEditProduct,

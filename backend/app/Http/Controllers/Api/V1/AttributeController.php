@@ -32,15 +32,19 @@ class AttributeController extends BaseApiController
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name'      => ['required', 'string', 'max:50', 'unique:attributes,name'],
-            'is_active' => ['boolean'],
-            'values'    => ['nullable', 'array'],
-            'values.*'  => ['string', 'max:50'],
+            'name'        => ['required', 'string', 'max:50', 'unique:attributes,name'],
+            'code'        => ['nullable', 'string', 'max:50', 'unique:attributes,code'],
+            'description' => ['nullable', 'string'],
+            'is_active'   => ['boolean'],
+            'values'      => ['nullable', 'array'],
+            'values.*'    => ['string', 'max:50'],
         ]);
 
         $attribute = Attribute::create([
-            'name'      => $validated['name'],
-            'is_active' => $validated['is_active'] ?? true,
+            'name'        => $validated['name'],
+            'code'        => $validated['code'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'is_active'   => $validated['is_active'] ?? true,
         ]);
 
         if (!empty($validated['values'])) {
@@ -64,14 +68,22 @@ class AttributeController extends BaseApiController
         $attribute = Attribute::findOrFail($id);
 
         $validated = $request->validate([
-            'name'      => ['sometimes', 'required', 'string', 'max:50', 'unique:attributes,name,' . $attribute->id],
-            'is_active' => ['boolean'],
-            'values'    => ['nullable', 'array'],
-            'values.*'  => ['string', 'max:50'],
+            'name'        => ['sometimes', 'required', 'string', 'max:50', 'unique:attributes,name,' . $attribute->id],
+            'code'        => ['nullable', 'string', 'max:50', 'unique:attributes,code,' . $attribute->id],
+            'description' => ['nullable', 'string'],
+            'is_active'   => ['boolean'],
+            'values'      => ['nullable', 'array'],
+            'values.*'    => ['string', 'max:50'],
         ]);
 
         if (array_key_exists('name', $validated)) {
             $attribute->name = $validated['name'];
+        }
+        if (array_key_exists('code', $validated)) {
+            $attribute->code = $validated['code'];
+        }
+        if (array_key_exists('description', $validated)) {
+            $attribute->description = $validated['description'];
         }
         if (array_key_exists('is_active', $validated)) {
             $attribute->is_active = $validated['is_active'];

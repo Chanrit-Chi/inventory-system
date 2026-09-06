@@ -13,6 +13,9 @@ export function useProductCatalog() {
   const debouncedSearch = useDebounce(search, 250)
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED'>('ALL')
+  const [stockFilter, setStockFilter] = useState<'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL')
+  const [sortBy, setSortBy] = useState<'DEFAULT' | 'NAME_ASC' | 'NAME_DESC' | 'STOCK_ASC' | 'STOCK_DESC'>('DEFAULT')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [refreshing, setRefreshing] = useState(false)
 
   const { data: rawCategories, refetch: refetchCategories } = useCategories()
@@ -192,9 +195,15 @@ export function useProductCatalog() {
     return list
   }, [managedCategories, products, missingBarcodeCount])
 
+  const getProductTotalStock = useCallback((p: Product) => {
+    return p.variants && p.variants.length > 0
+      ? p.variants.reduce((sum, v) => sum + (Number(v.quantity_on_hand) || 0), 0)
+      : 0
+  }, [])
+
   const filteredProducts = useMemo(() => {
     const q = debouncedSearch.toLowerCase().trim()
-    return products.filter((p) => {
+    const result = products.filter((p) => {
       const matchSearch =
         !q ||
         (p.name || '').toLowerCase().includes(q) ||
@@ -220,9 +229,47 @@ export function useProductCatalog() {
         matchCat = Boolean(p.category?.name && p.category.name.toLowerCase() === categoryFilter.toLowerCase())
       }
       const matchStatus = statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? p.is_active !== false : p.is_active === false)
-      return matchSearch && matchCat && matchStatus
+
+      let matchStock = true
+      const totalStock = getProductTotalStock(p)
+      if (stockFilter === 'LOW_STOCK') {
+        const reorder = p.default_reorder_level ?? 10
+        matchStock = totalStock <= reorder && totalStock > 0
+      } else if (stockFilter === 'OUT_OF_STOCK') {
+        matchStock = totalStock <= 0
+      }
+
+      return matchSearch && matchCat && matchStatus && matchStock
     })
-  }, [products, debouncedSearch, categoryFilter, statusFilter])
+
+    if (sortBy === 'NAME_ASC') {
+      return [...result].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    } else if (sortBy === 'NAME_DESC') {
+      return [...result].sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+    } else if (sortBy === 'STOCK_ASC') {
+      return [...result].sort((a, b) => getProductTotalStock(a) - getProductTotalStock(b))
+    } else if (sortBy === 'STOCK_DESC') {
+      return [...result].sort((a, b) => getProductTotalStock(b) - getProductTotalStock(a))
+    }
+
+    return result
+  }, [products, debouncedSearch, categoryFilter, statusFilter, stockFilter, sortBy, getProductTotalStock])
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0
+    if (categoryFilter !== 'ALL') count++
+    if (statusFilter !== 'ALL') count++
+    if (stockFilter !== 'ALL') count++
+    if (sortBy !== 'DEFAULT') count++
+    return count
+  }, [categoryFilter, statusFilter, stockFilter, sortBy])
+
+  const resetFilters = useCallback(() => {
+    setCategoryFilter('ALL')
+    setStatusFilter('ALL')
+    setStockFilter('ALL')
+    setSortBy('DEFAULT')
+  }, [])
 
   return {
     products, setProducts,
@@ -231,6 +278,11 @@ export function useProductCatalog() {
     search, setSearch,
     categoryFilter, setCategoryFilter,
     statusFilter, setStatusFilter,
+    stockFilter, setStockFilter,
+    sortBy, setSortBy,
+    viewMode, setViewMode,
+    activeFiltersCount,
+    resetFilters,
     loading, loadingMore, hasMore: Boolean(hasMore),
     refreshing,
     catalogError,

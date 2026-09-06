@@ -35,7 +35,6 @@ import { useProductForm } from './products/hooks/useProductForm'
 import { StockMovementsTab } from './products/components/StockMovementsTab'
 import { ProductCatalogTab } from './products/components/ProductCatalogTab'
 import { PurchaseOrdersTab } from './products/components/PurchaseOrdersTab'
-import { InlineCreatorModals } from './products/components/InlineCreatorModals'
 import { SupplierFormModal } from './products/components/SupplierFormModal'
 import { PurchaseOrderDetailModal } from './products/components/PurchaseOrderDetailModal'
 import { PurchaseOrderModal } from './products/components/PurchaseOrderModal'
@@ -87,6 +86,10 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     search, setSearch,
     categoryFilter, setCategoryFilter,
     statusFilter, setStatusFilter,
+    stockFilter, setStockFilter,
+    sortBy, setSortBy,
+    viewMode, setViewMode,
+    activeFiltersCount, resetFilters,
     loading, loadingMore, hasMore,
     refreshing,
     catalogError,
@@ -111,6 +114,16 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
 
+  // Keep detailProduct synchronized whenever product catalog updates (e.g. from stock adjustment or stock in)
+  useEffect(() => {
+    if (detailProduct) {
+      const fresh = products.find((p) => p.id === detailProduct.id)
+      if (fresh && fresh !== detailProduct) {
+        setDetailProduct(fresh)
+      }
+    }
+  }, [products, detailProduct])
+
   // Product Form hook & state
   const productForm = useProductForm({
     products,
@@ -119,6 +132,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     setDetailProduct,
     loadProducts,
     managedCategories,
+    managedAttributes,
   })
 
   const {
@@ -204,72 +218,109 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   }, [])
 
   const handleToggleProductActive = async (prod: Product) => {
-    const previousProd = prod
-    const newActive = prod.is_active === false ? true : false
-    const updatedVariants = prod.variants?.map((v) => ({ ...v, is_active: newActive })) || []
-    const updated: Product = {
-      ...prod,
-      is_active: newActive,
-      variants: updatedVariants.length > 0 ? updatedVariants : prod.variants,
-    }
+    const isCurrentlyActive = prod.is_active !== false
+    const newActive = !isCurrentlyActive
 
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
-    if (detailProduct?.id === prod.id) {
-      setDetailProduct(updated)
-    }
-
-    try {
-      await updateProduct(prod.id, { is_active: newActive })
-      showToast(
-        `"${prod.name}" is now ${newActive ? 'active' : 'hidden from sale'}.`,
-        'info'
-      )
-    } catch (err) {
-      console.warn('Product status update API call failed, rolling back:', prod.id, err)
-      // Rollback on failure
-      setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
-      if (detailProduct?.id === prod.id) {
-        setDetailProduct(previousProd)
+    const executeProductToggle = async () => {
+      const previousProd = prod
+      const updatedVariants = prod.variants?.map((v) => ({ ...v, is_active: newActive })) || []
+      const updated: Product = {
+        ...prod,
+        is_active: newActive,
+        variants: updatedVariants.length > 0 ? updatedVariants : prod.variants,
       }
-      showToast('Could not update product status.', 'error')
+
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+      if (detailProduct?.id === prod.id) {
+        setDetailProduct(updated)
+      }
+
+      try {
+        await updateProduct(prod.id, { is_active: newActive })
+        showToast(
+          `"${prod.name}" is now ${newActive ? 'active' : 'hidden from sale'}.`,
+          'info'
+        )
+      } catch (err) {
+        console.warn('Product status update API call failed, rolling back:', prod.id, err)
+        // Rollback on failure
+        setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
+        if (detailProduct?.id === prod.id) {
+          setDetailProduct(previousProd)
+        }
+        showToast('Could not update product status.', 'error')
+      }
     }
+
+    Alert.alert(
+      newActive ? 'Reactivate Product?' : 'Deactivate Product?',
+      newActive
+        ? `Reactivate "${prod.name}" and make it available for sale across all channels?`
+        : `Hide "${prod.name}" from sale? It will no longer appear in POS or active sales channels.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: newActive ? 'Reactivate' : 'Deactivate',
+          style: newActive ? 'default' : 'destructive',
+          onPress: executeProductToggle,
+        },
+      ]
+    )
   }
 
   const handleToggleVariantActive = async (prod: Product, variantId: string) => {
-    const previousProd = prod
     const targetVariant = prod.variants?.find((v) => v.id === variantId)
     const displayName = targetVariant?.name || targetVariant?.sku || 'Variant'
-    const newActive = targetVariant?.is_active === false ? true : false
+    const isCurrentlyActive = targetVariant?.is_active !== false
+    const newActive = !isCurrentlyActive
 
-    const updatedVariants = prod.variants?.map((v) =>
-      v.id === variantId ? { ...v, is_active: newActive } : v
-    ) || []
+    const executeVariantToggle = async () => {
+      const previousProd = prod
+      const updatedVariants = prod.variants?.map((v) =>
+        v.id === variantId ? { ...v, is_active: newActive } : v
+      ) || []
 
-    const updatedProd: Product = {
-      ...prod,
-      variants: updatedVariants,
-    }
-
-    setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)))
-    if (detailProduct?.id === prod.id) {
-      setDetailProduct(updatedProd)
-    }
-
-    try {
-      await updateProduct(prod.id, { variants: [{ id: variantId, is_active: newActive }] })
-      showToast(
-        `"${displayName}" is now ${newActive ? 'available for sale.' : 'hidden from sale.'}`,
-        'info'
-      )
-    } catch (err) {
-      console.warn('Variant status update API call failed, rolling back:', variantId, err)
-      // Rollback on failure
-      setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
-      if (detailProduct?.id === prod.id) {
-        setDetailProduct(previousProd)
+      const updatedProd: Product = {
+        ...prod,
+        variants: updatedVariants,
       }
-      showToast('Could not update variant status.', 'error')
+
+      setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)))
+      if (detailProduct?.id === prod.id) {
+        setDetailProduct(updatedProd)
+      }
+
+      try {
+        await updateProduct(prod.id, { variants: [{ id: variantId, is_active: newActive }] })
+        showToast(
+          `"${displayName}" is now ${newActive ? 'available for sale.' : 'hidden from sale.'}`,
+          'info'
+        )
+      } catch (err) {
+        console.warn('Variant status update API call failed, rolling back:', variantId, err)
+        // Rollback on failure
+        setProducts((prev) => prev.map((p) => (p.id === previousProd.id ? previousProd : p)))
+        if (detailProduct?.id === prod.id) {
+          setDetailProduct(previousProd)
+        }
+        showToast('Could not update variant status.', 'error')
+      }
     }
+
+    Alert.alert(
+      newActive ? 'Make Variant Available for Sale?' : 'Hide Variant from Sale?',
+      newActive
+        ? `Make "${displayName}" available for sale again on POS and store channels?`
+        : `Hide "${displayName}" from sale? Cashiers will not be able to select or sell this variant until reactivated.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: newActive ? 'Make Available' : 'Hide from Sale',
+          style: newActive ? 'default' : 'destructive',
+          onPress: executeVariantToggle,
+        },
+      ]
+    )
   }
 
   const handleDeleteProductRequest = (prod: Product) => {
@@ -401,6 +452,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     try {
       const res = await createAttribute({
         name: newTaxName,
+        code: newTaxName.toUpperCase().replace(/\s+/g, '_'),
         values,
       })
       const created = res?.data
@@ -408,12 +460,16 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
         setManagedAttributes((prev) =>
           prev.map((t) => (t.id === tempId ? { ...t, id: created.id } : t))
         )
+        setSelectedProductAttributes((prev) =>
+          prev.map((t) => (t.id === tempId ? { ...t, id: created.id } : t))
+        )
       }
-    } catch {
-      // Saved locally
+      showToast(`Attribute "${newTaxName}" saved and added!`, 'success')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } } }
+      const msg = error.response?.data?.message || 'Attribute added locally, but server sync failed.'
+      showToast(msg, 'warning')
     }
-
-    showToast(`Attribute "${newTaxName}" saved and added!`, 'success')
   }
 
   const handleOpenAddCustomValueModal = (attrId: string, attrName: string) => {
@@ -582,6 +638,14 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           setCategoryFilter={setCategoryFilter}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
+          stockFilter={stockFilter}
+          setStockFilter={setStockFilter}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          activeFiltersCount={activeFiltersCount}
+          resetFilters={resetFilters}
           missingBarcodeCount={missingBarcodeCount}
           search={search}
           setSearch={setSearch}
@@ -647,21 +711,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           managedAttributes={managedAttributes}
           setNewAttrModalOpen={setNewAttrModalOpen}
           handleOpenAddCustomValueModal={handleOpenAddCustomValueModal}
-        />
-      )}
-
-      {/* Inline creator dialogs: New Category / New Attribute / Custom Value */}
-      {Boolean(newCatModalOpen || newAttrModalOpen || customValueModalOpen) && (
-        <InlineCreatorModals
           newCatModalOpen={newCatModalOpen}
-          setNewCatModalOpen={setNewCatModalOpen}
           inlineCatName={inlineCatName}
           setInlineCatName={setInlineCatName}
           inlineCatCode={inlineCatCode}
           setInlineCatCode={setInlineCatCode}
           handleSaveInlineCategory={handleSaveInlineCategory}
           newAttrModalOpen={newAttrModalOpen}
-          setNewAttrModalOpen={setNewAttrModalOpen}
           inlineAttrName={inlineAttrName}
           setInlineAttrName={setInlineAttrName}
           inlineAttrValues={inlineAttrValues}

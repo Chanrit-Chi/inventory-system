@@ -14,6 +14,7 @@ import { Image } from 'expo-image'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../ProductsScreen.styles'
 import { ControlledInput } from '../../../components/ControlledInput'
+import { InlineCreatorModals } from './InlineCreatorModals'
 import type { Control, UseFormSetValue, UseFormHandleSubmit } from 'react-hook-form'
 import type { Product } from '../../../types'
 import type { ProductFormInstance } from '../hooks/useProductForm'
@@ -25,6 +26,25 @@ export interface ProductFormModalProps {
   managedAttributes: Array<{ id: string; name: string; values?: string[] }>
   setNewAttrModalOpen: (v: boolean) => void
   handleOpenAddCustomValueModal: (attrId: string, attrName: string) => void
+  // Inline creator states
+  newCatModalOpen: boolean
+  inlineCatName: string
+  setInlineCatName: (v: string) => void
+  inlineCatCode: string
+  setInlineCatCode: (v: string) => void
+  handleSaveInlineCategory: () => void
+  newAttrModalOpen: boolean
+  inlineAttrName: string
+  setInlineAttrName: (v: string) => void
+  inlineAttrValues: string
+  setInlineAttrValues: (v: string) => void
+  handleSaveInlineAttribute: () => void
+  customValueModalOpen: boolean
+  setCustomValueModalOpen: (v: boolean) => void
+  targetAttrForCustomVal: { id: string; name: string } | null
+  customValInput: string
+  setCustomValInput: (v: string) => void
+  handleConfirmAddCustomValue: () => void
 }
 
 export function ProductFormModal({
@@ -34,6 +54,24 @@ export function ProductFormModal({
   managedAttributes,
   setNewAttrModalOpen,
   handleOpenAddCustomValueModal,
+  newCatModalOpen,
+  inlineCatName,
+  setInlineCatName,
+  inlineCatCode,
+  setInlineCatCode,
+  handleSaveInlineCategory,
+  newAttrModalOpen,
+  inlineAttrName,
+  setInlineAttrName,
+  inlineAttrValues,
+  setInlineAttrValues,
+  handleSaveInlineAttribute,
+  customValueModalOpen,
+  setCustomValueModalOpen,
+  targetAttrForCustomVal,
+  customValInput,
+  setCustomValInput,
+  handleConfirmAddCustomValue,
 }: ProductFormModalProps) {
   const {
     productModalOpen,
@@ -58,10 +96,13 @@ export function ProductFormModal({
     setSelectedProductAttributes,
     handleToggleAttributeValue,
     handleRemoveAttribute,
+    handleRemoveValueFromAttribute,
     handleGenerateMatrix,
     variantsFields,
     handleStartScanVariantBarcode,
     removeVariant,
+    handleConfirmRemoveVariant,
+    handleBatchApplyStockToAll,
   } = form
   const onFormError = (errors: Record<string, { message?: string }>) => {
     const firstKey = Object.keys(errors)[0]
@@ -72,15 +113,43 @@ export function ProductFormModal({
   return (
     <Modal visible={productModalOpen} transparent animationType="slide" onRequestClose={() => setProductModalOpen(false)}>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { height: '90%', maxHeight: '94%', paddingBottom: 0, overflow: 'hidden' }]}>
           <View style={styles.sheetHeader}>
             <Text style={styles.modalTitle}>{editingProduct ? 'Edit Product' : 'New Product'}</Text>
-            <TouchableOpacity onPress={() => setProductModalOpen(false)}>
-              <Ionicons name="close" size={24} color={tokens.colors.secondary} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.headerSaveBtn, (isSavingProduct || uploadingPhoto) && { opacity: 0.7 }]}
+                onPress={handleSubmit(onSubmit, onFormError)}
+                disabled={isSavingProduct || uploadingPhoto}
+                activeOpacity={0.8}
+                accessibilityLabel="Quick save product"
+              >
+                {isSavingProduct || uploadingPhoto ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+                )}
+                <Text style={styles.headerSaveBtnText}>
+                  {isSavingProduct ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.detailCloseBtn}
+                onPress={() => setProductModalOpen(false)}
+                accessibilityLabel="Close product editor"
+              >
+                <Ionicons name="close" size={20} color={tokens.colors.secondary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <ScrollView style={styles.formScroll}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.formScrollContent}
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Product Photo Upload Section */}
             <View style={styles.formPhotoCard}>
               <View style={styles.formPhotoHeader}>
@@ -418,23 +487,42 @@ export function ProductFormModal({
                           {attr.allValues.map((val) => {
                             const isSelected = attr.selectedValues.includes(val)
                             return (
-                              <TouchableOpacity
+                              <View
                                 key={val}
-                                style={[styles.valChip, isSelected && styles.valChipSelected]}
-                                onPress={() => handleToggleAttributeValue(attr.id, val)}
+                                style={[
+                                  styles.valChip,
+                                  isSelected && styles.valChipSelected,
+                                  { flexDirection: 'row', alignItems: 'center', paddingRight: 6 },
+                                ]}
                               >
-                                {Boolean(isSelected) && (
+                                <TouchableOpacity
+                                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                                  onPress={() => handleToggleAttributeValue(attr.id, val)}
+                                >
+                                  {Boolean(isSelected) && (
+                                    <Ionicons
+                                      name="checkmark"
+                                      size={11}
+                                      color="#FFFFFF"
+                                      style={{ marginRight: 3 }}
+                                    />
+                                  )}
+                                  <Text style={[styles.valChipText, isSelected && styles.valChipTextSelected]}>
+                                    {val}
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handleRemoveValueFromAttribute(attr.id, val)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                                  style={{ marginLeft: 5, padding: 1 }}
+                                >
                                   <Ionicons
-                                    name="checkmark"
-                                    size={11}
-                                    color="#FFFFFF"
-                                    style={{ marginRight: 3 }}
+                                    name="close-circle"
+                                    size={13}
+                                    color={isSelected ? 'rgba(255,255,255,0.8)' : tokens.colors.secondary}
                                   />
-                                )}
-                                <Text style={[styles.valChipText, isSelected && styles.valChipTextSelected]}>
-                                  {val}
-                                </Text>
-                              </TouchableOpacity>
+                                </TouchableOpacity>
+                              </View>
                             )
                           })}
                           <TouchableOpacity
@@ -449,6 +537,30 @@ export function ProductFormModal({
                     ))
                   )}
 
+                  {/* Configurable Initial Stock per Variant */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 10, backgroundColor: '#F8FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginTop: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                        <Ionicons name="cube-outline" size={14} color={tokens.colors.primaryContainer} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: tokens.colors.onBackground }}>
+                          Initial Stock per Variant
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 10.5, color: tokens.colors.secondary, marginTop: 2 }}>
+                        Default quantity assigned to new variant combinations
+                      </Text>
+                    </View>
+                    <View style={{ width: 75 }}>
+                      <ControlledInput
+                        name="variantInitialStock"
+                        control={control}
+                        containerStyle={styles.compactFieldContainer}
+                        placeholder="10"
+                        inputProps={{ keyboardType: 'numeric', style: [styles.variantTextInput, { textAlign: 'center', fontWeight: '700' }] }}
+                      />
+                    </View>
+                  </View>
+
                   {/* Generate Variant Matrix Action */}
                   <TouchableOpacity
                     style={[styles.generateBtn, selectedProductAttributes.length === 0 && { opacity: 0.6 }]}
@@ -456,19 +568,49 @@ export function ProductFormModal({
                     disabled={selectedProductAttributes.length === 0}
                   >
                     <Ionicons name="flash-outline" size={16} color={tokens.colors.onPrimary} />
-                    <Text style={styles.generateBtnText}>Generate Variant Combinations</Text>
+                    <Text style={styles.generateBtnText}>
+                      {variantsFields.length > 0 ? 'Update Variant Combinations' : 'Generate Variant Combinations'}
+                    </Text>
                   </TouchableOpacity>
+                  {Boolean(variantsFields.length > 0) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, paddingHorizontal: 2 }}>
+                      <Ionicons name="shield-checkmark" size={13} color="#16A34A" />
+                      <Text style={{ fontSize: 11, color: '#16A34A', fontWeight: '600' }}>
+                        Existing stock, barcodes & IDs are preserved on update
+                      </Text>
+                    </View>
+                  )}
 
                   {/* Variant Matrix Table */}
                   {Boolean(variantsFields.length > 0) && (
                     <View style={styles.matrixContainer}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                        <View>
+                        <View style={{ flex: 1 }}>
                           <Text style={styles.matrixTitle}>Variant Combinations ({variantsFields.length})</Text>
                           <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
                             Scan supplier barcodes or edit inventory
                           </Text>
                         </View>
+                        <TouchableOpacity
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: '#EFF6FF',
+                            borderColor: '#BFDBFE',
+                            borderWidth: 1,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            borderRadius: 6,
+                          }}
+                          onPress={handleBatchApplyStockToAll}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="copy-outline" size={12} color="#2563EB" />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB' }}>
+                            Apply to All
+                          </Text>
+                        </TouchableOpacity>
                       </View>
 
                       {variantsFields.map((v, vIdx) => (
@@ -479,7 +621,7 @@ export function ProductFormModal({
                               <Text style={styles.varBadgeText}>{v.name}</Text>
                             </View>
                             <TouchableOpacity
-                              onPress={() => removeVariant(vIdx)}
+                              onPress={() => handleConfirmRemoveVariant(vIdx)}
                               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             >
                               <Ionicons name="trash-outline" size={16} color={tokens.colors.statusError} />
@@ -530,7 +672,7 @@ export function ProductFormModal({
                                 label="STOCK"
                                 labelStyle={styles.variantFieldLabel}
                                 containerStyle={styles.compactFieldContainer}
-                                placeholder="10"
+                                placeholder="0"
                                 inputProps={{ keyboardType: 'numeric', style: [styles.variantTextInput, { textAlign: 'center' }] }}
                               />
                             </View>
@@ -554,8 +696,19 @@ export function ProductFormModal({
               </View>
             )}
 
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Active in POS Catalog</Text>
+          </ScrollView>
+
+          {/* Sticky Bottom Action Bar — Always accessible without scrolling */}
+          <View style={styles.formFooterBar}>
+            <View style={styles.formFooterSwitchRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons
+                  name={formIsActive ? 'eye-outline' : 'eye-off-outline'}
+                  size={15}
+                  color={formIsActive ? tokens.colors.primaryContainer : tokens.colors.secondary}
+                />
+                <Text style={styles.switchLabel}>Active in POS Catalog</Text>
+              </View>
               <Switch
                 value={formIsActive}
                 onValueChange={(val) => setValue('is_active', val)}
@@ -564,7 +717,7 @@ export function ProductFormModal({
             </View>
 
             <TouchableOpacity
-              style={[styles.submitBtn, (isSavingProduct || uploadingPhoto) && { opacity: 0.75 }]}
+              style={[styles.formFooterSubmitBtn, (isSavingProduct || uploadingPhoto) && { opacity: 0.75 }]}
               onPress={handleSubmit(onSubmit, onFormError)}
               disabled={isSavingProduct || uploadingPhoto}
               activeOpacity={0.85}
@@ -583,7 +736,31 @@ export function ProductFormModal({
                 <Text style={styles.submitBtnText}>{editingProduct ? 'Save Product Changes' : 'Create Product'}</Text>
               )}
             </TouchableOpacity>
-          </ScrollView>
+          </View>
+
+          {/* In-Modal Inline Creator Overlays */}
+          <InlineCreatorModals
+            newCatModalOpen={newCatModalOpen}
+            setNewCatModalOpen={setNewCatModalOpen}
+            inlineCatName={inlineCatName}
+            setInlineCatName={setInlineCatName}
+            inlineCatCode={inlineCatCode}
+            setInlineCatCode={setInlineCatCode}
+            handleSaveInlineCategory={handleSaveInlineCategory}
+            newAttrModalOpen={newAttrModalOpen}
+            setNewAttrModalOpen={setNewAttrModalOpen}
+            inlineAttrName={inlineAttrName}
+            setInlineAttrName={setInlineAttrName}
+            inlineAttrValues={inlineAttrValues}
+            setInlineAttrValues={setInlineAttrValues}
+            handleSaveInlineAttribute={handleSaveInlineAttribute}
+            customValueModalOpen={customValueModalOpen}
+            setCustomValueModalOpen={setCustomValueModalOpen}
+            targetAttrForCustomVal={targetAttrForCustomVal}
+            customValInput={customValInput}
+            setCustomValInput={setCustomValInput}
+            handleConfirmAddCustomValue={handleConfirmAddCustomValue}
+          />
         </View>
       </View>
     </Modal>

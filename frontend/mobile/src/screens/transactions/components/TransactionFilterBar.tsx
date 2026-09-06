@@ -11,37 +11,98 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../TransactionsScreen.styles'
-import type { FilterStatus, DateRangeMode } from '../transactionUtils'
+import type {
+  FilterStatus,
+  DateRangeMode,
+  TransactionSortOption,
+  PaymentMethodFilter,
+} from '../transactionUtils'
 
 export interface TransactionFilterBarProps {
   searchQuery: string
   setSearchQuery: (q: string) => void
-  dateRange: DateRangeMode
-  setDateRange: (r: DateRangeMode) => void
-  statusFilter: FilterStatus
-  setStatusFilter: (s: FilterStatus) => void
-  dateLabel: string
-  counts: { all: number; completed: number; pending: number; cancelled: number }
+  activeFiltersCount: number
+  onOpenFilterModal: () => void
   headerTranslateY: Animated.AnimatedInterpolation<string | number>
   headerOpacity: Animated.AnimatedInterpolation<string | number>
   onLayoutHeader: (e: LayoutChangeEvent) => void
-  onOpenCustomModal: () => void
+  // Active Filter Removers
+  sortBy?: TransactionSortOption
+  onResetSort?: () => void
+  dateRange?: DateRangeMode
+  dateLabel?: string
+  onResetDate?: () => void
+  statusFilter?: FilterStatus
+  onResetStatus?: () => void
+  channelFilter?: string
+  onResetChannel?: () => void
+  paymentMethodFilter?: PaymentMethodFilter
+  onResetPaymentMethod?: () => void
 }
 
 export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   searchQuery,
   setSearchQuery,
-  dateRange,
-  setDateRange,
-  statusFilter,
-  setStatusFilter,
-  dateLabel,
-  counts,
+  activeFiltersCount,
+  onOpenFilterModal,
   headerTranslateY,
   headerOpacity,
   onLayoutHeader,
-  onOpenCustomModal,
+  sortBy = 'DEFAULT',
+  onResetSort,
+  dateRange = 'all',
+  dateLabel,
+  onResetDate,
+  statusFilter = 'ALL',
+  onResetStatus,
+  channelFilter = 'ALL',
+  onResetChannel,
+  paymentMethodFilter = 'ALL',
+  onResetPaymentMethod,
 }) => {
+  const getSortLabel = (key: TransactionSortOption) => {
+    switch (key) {
+      case 'OLDEST':
+        return 'Oldest'
+      case 'AMOUNT_DESC':
+        return 'Amount: High → Low'
+      case 'AMOUNT_ASC':
+        return 'Amount: Low → High'
+      case 'ORDER_NUM_ASC':
+        return 'Order #: A → Z'
+      default:
+        return 'Newest'
+    }
+  }
+
+  const getStatusLabel = (key: FilterStatus) => {
+    switch (key) {
+      case 'COMPLETED':
+        return 'Paid'
+      case 'PENDING':
+        return 'Pending'
+      case 'CANCELLED':
+        return 'Cancelled'
+      default:
+        return 'All Statuses'
+    }
+  }
+
+  const getPaymentLabel = (key: PaymentMethodFilter) => {
+    switch (key) {
+      case 'CASH':
+        return 'Cash'
+      case 'ABA':
+        return 'ABA QR'
+      case 'CARD':
+        return 'Card'
+      case 'BANK':
+        return 'Bank Transfer'
+      default:
+        return 'All Payments'
+    }
+  }
+
   return (
     <Animated.View
       style={[
@@ -53,7 +114,7 @@ export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
       ]}
       onLayout={onLayoutHeader}
     >
-      {/* Top Search Toolbar */}
+      {/* Streamlined Search & Filter Row */}
       <View style={styles.topToolbar}>
         <View style={styles.searchBox}>
           <Ionicons
@@ -64,166 +125,126 @@ export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search order #, customer, phone, SKU..."
+            placeholder="Search order #, customer, SKU..."
             placeholderTextColor={tokens.colors.secondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {Boolean(searchQuery) && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons name="close-circle" size={16} color={tokens.colors.secondary} />
             </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      {/* Date Range Bar */}
-      <View style={styles.dateBarContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateBarContent}
+        {/* Filter & Sort Trigger Button */}
+        <TouchableOpacity
+          style={[
+            styles.filterTriggerBtn,
+            activeFiltersCount > 0 && styles.filterTriggerBtnActive,
+          ]}
+          onPress={onOpenFilterModal}
+          activeOpacity={0.75}
+          accessibilityLabel="Open filter and sort menu"
         >
-          <TouchableOpacity
-            style={[styles.dateBtn, dateRange === 'all' && styles.dateBtnActive]}
-            onPress={() => setDateRange('all')}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.dateBtnText, dateRange === 'all' && styles.dateBtnTextActive]}>
-              All Time
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, dateRange === 'today' && styles.dateBtnActive]}
-            onPress={() => setDateRange('today')}
-            activeOpacity={0.75}
-          >
-            <Text
-              style={[
-                styles.dateBtnText,
-                dateRange === 'today' && styles.dateBtnTextActive,
-              ]}
-            >
-              Today
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, dateRange === '7d' && styles.dateBtnActive]}
-            onPress={() => setDateRange('7d')}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.dateBtnText, dateRange === '7d' && styles.dateBtnTextActive]}>
-              7 Days
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, dateRange === '30d' && styles.dateBtnActive]}
-            onPress={() => setDateRange('30d')}
-            activeOpacity={0.75}
-          >
-            <Text
-              style={[
-                styles.dateBtnText,
-                dateRange === '30d' && styles.dateBtnTextActive,
-              ]}
-            >
-              30 Days
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.dateBtn, dateRange === 'year' && styles.dateBtnActive]}
-            onPress={() => setDateRange('year')}
-            activeOpacity={0.75}
-          >
-            <Text
-              style={[
-                styles.dateBtnText,
-                dateRange === 'year' && styles.dateBtnTextActive,
-              ]}
-            >
-              Year
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
+          <Ionicons
+            name="filter"
+            size={15}
+            color={
+              activeFiltersCount > 0
+                ? tokens.colors.primaryContainer
+                : tokens.colors.secondary
+            }
+          />
+          <Text
             style={[
-              styles.dateBtn,
-              (dateRange === 'single' || dateRange === 'custom') && styles.dateBtnActive,
-              { flexDirection: 'row', gap: 4 },
+              styles.filterTriggerText,
+              activeFiltersCount > 0 && styles.filterTriggerTextActive,
             ]}
-            onPress={onOpenCustomModal}
-            activeOpacity={0.75}
           >
-            <Ionicons
-              name="calendar-outline"
-              size={13}
-              color={
-                dateRange === 'single' || dateRange === 'custom'
-                  ? tokens.colors.onPrimary
-                  : tokens.colors.secondary
-              }
-            />
-            <Text
-              style={[
-                styles.dateBtnText,
-                (dateRange === 'single' || dateRange === 'custom') &&
-                  styles.dateBtnTextActive,
-              ]}
-              numberOfLines={1}
-            >
-              {dateRange === 'single' || dateRange === 'custom' ? dateLabel : 'Custom'}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+            Filter
+          </Text>
+          {Boolean(activeFiltersCount > 0) && (
+            <View style={styles.filterBadgeCount}>
+              <Text style={styles.filterBadgeCountText}>{activeFiltersCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Status Filter Chips Bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statusChipsRow}
-        contentContainerStyle={styles.statusChipsContent}
-      >
-        {[
-          { id: 'ALL' as const, label: 'All Statuses', count: counts.all },
-          { id: 'COMPLETED' as const, label: 'Paid', count: counts.completed },
-          { id: 'PENDING' as const, label: 'Pending', count: counts.pending },
-          { id: 'CANCELLED' as const, label: 'Cancelled', count: counts.cancelled },
-        ].map((st) => {
-          const isSelected = statusFilter === st.id
-          return (
-            <TouchableOpacity
-              key={st.id}
-              style={[styles.statusFilterChip, isSelected && styles.statusFilterChipActive]}
-              onPress={() => setStatusFilter(st.id)}
-              activeOpacity={0.75}
-            >
-              <Text
-                style={[
-                  styles.statusFilterChipText,
-                  isSelected && styles.statusFilterChipTextActive,
-                ]}
-              >
-                {st.label}
-              </Text>
-              <View style={[styles.countBadge, isSelected && styles.countBadgeActive]}>
-                <Text
-                  style={[
-                    styles.countBadgeText,
-                    isSelected && styles.countBadgeTextActive,
-                  ]}
-                >
-                  {st.count}
-                </Text>
+      {/* Active Filter Chips Scroll (Visible when filters are active) */}
+      {activeFiltersCount > 0 && (
+        <View style={styles.activeChipsRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.activeChipsContent}
+          >
+            {sortBy !== 'DEFAULT' && (
+              <View style={styles.filterChip}>
+                <Ionicons name="swap-vertical" size={12} color={tokens.colors.primaryContainer} />
+                <Text style={styles.filterChipText}>{getSortLabel(sortBy)}</Text>
+                {Boolean(onResetSort) && (
+                  <TouchableOpacity onPress={onResetSort} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color={tokens.colors.primaryContainer} />
+                  </TouchableOpacity>
+                )}
               </View>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+            )}
+
+            {dateRange !== 'all' && (
+              <View style={styles.filterChip}>
+                <Ionicons name="calendar-outline" size={12} color={tokens.colors.primaryContainer} />
+                <Text style={styles.filterChipText}>{dateLabel || dateRange}</Text>
+                {Boolean(onResetDate) && (
+                  <TouchableOpacity onPress={onResetDate} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color={tokens.colors.primaryContainer} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {statusFilter !== 'ALL' && (
+              <View style={styles.filterChip}>
+                <Ionicons name="radio-button-on" size={12} color={tokens.colors.primaryContainer} />
+                <Text style={styles.filterChipText}>{getStatusLabel(statusFilter)}</Text>
+                {Boolean(onResetStatus) && (
+                  <TouchableOpacity onPress={onResetStatus} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color={tokens.colors.primaryContainer} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {channelFilter !== 'ALL' && (
+              <View style={styles.filterChip}>
+                <Ionicons name="storefront-outline" size={12} color={tokens.colors.primaryContainer} />
+                <Text style={styles.filterChipText}>{channelFilter}</Text>
+                {Boolean(onResetChannel) && (
+                  <TouchableOpacity onPress={onResetChannel} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color={tokens.colors.primaryContainer} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {paymentMethodFilter !== 'ALL' && (
+              <View style={styles.filterChip}>
+                <Ionicons name="wallet-outline" size={12} color={tokens.colors.primaryContainer} />
+                <Text style={styles.filterChipText}>{getPaymentLabel(paymentMethodFilter)}</Text>
+                {Boolean(onResetPaymentMethod) && (
+                  <TouchableOpacity onPress={onResetPaymentMethod} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={13} color={tokens.colors.primaryContainer} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
     </Animated.View>
   )
 }

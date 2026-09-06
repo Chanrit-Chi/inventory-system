@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { View, Text, TextInput, Modal, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
@@ -52,10 +52,20 @@ export function InlineCreatorModals({
   setCustomValInput,
   handleConfirmAddCustomValue,
 }: InlineCreatorModalsProps) {
+  if (!newCatModalOpen && !newAttrModalOpen && !customValueModalOpen) {
+    return null
+  }
+
   return (
-    <>      {/* Inline New Category Creator Modal */}
-      <Modal visible={newCatModalOpen} transparent animationType="fade" onRequestClose={() => setNewCatModalOpen(false)}>
+    <>
+      {/* Inline New Category Creator */}
+      {Boolean(newCatModalOpen) && (
         <View style={styles.dialogOverlay}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            activeOpacity={1}
+            onPress={() => setNewCatModalOpen(false)}
+          />
           <View style={styles.dialogCard}>
             <View style={styles.dialogHeader}>
               <Text style={styles.dialogTitle}>Add New Category</Text>
@@ -68,6 +78,7 @@ export function InlineCreatorModals({
             <TextInput
               style={styles.input}
               placeholder="e.g. Footwear, Headwear"
+              placeholderTextColor={tokens.colors.textMuted}
               value={inlineCatName}
               onChangeText={setInlineCatName}
             />
@@ -76,6 +87,7 @@ export function InlineCreatorModals({
             <TextInput
               style={styles.input}
               placeholder="e.g. FTW, HDW"
+              placeholderTextColor={tokens.colors.textMuted}
               value={inlineCatCode}
               onChangeText={setInlineCatCode}
             />
@@ -85,11 +97,16 @@ export function InlineCreatorModals({
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
 
-      {/* Inline New Attribute Creator Modal */}
-      <Modal visible={newAttrModalOpen} transparent animationType="fade" onRequestClose={() => setNewAttrModalOpen(false)}>
+      {/* Inline New Attribute Creator */}
+      {Boolean(newAttrModalOpen) && (
         <View style={styles.dialogOverlay}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            activeOpacity={1}
+            onPress={() => setNewAttrModalOpen(false)}
+          />
           <View style={styles.dialogCard}>
             <View style={styles.dialogHeader}>
               <Text style={styles.dialogTitle}>Add New Attribute</Text>
@@ -102,6 +119,7 @@ export function InlineCreatorModals({
             <TextInput
               style={styles.input}
               placeholder="e.g. Material, Storage, Waist"
+              placeholderTextColor={tokens.colors.textMuted}
               value={inlineAttrName}
               onChangeText={setInlineAttrName}
             />
@@ -110,6 +128,7 @@ export function InlineCreatorModals({
             <TextInput
               style={styles.input}
               placeholder="e.g. S, M, L, XL or Black, White"
+              placeholderTextColor={tokens.colors.textMuted}
               value={inlineAttrValues}
               onChangeText={setInlineAttrValues}
             />
@@ -119,16 +138,16 @@ export function InlineCreatorModals({
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
 
-      {/* Custom Attribute Value Creator Modal */}
-      <Modal
-        visible={customValueModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCustomValueModalOpen(false)}
-      >
+      {/* Custom Attribute Value Creator */}
+      {Boolean(customValueModalOpen) && (
         <View style={styles.dialogOverlay}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            activeOpacity={1}
+            onPress={() => setCustomValueModalOpen(false)}
+          />
           <View style={styles.dialogCard}>
             <View style={styles.dialogHeader}>
               <Text style={styles.dialogTitle}>Add Value to {targetAttrForCustomVal?.name || 'Attribute'}</Text>
@@ -138,23 +157,39 @@ export function InlineCreatorModals({
             </View>
 
             <Text style={styles.formLabel}>Value Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. 3XL, Heather Grey, 1TB, Titanium"
-              placeholderTextColor={tokens.colors.textDisabled}
-              value={customValInput}
-              onChangeText={setCustomValInput}
-              autoFocus
-              onSubmitEditing={handleConfirmAddCustomValue}
-            />
+            {(() => {
+              const attrNameLower = targetAttrForCustomVal?.name?.toLowerCase() || ''
+              let placeholderText = 'e.g. Value Name'
+              if (attrNameLower.includes('size')) {
+                placeholderText = 'e.g. 5XL, 6XL, 38W, 40L'
+              } else if (attrNameLower.includes('color') || attrNameLower.includes('colour')) {
+                placeholderText = 'e.g. Burgundy, Olive Green, Coral'
+              } else if (attrNameLower.includes('storage') || attrNameLower.includes('capacity')) {
+                placeholderText = 'e.g. 512GB, 1TB, 2TB'
+              } else if (attrNameLower.includes('material')) {
+                placeholderText = 'e.g. Cotton, Linen, Polyester'
+              } else {
+                placeholderText = 'e.g. Option Value'
+              }
+              return (
+                <TextInput
+                  style={styles.input}
+                  placeholder={placeholderText}
+                  placeholderTextColor={tokens.colors.textDisabled}
+                  value={customValInput}
+                  onChangeText={setCustomValInput}
+                  autoFocus
+                  onSubmitEditing={handleConfirmAddCustomValue}
+                />
+              )
+            })()}
 
             <TouchableOpacity style={styles.dialogBtn} onPress={handleConfirmAddCustomValue}>
               <Text style={styles.dialogBtnText}>+ Add to Options</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-
+      )}
     </>
   )
 }

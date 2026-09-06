@@ -1,5 +1,6 @@
 import React from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, StyleProp, ViewStyle } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import type { Order } from '../types'
@@ -11,91 +12,22 @@ export interface TransactionCardProps {
   style?: ViewStyle
 }
 
-function formatDateTime(dateStr?: string | null): string {
-  if (!dateStr) return 'Today'
-  try {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-    if (isToday) {
-      return `Today, ${timeStr}`
-    }
-    const dateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    return `${dateFormatted} • ${timeStr}`
-  } catch {
-    return 'Today'
-  }
-}
+import {
+  formatDateTime,
+  getChannelPlatformMeta,
+  getChannelCleanShopName,
+  getChannelDisplayName,
+  getCustomerDisplayAddress,
+  getPaymentStyle,
+} from '../screens/transactions/transactionUtils'
 
-export function getChannelPlatformMeta(channel?: Order['channel'] | null, channelId?: string | null) {
-  const nameLower = (channel?.name || channelId || '').toLowerCase()
-  const codeLower = (channel?.code || '').toLowerCase()
-  const typeLower = (channel?.type || '').toLowerCase()
-
-  if (typeLower === 'telegram' || nameLower.includes('telegram') || codeLower.includes('tg')) {
-    return { icon: 'paper-plane' as const, color: '#0284C7', bg: '#E0F2FE', label: 'Telegram' }
-  }
-  if (typeLower === 'facebook' || nameLower.includes('facebook') || codeLower.includes('fb')) {
-    return { icon: 'logo-facebook' as const, color: '#1877F2', bg: '#EBF5FF', label: 'Facebook' }
-  }
-  if (typeLower === 'instagram' || nameLower.includes('instagram') || codeLower.includes('ig')) {
-    return { icon: 'logo-instagram' as const, color: '#E1306C', bg: '#FCE7F3', label: 'Instagram' }
-  }
-  if (typeLower === 'tiktok' || nameLower.includes('tiktok')) {
-    return { icon: 'logo-tiktok' as const, color: '#0F172A', bg: '#F1F5F9', label: 'TikTok' }
-  }
-  if (typeLower === 'pos' || nameLower.includes('pos') || nameLower.includes('store') || nameLower.includes('retail')) {
-    return { icon: 'storefront' as const, color: '#D97706', bg: '#FEF3C7', label: 'Store POS' }
-  }
-  if (typeLower === 'online' || typeLower === 'website' || nameLower.includes('web') || nameLower.includes('e-commerce') || nameLower.includes('online')) {
-    return { icon: 'globe' as const, color: '#059669', bg: '#ECFDF5', label: 'Online Web' }
-  }
-  if (typeLower === 'shopee' || nameLower.includes('shopee') || nameLower.includes('lazada')) {
-    return { icon: 'cart' as const, color: '#EA580C', bg: '#FFEDD5', label: 'E-Commerce' }
-  }
-  if (typeLower === 'social_media') {
-    return { icon: 'share-social' as const, color: '#8B5CF6', bg: '#F5F3FF', label: 'Social Media' }
-  }
-  if (typeLower === 'offline' || nameLower.includes('b2b') || nameLower.includes('wholesale')) {
-    return { icon: 'briefcase' as const, color: '#64748B', bg: '#F1F5F9', label: 'Wholesale' }
-  }
-  if (channel || channelId) {
-    return { icon: 'storefront-outline' as const, color: '#64748B', bg: '#F8FAFC', label: channel?.name || 'Channel' }
-  }
-  return null
-}
-
-function getChannelDisplayName(order: Order): string | null {
-  if (order.channel?.name) return order.channel.name
-  if (!order.channel_id) return null
-  const isTechnicalId =
-    /^[0-9a-fA-F-]{8,}$/i.test(order.channel_id) ||
-    order.channel_id.length > 18 ||
-    order.channel_id.startsWith('chan-') ||
-    order.channel_id.startsWith('ch-')
-  if (isTechnicalId) return null
-  return order.channel_id
-}
-
-function getPaymentStyle(methodStr: string) {
-  const m = methodStr.toLowerCase()
-  if (m.includes('aba') || m.includes('khqr')) {
-    return { name: 'qr-code' as const, color: '#005F83', bg: '#E0F2FE', label: 'ABA QR' }
-  }
-  if (m.includes('acleda')) {
-    return { name: 'business' as const, color: '#0D3880', bg: '#E6EDF8', label: 'ACLEDA' }
-  }
-  if (m.includes('wing')) {
-    return { name: 'phone-portrait' as const, color: '#6EBE44', bg: '#EDF8E6', label: 'Wing' }
-  }
-  if (m.includes('bank') || m.includes('transfer')) {
-    return { name: 'business' as const, color: '#1E3A8A', bg: '#FFF7ED', label: 'Bank' }
-  }
-  if (m.includes('card')) {
-    return { name: 'card' as const, color: '#7C3AED', bg: '#EDE9FE', label: 'Card' }
-  }
-  return { name: 'cash' as const, color: '#16A34A', bg: '#DCFCE7', label: 'Cash' }
+export {
+  formatDateTime,
+  getChannelPlatformMeta,
+  getChannelCleanShopName,
+  getChannelDisplayName,
+  getCustomerDisplayAddress,
+  getPaymentStyle,
 }
 
 export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
@@ -118,6 +50,8 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
   const itemCount = order.items?.reduce((s, it) => s + it.quantity, 0) || 1
   const channelName = getChannelDisplayName(order)
   const channelMeta = getChannelPlatformMeta(order.channel, order.channel_id)
+  const channelLogoUrl = order.channel?.image_url || order.channel?.imageUrl || null
+  const customerAddress = getCustomerDisplayAddress(order)
   const cashierName = order.user?.name
 
   return (
@@ -198,6 +132,16 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
         </View>
       </View>
 
+      {/* Customer Address Row (if available) */}
+      {Boolean(customerAddress) && (
+        <View style={styles.addressRow}>
+          <Ionicons name="location-outline" size={12} color={tokens.colors.secondary} style={styles.addressIcon} />
+          <Text style={styles.addressText} numberOfLines={1} ellipsizeMode="tail">
+            {customerAddress}
+          </Text>
+        </View>
+      )}
+
       {/* 3. Bottom Tag Strip: Channel, Payment Method, Date & Time */}
       <View style={styles.bottomTagStrip}>
         {/* Channel Tag */}
@@ -208,11 +152,19 @@ export const TransactionCard: React.FC<TransactionCardProps> = React.memo(({
               channelMeta ? { backgroundColor: channelMeta.bg } : styles.metaPillNeutral,
             ]}
           >
-            <Ionicons
-              name={channelMeta?.icon || 'storefront-outline'}
-              size={11}
-              color={channelMeta?.color || tokens.colors.secondary}
-            />
+            {channelLogoUrl ? (
+              <Image
+                source={{ uri: channelLogoUrl }}
+                style={styles.channelLogoImg}
+                contentFit="contain"
+              />
+            ) : (
+              <Ionicons
+                name={channelMeta?.icon || 'storefront-outline'}
+                size={11}
+                color={channelMeta?.color || tokens.colors.secondary}
+              />
+            )}
             <Text
               style={[
                 styles.metaPillText,
@@ -408,6 +360,27 @@ const styles = StyleSheet.create({
     color: tokens.colors.secondary,
     fontWeight: '600',
     fontSize: 11,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+    paddingHorizontal: 1,
+  },
+  addressIcon: {
+    flexShrink: 0,
+    marginTop: 0.5,
+  },
+  addressText: {
+    fontSize: 11.5,
+    color: tokens.colors.secondary,
+    flex: 1,
+  },
+  channelLogoImg: {
+    width: 12,
+    height: 12,
+    borderRadius: 2.5,
   },
 })
 

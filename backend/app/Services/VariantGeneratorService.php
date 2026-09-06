@@ -125,15 +125,27 @@ class VariantGeneratorService
                 $attrName = $av['attribute']['name'] ?? $av['attribute_name'] ?? null;
                 $valName = $av['value_name'] ?? $av['value'] ?? null;
 
-                if (!$attrValId && $attrName && $valName) {
+                if ($attrName && $valName) {
                     $attribute = Attribute::firstOrCreate(
                         ['name' => $attrName],
                         ['code' => strtoupper(Str::slug($attrName, '_'))]
                     );
-                    $attrVal = AttributeValue::firstOrCreate(
-                        ['attribute_id' => $attribute->id, 'value_name' => $valName]
-                    );
-                    $attrValId = $attrVal->id;
+
+                    // If attrValId was provided, verify it actually belongs to this attribute
+                    if ($attrValId) {
+                        $existingVal = AttributeValue::find($attrValId);
+                        if (!$existingVal || $existingVal->attribute_id !== $attribute->id) {
+                            $attrVal = AttributeValue::firstOrCreate(
+                                ['attribute_id' => $attribute->id, 'value_name' => $valName]
+                            );
+                            $attrValId = $attrVal->id;
+                        }
+                    } else {
+                        $attrVal = AttributeValue::firstOrCreate(
+                            ['attribute_id' => $attribute->id, 'value_name' => $valName]
+                        );
+                        $attrValId = $attrVal->id;
+                    }
                 }
             } elseif (is_string($av) && Str::isUuid($av)) {
                 $attrValId = $av;
@@ -290,6 +302,11 @@ class VariantGeneratorService
                     if (!empty($variantUpdate)) {
                         $variant->update($variantUpdate);
                     }
+
+                    if (isset($varData['attribute_values']) && is_array($varData['attribute_values'])) {
+                        $variant->variantAttributeValues()->delete();
+                        $this->attachAttributeValuesToVariant($product, $variant, $varData['attribute_values']);
+                    }
                 }
             } else {
                 $sku = $this->generateUniqueSku(!empty($varData['sku']) ? $varData['sku'] : ('SKU-' . strtoupper(Str::random(6))));
@@ -311,6 +328,22 @@ class VariantGeneratorService
                 $processedVariantIds[] = $newVar->id;
 
                 $this->attachAttributeValuesToVariant($product, $newVar, $varData['attribute_values'] ?? []);
+            }
+        }
+
+        // Clean up or deactivate variants that were removed from the product in this update
+        if (count($processedVariantIds) > 0) {
+            $removedVariants = ProductVariant::where('product_id', $product->id)
+                ->whereNotIn('id', $processedVariantIds)
+                ->get();
+
+            foreach ($removedVariants as $removedVar) {
+                if ($removedVar->stockMovements()->count() === 0 && $removedVar->orderItems()->count() === 0) {
+                    $removedVar->variantAttributeValues()->delete();
+                    $removedVar->forceDelete();
+                } else {
+                    $removedVar->update(['is_active' => false]);
+                }
             }
         }
 

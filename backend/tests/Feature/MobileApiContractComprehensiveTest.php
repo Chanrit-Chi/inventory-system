@@ -1824,4 +1824,75 @@ class MobileApiContractComprehensiveTest extends TestCase
                 ],
             ]);
     }
+
+    // =========================================================================
+    // 13. ATTRIBUTES & TAXONOMY MUTATIONS
+    // =========================================================================
+
+    public function test_attribute_crud_with_code_description_and_values(): void
+    {
+        Sanctum::actingAs($this->adminUser);
+
+        // 1. Create Attribute
+        $createRes = $this->postJson('/api/v1/attributes', [
+            'name'        => 'Material Option',
+            'code'        => 'MAT_OPT',
+            'description' => 'Fabric and garment material',
+            'values'      => ['Cotton', 'Silk', 'Linen'],
+        ]);
+
+        $createRes->assertStatus(201)
+            ->assertJson([
+                'success' => true,
+                'data'    => [
+                    'name'        => 'Material Option',
+                    'code'        => 'MAT_OPT',
+                    'description' => 'Fabric and garment material',
+                ],
+            ]);
+
+        $attrId = $createRes->json('data.id');
+        $this->assertDatabaseHas('attributes', [
+            'id'          => $attrId,
+            'name'        => 'Material Option',
+            'code'        => 'MAT_OPT',
+            'description' => 'Fabric and garment material',
+        ]);
+        $this->assertDatabaseHas('attribute_values', [
+            'attribute_id' => $attrId,
+            'value_name'   => 'Cotton',
+        ]);
+
+        // 2. Update Attribute
+        $updateRes = $this->patchJson("/api/v1/attributes/{$attrId}", [
+            'name'        => 'Updated Material',
+            'code'        => 'MAT_UPD',
+            'description' => 'Updated fabric notes',
+            'values'      => ['Cotton', 'Polyester'],
+        ]);
+
+        $updateRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data'    => [
+                    'name'        => 'Updated Material',
+                    'code'        => 'MAT_UPD',
+                    'description' => 'Updated fabric notes',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('attributes', [
+            'id'          => $attrId,
+            'name'        => 'Updated Material',
+            'code'        => 'MAT_UPD',
+            'description' => 'Updated fabric notes',
+        ]);
+
+        // 3. List Attributes
+        $listRes = $this->getJson('/api/v1/attributes');
+        $listRes->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+            ]);
+    }
 }

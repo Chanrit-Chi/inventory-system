@@ -38,7 +38,7 @@ export function ProductDetailModal({
   const { can } = usePermissions()
   return (      <Modal visible={detailModalOpen} transparent animationType="slide" onRequestClose={() => setDetailModalOpen(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { height: '88%', maxHeight: '92%', paddingBottom: 0, overflow: 'hidden' }]}>
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>Product Overview</Text>
@@ -46,13 +46,42 @@ export function ProductDetailModal({
                   {detailProduct?.category?.name || 'General Inventory'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setDetailModalOpen(false)}>
-                <Ionicons name="close" size={24} color={tokens.colors.secondary} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {Boolean(can('products:update') && detailProduct) && (
+                  <TouchableOpacity
+                    style={styles.headerEditPill}
+                    onPress={() => {
+                      if (detailProduct) {
+                        setDetailModalOpen(false)
+                        handleOpenEditProduct(detailProduct)
+                      }
+                    }}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Edit product shortcut"
+                  >
+                    <Ionicons name="pencil" size={13} color="#FFFFFF" />
+                    <Text style={styles.headerEditPillText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.detailCloseBtn}
+                  onPress={() => setDetailModalOpen(false)}
+                  accessibilityLabel="Close product overview"
+                >
+                  <Ionicons name="close" size={20} color={tokens.colors.secondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {detailProduct ? (
-              <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
+              <>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.formScrollContent}
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+                keyboardShouldPersistTaps="handled"
+              >
                 {/* Image & Header Summary */}
                 <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center', marginBottom: 16, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' }}>
                   {detailProduct.image_url ? (
@@ -338,54 +367,9 @@ export function ProductDetailModal({
                   </View>
                 )}
 
-                {/* Actions Button Bar */}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 16 }}>
-                  {Boolean(can('inventory:restock')) && (
-                    <TouchableOpacity
-                      style={[styles.submitBtn, { flex: 1, backgroundColor: '#16A34A', marginTop: 0, marginBottom: 0, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', gap: 4 }]}
-                      onPress={() => {
-                        setDetailModalOpen(false)
-                        onOpenStockIn?.(detailProduct)
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="enter-outline" size={16} color="#FFFFFF" />
-                      <Text style={[styles.submitBtnText, { fontSize: 13 }]}>Stock In</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {Boolean(can('inventory:adjust')) && (
-                    <TouchableOpacity
-                      style={[styles.submitBtn, { flex: 1, backgroundColor: '#0284C7', marginTop: 0, marginBottom: 0, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', gap: 4 }]}
-                      onPress={() => {
-                        setDetailModalOpen(false)
-                        onOpenStockAdjustment?.(detailProduct)
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="options-outline" size={16} color="#FFFFFF" />
-                      <Text style={[styles.submitBtnText, { fontSize: 13 }]}>Adjust</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {Boolean(can('products:update')) && (
-                    <TouchableOpacity
-                      style={[styles.submitBtn, { flex: 1.3, backgroundColor: tokens.colors.primaryContainer, marginTop: 0, marginBottom: 0, paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', gap: 5 }]}
-                      onPress={() => {
-                        setDetailModalOpen(false)
-                        handleOpenEditProduct(detailProduct)
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="pencil" size={15} color="#FFFFFF" />
-                      <Text style={[styles.submitBtnText, { fontSize: 13 }]}>Edit</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
                 {/* Status & Danger Zone Actions */}
                 {Boolean(can('products:update') || can('products:delete')) && (
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 20 }}>
                     {Boolean(can('products:update')) && (
                       <TouchableOpacity
                         style={{
@@ -394,7 +378,7 @@ export function ProductDetailModal({
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: 5,
-                          paddingVertical: 11,
+                          paddingVertical: 10,
                           borderRadius: tokens.borderRadius.input,
                           borderWidth: 1,
                           backgroundColor: '#FFFFFF',
@@ -428,7 +412,7 @@ export function ProductDetailModal({
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: 5,
-                          paddingVertical: 11,
+                          paddingVertical: 10,
                           borderRadius: tokens.borderRadius.input,
                           borderWidth: 1,
                           backgroundColor: '#FFFFFF',
@@ -444,6 +428,52 @@ export function ProductDetailModal({
                   </View>
                 )}
               </ScrollView>
+
+              {/* Sticky Bottom Action Bar — Always accessible without scrolling */}
+              <View style={styles.overviewFooterBar}>
+                {Boolean(can('inventory:restock')) && (
+                  <TouchableOpacity
+                    style={styles.overviewStockInBtn}
+                    onPress={() => {
+                      setDetailModalOpen(false)
+                      onOpenStockIn?.(detailProduct)
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="enter-outline" size={16} color="#16A34A" />
+                    <Text style={styles.overviewStockInBtnText}>Stock In</Text>
+                  </TouchableOpacity>
+                )}
+
+                {Boolean(can('inventory:adjust')) && (
+                  <TouchableOpacity
+                    style={styles.overviewStockAdjBtn}
+                    onPress={() => {
+                      setDetailModalOpen(false)
+                      onOpenStockAdjustment?.(detailProduct)
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="options-outline" size={16} color="#0284C7" />
+                    <Text style={styles.overviewStockAdjBtnText}>Adjust</Text>
+                  </TouchableOpacity>
+                )}
+
+                {Boolean(can('products:update')) && (
+                  <TouchableOpacity
+                    style={styles.overviewEditBtn}
+                    onPress={() => {
+                      setDetailModalOpen(false)
+                      handleOpenEditProduct(detailProduct)
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="pencil" size={15} color="#FFFFFF" />
+                    <Text style={styles.overviewEditBtnText}>Edit Product</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
             ) : null}
           </View>
         </View>

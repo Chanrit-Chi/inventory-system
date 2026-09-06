@@ -12,10 +12,18 @@ import { styles } from './transactions/TransactionsScreen.styles'
 import {
   FilterStatus,
   DateRangeMode,
+  TransactionSortOption,
+  PaymentMethodFilter,
   computeActiveDateBounds,
   isDateWithinBounds,
+  sortOrders,
+  matchesPaymentMethod,
+  matchesChannel,
+  getChannelDisplayName,
+  getChannelPlatformMeta,
 } from './transactions/transactionUtils'
 import { TransactionFilterBar } from './transactions/components/TransactionFilterBar'
+import { TransactionFilterModal } from './transactions/components/TransactionFilterModal'
 import { TransactionDateRangeModal } from './transactions/components/TransactionDateRangeModal'
 import { TransactionListFeed } from './transactions/components/TransactionListFeed'
 
@@ -33,6 +41,10 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
   const [orders, setOrders] = useState<Order[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('ALL')
+  const [sortBy, setSortBy] = useState<TransactionSortOption>('DEFAULT')
+  const [channelFilter, setChannelFilter] = useState<string>('ALL')
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<PaymentMethodFilter>('ALL')
+  const [filterModalOpen, setFilterModalOpen] = useState(false)
   const [dateRange, setDateRange] = useState<DateRangeMode>('all')
   const [singleDate, setSingleDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -57,14 +69,14 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500)
 
-  // Collapsible Search, Date & Status Filters on Scroll
+  // Collapsible Search & Filter Toolbar on Scroll
   const {
     headerTranslateY,
     headerOpacity,
     onScroll,
     onLayoutHeader,
     headerHeight,
-  } = useCollapsibleHeader({ initialHeaderHeight: 145 })
+  } = useCollapsibleHeader({ initialHeaderHeight: 54 })
 
   // Calculate active date bounds for backend and client filtering
   const activeDateBounds = useMemo(() => {
@@ -138,9 +150,44 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
     setRefreshing(false)
   }, [refetchOrders])
 
-  // Filtered orders list (applies status, search, and date bounds)
+  // Unique available sales channels extracted from current orders
+  const availableChannels = useMemo(() => {
+    const options = [{ key: 'ALL', label: 'All Channels' }]
+    const seen = new Set<string>()
+    orders.forEach((o) => {
+      const cleanName = getChannelDisplayName(o)
+      const platform = getChannelPlatformMeta(o.channel, o.channel_id)?.label
+      const key = cleanName || platform || o.channel?.name
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        options.push({ key, label: key })
+      }
+    })
+    return options
+  }, [orders])
+
+  // Count of active filters to show on the Filter button badge
+  const activeFiltersCount = useMemo(() => {
+    let count = 0
+    if (sortBy !== 'DEFAULT') count++
+    if (statusFilter !== 'ALL') count++
+    if (dateRange !== 'all') count++
+    if (channelFilter !== 'ALL') count++
+    if (paymentMethodFilter !== 'ALL') count++
+    return count
+  }, [sortBy, statusFilter, dateRange, channelFilter, paymentMethodFilter])
+
+  const resetFilters = useCallback(() => {
+    setSortBy('DEFAULT')
+    setStatusFilter('ALL')
+    setDateRange('all')
+    setChannelFilter('ALL')
+    setPaymentMethodFilter('ALL')
+  }, [])
+
+  // Filtered and sorted orders list
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
+    const result = orders.filter((order) => {
       const statusLower = (order.status || '').toLowerCase()
 
       // Status filter
@@ -153,6 +200,16 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
 
       // Date range filter
       if (!isDateWithinBounds(order.created_at, activeDateBounds.from, activeDateBounds.to)) {
+        return false
+      }
+
+      // Channel filter
+      if (!matchesChannel(order, channelFilter)) {
+        return false
+      }
+
+      // Payment method filter
+      if (!matchesPaymentMethod(order, paymentMethodFilter)) {
         return false
       }
 
@@ -190,7 +247,17 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
 
       return true
     })
-  }, [orders, statusFilter, searchQuery, activeDateBounds])
+
+    return sortOrders(result, sortBy)
+  }, [
+    orders,
+    statusFilter,
+    searchQuery,
+    activeDateBounds,
+    channelFilter,
+    paymentMethodFilter,
+    sortBy,
+  ])
 
   // Counts for filter badges within current date range
   const counts = useMemo(() => {
@@ -288,20 +355,26 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Animated Collapsible Header (Search, Date Pills, Status Chips) */}
+      {/* Animated Collapsible Header Toolbar */}
       <TransactionFilterBar
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        dateLabel={getDateLabel()}
-        counts={counts}
+        activeFiltersCount={activeFiltersCount}
+        onOpenFilterModal={() => setFilterModalOpen(true)}
         headerTranslateY={headerTranslateY}
         headerOpacity={headerOpacity}
         onLayoutHeader={onLayoutHeader}
-        onOpenCustomModal={handleOpenCustomModal}
+        sortBy={sortBy}
+        onResetSort={() => setSortBy('DEFAULT')}
+        dateRange={dateRange}
+        dateLabel={getDateLabel()}
+        onResetDate={() => setDateRange('all')}
+        statusFilter={statusFilter}
+        onResetStatus={() => setStatusFilter('ALL')}
+        channelFilter={channelFilter}
+        onResetChannel={() => setChannelFilter('ALL')}
+        paymentMethodFilter={paymentMethodFilter}
+        onResetPaymentMethod={() => setPaymentMethodFilter('ALL')}
       />
 
       {/* Main Content Area */}
@@ -322,6 +395,28 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
         onRefresh={onRefresh}
         onSelectOrder={onSelectOrder}
         onClearDateRange={() => setDateRange('all')}
+      />
+
+      {/* Modern Filter & Sort Modal */}
+      <TransactionFilterModal
+        visible={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+        dateLabel={getDateLabel()}
+        onOpenCustomDateModal={handleOpenCustomModal}
+        channelFilter={channelFilter}
+        setChannelFilter={setChannelFilter}
+        availableChannels={availableChannels}
+        paymentMethodFilter={paymentMethodFilter}
+        setPaymentMethodFilter={setPaymentMethodFilter}
+        counts={counts}
+        onResetAll={resetFilters}
+        activeFiltersCount={activeFiltersCount}
       />
 
       {/* Custom Date Range Calendar Modal */}

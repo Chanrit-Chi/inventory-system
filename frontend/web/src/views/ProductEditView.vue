@@ -292,8 +292,15 @@ function generateVariantsFromAttributes() {
     const varName = comboNames.join(' / ')
     const slug = comboNames.map((n: string) => n.toUpperCase().replace(/\s+/g, '-')).join('-')
 
-    // Preserve existing variant if already matched by name
-    const existing = variantRows.value.find(v => v.name.toLowerCase() === varName.toLowerCase())
+    // Preserve existing variant if already matched by name or attribute value tokens (order-independent)
+    const comboTokens = comboNames.map((n: string) => n.trim().toLowerCase()).sort().join('|')
+    const existing = variantRows.value.find(v => {
+      if (v.name.toLowerCase() === varName.toLowerCase()) return true
+      const existingTokens = (v.name || '').split(/[\/\-,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean).sort().join('|')
+      if (existingTokens && existingTokens === comboTokens) return true
+      const avTokens = (v.attributeValues || []).map((av: any) => (av.value_name || av.value || '').trim().toLowerCase()).filter(Boolean).sort().join('|')
+      return avTokens && avTokens === comboTokens
+    })
     if (existing) {
       return existing
     }

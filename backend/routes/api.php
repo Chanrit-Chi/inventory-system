@@ -153,7 +153,7 @@ Route::prefix('v1')->group(function () {
         // ============================================================
         // 3. Store Operations & Inventory Management (Manager, Admin, Super Admin)
         // ============================================================
-        Route::middleware('role:SUPER_ADMIN,ADMIN,MANAGER,products:*,inventory:*,expenses:*,settings:*')->group(function () {
+        Route::middleware('role:SUPER_ADMIN,ADMIN,MANAGER,products:*,inventory:*,expenses:*,settings:*,attributes:*,attributes:manage,categories:*,categories:manage')->group(function () {
             // Media & Asset Uploads (Cloudflare R2 / Storage)
             Route::post('/media/upload',                         [MediaController::class, 'upload']);
 

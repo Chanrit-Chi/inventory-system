@@ -208,6 +208,7 @@ export const productSchema = z.object({
   simpleStock: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined ? String(v) : '0')),
   
   // Variable fields
+  variantInitialStock: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined && v !== '' ? String(v) : '10')),
   attributesList: z.array(productAttributeSchema).optional().default([]),
   variantsList: z.array(productVariantSchema).optional().default([]),
 })

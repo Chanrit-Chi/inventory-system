@@ -4,7 +4,7 @@ import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import { useBranding } from '../context/BrandingContext'
-import { getChannelPlatformMeta } from './TransactionCard'
+import { getChannelPlatformMeta, getChannelCleanShopName } from './TransactionCard'
 import type { Order } from '../types'
 import ViewShot from 'react-native-view-shot'
 
@@ -205,7 +205,7 @@ export const DigitalReceipt = forwardRef<ViewShot, DigitalReceiptProps>((props, 
                   channelMeta?.color ? { color: channelMeta.color } : null,
                 ]}
               >
-                {channelName || channelMeta?.label || 'Store POS'}
+                {getChannelCleanShopName(channelName) || channelMeta?.label || 'Store POS'}
               </Text>
             </View>
           ) : (

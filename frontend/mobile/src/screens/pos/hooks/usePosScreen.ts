@@ -16,7 +16,7 @@ import {
   updateOrder,
 } from '../../../api/endpoints'
 import { useAuth } from '../../../context/AuthContext'
-import { useProducts, useInfiniteProducts } from '../../../hooks/queries/useProductsQuery'
+import { useProducts, useInfiniteProducts, useCategories } from '../../../hooks/queries/useProductsQuery'
 import { useCart } from '../../../hooks/useCart'
 import { useBarcodeScan } from '../../../hooks/useBarcodeScan'
 import { useCustomerLookup } from '../../../hooks/useCustomerLookup'
@@ -213,7 +213,21 @@ export function usePosScreen({
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearchQuery = useDebounce(searchQuery, 250)
   const [selectedCategory, setSelectedCategory] = useState('All')
-  const [categories, setCategories] = useState<string[]>([])
+
+  // Categories from TanStack Query
+  const { data: rawCategories, refetch: refetchCategories } = useCategories()
+  const categories = useMemo(() => {
+    const list = (rawCategories ?? []).map((c) => c.name).filter(Boolean)
+    return ['All', ...Array.from(new Set(list))]
+  }, [rawCategories])
+
+  const resolvedCategoryId = useMemo(() => {
+    if (selectedCategory === 'All') return undefined
+    const match = rawCategories?.find(
+      (c) => c.name.toLowerCase() === selectedCategory.toLowerCase()
+    )
+    return match?.id
+  }, [selectedCategory, rawCategories])
 
   // Collapsible Search & Category Header on Scroll
   const {
@@ -224,11 +238,16 @@ export function usePosScreen({
     headerHeight,
   } = useCollapsibleHeader({ initialHeaderHeight: 110 })
 
-  // Products state & TanStack Query sync
-  const [products, setProducts] = useState<Product[]>([])
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
-  const [productsError, setProductsError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
+  // Product filters for server query
+  const posProductFilters = useMemo(
+    () => ({
+      search: debouncedSearchQuery.trim() || undefined,
+      category_id: resolvedCategoryId,
+      is_active: true,
+      per_page: 50,
+    }),
+    [debouncedSearchQuery, resolvedCategoryId]
+  )
 
   const {
     data: infiniteProductsData,
@@ -238,10 +257,26 @@ export function usePosScreen({
     hasNextPage: hasMoreProducts,
     isFetchingNextPage: loadingMoreProducts,
     refetch: refetchProducts,
-  } = useInfiniteProducts({ per_page: 50 })
+  } = useInfiniteProducts(posProductFilters)
 
-  const queryProducts = useMemo(() => {
-    return infiniteProductsData?.pages?.flatMap((page) => page.data) ?? []
+  const products = useMemo(() => {
+    if (!infiniteProductsData?.pages) return []
+    const items: Product[] = []
+    const seen = new Set<string>()
+    for (const page of infiniteProductsData.pages) {
+      const pageItems: Product[] = Array.isArray(page)
+        ? page
+        : Array.isArray(page?.data)
+        ? page.data
+        : (page as any)?.data?.data ?? []
+      for (const item of pageItems) {
+        if (item && item.id && !seen.has(item.id)) {
+          seen.add(item.id)
+          items.push(item)
+        }
+      }
+    }
+    return items
   }, [infiniteProductsData])
 
   const loadMoreProducts = useCallback(() => {
@@ -250,22 +285,9 @@ export function usePosScreen({
     }
   }, [hasMoreProducts, loadingMoreProducts, fetchNextProductsPage])
 
-  // Auto-sync products and categories when query cache updates
-  const prevRawProductsRef = useRef<Product[] | undefined>(undefined)
-  useEffect(() => {
-    if (queryProducts && queryProducts !== prevRawProductsRef.current) {
-      prevRawProductsRef.current = queryProducts
-      setProducts(queryProducts)
-      const cats = Array.from(
-        new Set(
-          queryProducts
-            .map((p) => p.category?.name)
-            .filter((c): c is string => Boolean(c))
-        )
-      )
-      setCategories(['All', ...cats])
-    }
-  }, [queryProducts])
+  const isLoadingProducts = isLoadingQueryProducts
+  const productsError = queryProductsError ? 'Unable to load products. Please check network.' : null
+  const [refreshing, setRefreshing] = useState(false)
 
   // Channels state
   const [channels, setChannels] = useState<SalesChannel[]>([])
@@ -528,33 +550,14 @@ export function usePosScreen({
   }, [cartHook.checkoutPreset, setValue, setName, setPhone])
 
   const loadData = useCallback(async () => {
-    setIsLoadingProducts(true)
-    setProductsError(null)
     try {
-      const [prodRes, chanRes, delCoRes, delZnRes, bankRes, catRes, staffRes] = await Promise.allSettled([
-        getProducts({ per_page: 200 }),
+      const [chanRes, delCoRes, delZnRes, bankRes, staffRes] = await Promise.allSettled([
         getSalesChannels(),
         fetchDeliveryCompanies(),
         fetchDeliveryZones(),
         fetchBankAccounts(),
-        fetchCategories(),
         fetchStaffMembers(),
       ])
-
-      if (prodRes.status === 'fulfilled' && prodRes.value?.data) {
-        const list = prodRes.value.data
-        setProducts(list)
-        const cats = Array.from(
-          new Set(
-            list
-              .map((p) => p.category?.name)
-              .filter((c): c is string => Boolean(c))
-          )
-        )
-        setCategories(['All', ...cats])
-      } else if (prodRes.status === 'rejected') {
-        setProductsError('Unable to load products. Please check network.')
-      }
 
       if (chanRes.status === 'fulfilled') {
         const chanList: SalesChannel[] = Array.isArray(chanRes.value)
@@ -591,13 +594,8 @@ export function usePosScreen({
         const defBank = bankRes.value.data.find((b) => b.isDefault) || bankRes.value.data[0] || null
         setSelectedBank(defBank)
       }
-
-      if (catRes.status === 'fulfilled' && catRes.value?.data) {
-        const catNames = catRes.value.data.map((c) => c.name)
-        setCategories((prev) => Array.from(new Set([...prev, ...catNames])))
-      }
-    } finally {
-      setIsLoadingProducts(false)
+    } catch {
+      // Non-blocking for auxiliary POS data
     }
   }, [setValue])
 
@@ -606,13 +604,15 @@ export function usePosScreen({
     try {
       await Promise.allSettled([
         refetchProducts(),
+        refetchCategories(),
         loadData(),
         queryClient.invalidateQueries({ queryKey: queryKeys.products.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories.all }),
       ])
     } finally {
       setRefreshing(false)
     }
-  }, [refetchProducts, loadData, queryClient])
+  }, [refetchProducts, refetchCategories, loadData, queryClient])
 
   useEffect(() => {
     loadData()
@@ -623,19 +623,23 @@ export function usePosScreen({
     return products.filter((p) => {
       const matchCat =
         selectedCategory === 'All' ||
-        p.category?.name === selectedCategory
+        p.category?.name?.toLowerCase() === selectedCategory.toLowerCase()
       if (!matchCat) return false
 
       if (!debouncedSearchQuery.trim()) return true
-      const q = debouncedSearchQuery.toLowerCase()
-      const matchName = p.name.toLowerCase().includes(q)
+      const q = debouncedSearchQuery.toLowerCase().trim()
+      const matchName = p.name?.toLowerCase().includes(q)
       const matchSku = p.sku?.toLowerCase().includes(q)
       const matchBarcode = p.barcode?.toLowerCase().includes(q)
       const matchVariant = p.variants?.some(
         (v) =>
-          v.sku.toLowerCase().includes(q) ||
+          v.sku?.toLowerCase().includes(q) ||
+          v.name?.toLowerCase().includes(q) ||
           v.barcode?.toLowerCase().includes(q) ||
-          v.attribute_values?.some((av) => av.value_name.toLowerCase().includes(q))
+          v.attribute_values?.some(
+            (av) =>
+              av.value_name?.toLowerCase().includes(q)
+          )
       )
       return matchName || matchSku || matchBarcode || matchVariant
     })

@@ -17,7 +17,7 @@ export const ProductCatalogRow = React.memo(({ product, onPress, onQuickScanBarc
     (product.variants && product.variants.length > 1) ||
     (product.variants?.[0]?.attribute_values && product.variants[0].attribute_values.length > 0)
   const totalStock =
-    product.variants?.reduce((sum, v) => sum + v.quantity_on_hand, 0) || 0
+    product.variants?.reduce((sum, v) => sum + (Number(v.quantity_on_hand) || 0), 0) || 0
   const isLowStock = totalStock <= (product.default_reorder_level || 10)
 
   // Extract attribute names

@@ -20,6 +20,8 @@ import { ProductPickerModal, SelectedProductItem } from './ProductPickerModal'
 import { ProductGroupHeader } from './ProductGroupHeader'
 import { CopyableBadge } from './CopyableBadge'
 import { useBarcodeScan } from '../hooks/useBarcodeScan'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../api/queryKeys'
 import type {
   Product,
   ProductVariant,
@@ -75,6 +77,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
   onSave,
   onSuccess,
 }) => {
+  const queryClient = useQueryClient()
   const [items, setItems] = useState<StockAdjustmentItem[]>([])
   const [globalReason, setGlobalReason] = useState<StockAdjustmentReason>('Audit')
   const [notes, setNotes] = useState('')
@@ -426,6 +429,8 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
 
     setIsSubmitting(true)
     try {
+      const adjustedVariantsList: Array<{ variant_id: string; new_quantity: number }> = []
+
       for (const item of items) {
         if (item.difference !== 0) {
           const payload: StockAdjustmentPayload = {
@@ -450,8 +455,55 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               notes: notes.trim() || undefined,
             })
           }
+
+          adjustedVariantsList.push({ variant_id: item.variant_id, new_quantity: item.new_quantity })
         }
       }
+
+      // Optimistically update TanStack query cache for all product lists
+      if (adjustedVariantsList.length > 0) {
+        queryClient.setQueriesData<any>(
+          { queryKey: queryKeys.products.all },
+          (oldData: any) => {
+            if (!oldData) return oldData
+            const updateProducts = (prods: Product[]): Product[] => {
+              return prods.map((prod) => {
+                const hasVariant = prod.variants?.some((v) =>
+                  adjustedVariantsList.some((it) => it.variant_id === v.id)
+                )
+                if (!hasVariant) return prod
+                return {
+                  ...prod,
+                  variants: prod.variants?.map((v) => {
+                    const match = adjustedVariantsList.find((it) => it.variant_id === v.id)
+                    return match ? { ...v, quantity_on_hand: match.new_quantity } : v
+                  }),
+                }
+              })
+            }
+
+            if (Array.isArray(oldData.pages)) {
+              return {
+                ...oldData,
+                pages: oldData.pages.map((page: any) => {
+                  const list = Array.isArray(page) ? page : page?.data
+                  if (!Array.isArray(list)) return page
+                  const updated = updateProducts(list)
+                  return Array.isArray(page) ? updated : { ...page, data: updated }
+                }),
+              }
+            }
+            if (Array.isArray(oldData)) {
+              return updateProducts(oldData)
+            }
+            return oldData
+          }
+        )
+      }
+
+      // Invalidate queries to fetch latest authoritative server state
+      await queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all })
 
       Alert.alert(
         'Stock Adjusted Successfully',
