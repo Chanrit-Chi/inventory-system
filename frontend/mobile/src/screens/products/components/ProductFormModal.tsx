@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
+  useWindowDimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
@@ -104,6 +105,9 @@ export function ProductFormModal({
     handleConfirmRemoveVariant,
     handleBatchApplyStockToAll,
   } = form
+  const { height: windowHeight } = useWindowDimensions()
+  const sheetHeight = Math.round(windowHeight * 0.90)
+
   const onFormError = (errors: Record<string, { message?: string }>) => {
     const firstKey = Object.keys(errors)[0]
     const msg = errors[firstKey]?.message || 'Please review required fields in product form.'
@@ -113,7 +117,18 @@ export function ProductFormModal({
   return (
     <Modal visible={productModalOpen} transparent animationType="slide" onRequestClose={() => setProductModalOpen(false)}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalSheet, { height: '90%', maxHeight: '94%', paddingBottom: 0, overflow: 'hidden' }]}>
+        <View
+          style={[
+            styles.modalSheet,
+            {
+              height: sheetHeight,
+              maxHeight: sheetHeight,
+              width: '100%',
+              paddingBottom: 0,
+              overflow: 'hidden',
+            },
+          ]}
+        >
           <View style={styles.sheetHeader}>
             <Text style={styles.modalTitle}>{editingProduct ? 'Edit Product' : 'New Product'}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

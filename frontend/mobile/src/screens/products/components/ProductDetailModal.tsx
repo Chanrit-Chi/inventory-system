@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, Modal, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native'
+import { View, Text, Modal, ScrollView, TouchableOpacity, Alert, Switch, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { tokens } from '../../../theme/tokens'
@@ -36,9 +36,24 @@ export function ProductDetailModal({
   onOpenStockAdjustment,
 }: ProductDetailModalProps) {
   const { can } = usePermissions()
-  return (      <Modal visible={detailModalOpen} transparent animationType="slide" onRequestClose={() => setDetailModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { height: '88%', maxHeight: '92%', paddingBottom: 0, overflow: 'hidden' }]}>
+  const { height: windowHeight } = useWindowDimensions()
+  const sheetHeight = Math.round(windowHeight * 0.88)
+
+  return (
+    <Modal visible={detailModalOpen} transparent animationType="slide" onRequestClose={() => setDetailModalOpen(false)}>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalSheet,
+            {
+              height: sheetHeight,
+              maxHeight: sheetHeight,
+              width: '100%',
+              paddingBottom: 0,
+              overflow: 'hidden',
+            },
+          ]}
+        >
             <View style={styles.sheetHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>Product Overview</Text>

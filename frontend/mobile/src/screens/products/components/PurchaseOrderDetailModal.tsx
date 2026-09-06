@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, Modal, ScrollView, TouchableOpacity } from 'react-native'
+import { View, Text, Modal, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../ProductsScreen.styles'
@@ -20,6 +20,9 @@ export function PurchaseOrderDetailModal({
   selectedPoDetail,
   handleMarkPoReceived,
 }: PurchaseOrderDetailModalProps) {
+  const { height: windowHeight } = useWindowDimensions()
+  const maxSheetHeight = Math.round(windowHeight * 0.90)
+
   if (!selectedPoDetail) return null
 
   const isReceived = selectedPoDetail.status === 'RECEIVED'
@@ -52,7 +55,7 @@ export function PurchaseOrderDetailModal({
       onRequestClose={() => setPoDetailModalOpen(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalSheet, { maxHeight: '90%', flexShrink: 1, overflow: 'hidden' }]}>
+        <View style={[styles.modalSheet, { maxHeight: maxSheetHeight, flexShrink: 1, overflow: 'hidden' }]}>
           {/* Header */}
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
