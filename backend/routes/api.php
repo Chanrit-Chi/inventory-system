@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AppVersionController;
 use App\Http\Controllers\Api\V1\AttributeController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -58,6 +59,7 @@ Route::prefix('v1')->group(function () {
     // Public Endpoints (No Authentication Required)
     // ----------------------------------------------------------------
     Route::get('/health', [HealthController::class, 'check']);
+    Route::get('/app/version', [AppVersionController::class, 'check']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::get('/settings/branding', [StoreSettingController::class, 'getBranding']);
     Route::get('/orders/{id}/receipt', [OrderController::class, 'receipt']);

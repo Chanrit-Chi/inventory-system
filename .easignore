@@ -1,9 +1,19 @@
 backend/
 frontend/web/
 tests/
+memory/
 .agents/
 .claude/
 node_modules/
 .expo/
 dist/
 *.log
+
+# Native folders and build artifacts (prevents uploading 1.8GB build cache)
+android/
+ios/
+frontend/mobile/android/
+frontend/mobile/ios/
+**/build/
+**/.gradle/
+**/.cxx/

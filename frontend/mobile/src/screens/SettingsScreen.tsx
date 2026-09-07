@@ -30,6 +30,7 @@ import { PrinterDeviceModal } from './settings/components/PrinterDeviceModal'
 import { StoreBrandingSection } from './settings/components/StoreBrandingSection'
 import { SystemDiagnosticsSection, HealthStatus } from './settings/components/SystemDiagnosticsSection'
 import { UserAccountSection } from './settings/components/UserAccountSection'
+import { useAppUpdates } from '../hooks/useAppUpdates'
 
 export interface SettingsScreenProps {
   onNavigate?: (tab: TabType) => void
@@ -42,6 +43,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
   const { showToast } = useToast()
   const { currentUser, logout } = useAuth()
   const [loggingOut, setLoggingOut] = useState(false)
+  const appUpdates = useAppUpdates()
   const {
     pendingCount,
     isSyncing,
@@ -428,6 +430,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = () => {
         isSyncing={isSyncing}
         onCheckBackendHealth={checkBackendHealth}
         onSyncOffline={handleSyncOffline}
+        updateState={appUpdates}
+        onCheckForUpdates={appUpdates.checkForUpdate}
+        onReloadApp={appUpdates.reloadApp}
       />
 
       {/* Account & Session Management Section */}

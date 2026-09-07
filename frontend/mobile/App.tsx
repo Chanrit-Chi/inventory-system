@@ -85,6 +85,7 @@ import { queryClient, asyncStoragePersister } from './src/api/queryClient'
 import { queryKeys } from './src/api/queryKeys'
 import { ErrorBoundary } from './src/components/ErrorBoundary'
 import { NotificationHandler } from './src/components/NotificationHandler'
+import { AppUpdateHandler } from './src/components/AppUpdateHandler'
 import { ToastProvider } from './src/context/ToastContext'
 
 export default function App() {
@@ -102,6 +103,7 @@ export default function App() {
                   <ModalManagerProvider>
                     <ToastProvider>
                       <NotificationHandler />
+                      <AppUpdateHandler />
                       <AppShell />
                     </ToastProvider>
                   </ModalManagerProvider>

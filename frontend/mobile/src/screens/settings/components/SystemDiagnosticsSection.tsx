@@ -38,6 +38,17 @@ export interface SystemDiagnosticsSectionProps {
   isSyncing: boolean
   onCheckBackendHealth: () => void
   onSyncOffline: () => void
+  updateState?: {
+    isEnabled: boolean
+    isChecking: boolean
+    updateAvailable: boolean
+    isDownloaded: boolean
+    channel: string | null
+    lastChecked: string | null
+    updateId?: string | null
+  }
+  onCheckForUpdates?: () => void
+  onReloadApp?: () => void
 }
 
 export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> = ({
@@ -47,6 +58,9 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
   isSyncing,
   onCheckBackendHealth,
   onSyncOffline,
+  updateState,
+  onCheckForUpdates,
+  onReloadApp,
 }) => {
   const { isDeviceOnline, isBackendReachable } = useNetworkStatus()
   const appVersion = Constants.expoConfig?.version || '1.0.0'
@@ -192,6 +206,84 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* App Auto-Update (OTA) */}
+        <View style={styles.diagnosticRow}>
+          <View style={styles.diagnosticLeft}>
+            <View
+              style={[
+                styles.diagnosticIconCircle,
+                updateState?.isDownloaded
+                  ? styles.diagWarning
+                  : updateState?.isEnabled
+                  ? styles.diagSuccess
+                  : styles.diagNeutral,
+              ]}
+            >
+              <Ionicons
+                name={
+                  updateState?.isDownloaded
+                    ? 'cloud-done-outline'
+                    : updateState?.isChecking
+                    ? 'sync-outline'
+                    : 'cloud-download-outline'
+                }
+                size={18}
+                color={
+                  updateState?.isDownloaded
+                    ? tokens.colors.statusPending
+                    : updateState?.isEnabled
+                    ? tokens.colors.statusSuccess
+                    : tokens.colors.secondary
+                }
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.diagnosticLabel}>App Auto-Update (OTA)</Text>
+              <Text style={styles.diagnosticSub}>
+                {updateState?.isChecking
+                  ? 'Checking for updates on Expo cloud...'
+                  : updateState?.isDownloaded
+                  ? 'Update downloaded • Restart to apply'
+                  : updateState?.updateAvailable
+                  ? 'Downloading latest update...'
+                  : updateState?.isEnabled
+                  ? `Channel: ${updateState.channel || 'production'} • Latest bundle active${
+                      updateState.lastChecked ? ` (${updateState.lastChecked})` : ''
+                    }`
+                  : 'Local development build (OTA inactive)'}
+              </Text>
+            </View>
+          </View>
+
+          {updateState?.isDownloaded ? (
+            <TouchableOpacity
+              style={styles.syncNowBtn}
+              onPress={onReloadApp}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.syncNowBtnText}>Restart</Text>
+            </TouchableOpacity>
+          ) : (
+            onCheckForUpdates && (
+              <TouchableOpacity
+                style={styles.refreshHealthBtn}
+                onPress={onCheckForUpdates}
+                disabled={updateState?.isChecking}
+                activeOpacity={0.7}
+                accessibilityLabel="Check for updates"
+              >
+                {updateState?.isChecking ? (
+                  <ActivityIndicator size="small" color={tokens.colors.primaryContainer} />
+                ) : (
+                  <Ionicons name="refresh" size={16} color={tokens.colors.primaryContainer} />
+                )}
+              </TouchableOpacity>
+            )
+          )}
         </View>
       </View>
     </>

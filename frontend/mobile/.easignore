@@ -8,3 +8,6 @@ ios/
 .agents/
 .claude/
 *.log
+**/build/
+**/.gradle/
+**/.cxx/
