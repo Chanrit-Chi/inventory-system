@@ -45,7 +45,6 @@
       ]
     },
     "androidNavigationBar": {
-      "visible": "always",
       "barStyle": "dark-content",
       "backgroundColor": "#FFFFFF"
     },
@@ -76,7 +75,10 @@
       "url": "https://u.expo.dev/f403c66d-8e4b-49a5-bc41-13de8ea312f6",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      }
     },
     "extra": {
       "eas": {

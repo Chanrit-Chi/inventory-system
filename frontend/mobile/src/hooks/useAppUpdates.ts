@@ -44,6 +44,13 @@ export function useAppUpdates() {
       }
 
       try {
+        console.log('[useAppUpdates] checkForUpdate initiated. Updates info:', {
+          isEnabled: Updates.isEnabled,
+          channel: Updates.channel,
+          runtimeVersion: Updates.runtimeVersion,
+          updateId: Updates.updateId,
+          isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+        })
         setState((prev) => ({ ...prev, isChecking: true }))
 
         const checkResult = await Updates.checkForUpdateAsync()
@@ -99,12 +106,13 @@ export function useAppUpdates() {
           }
         }
       } catch (error) {
+        console.error('[useAppUpdates] checkForUpdateAsync error:', error)
         setState((prev) => ({ ...prev, isChecking: false }))
         if (manual) {
           const errMessage = error instanceof Error ? error.message : 'Unknown error'
           showToast(`Update check failed: ${errMessage}`, {
             type: 'error',
-            duration: 4000,
+            duration: 5000,
           })
         }
       }

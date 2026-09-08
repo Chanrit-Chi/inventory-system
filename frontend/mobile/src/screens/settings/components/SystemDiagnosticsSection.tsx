@@ -251,7 +251,7 @@ export const SystemDiagnosticsSection: React.FC<SystemDiagnosticsSectionProps> =
                   : updateState?.updateAvailable
                   ? 'Downloading latest update...'
                   : updateState?.isEnabled
-                  ? `Channel: ${updateState.channel || 'production'} • Latest bundle active${
+                  ? `Channel: ${updateState.channel || 'production'} • Live OTA Active ✓${
                       updateState.lastChecked ? ` (${updateState.lastChecked})` : ''
                     }`
                   : 'Local development build (OTA inactive)'}
