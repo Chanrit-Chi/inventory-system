@@ -37,6 +37,7 @@ import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vu
 interface Product {
   id: string
   name: string
+  image_url?: string | null
   category?: { name: string }
   variants: Variant[]
 }
@@ -431,12 +432,23 @@ onMounted(() => {
               >
                 <!-- Product, Category, Variant Count & Expand in ONE horizontal line -->
                 <td class="px-3 py-2.5 min-w-0">
-                  <div class="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
+                  <div class="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
                     <div class="w-5.5 h-5.5 rounded-md bg-card border border-border flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:border-cta transition-all shrink-0 shadow-2xs">
                       <ChevronDown
                         class="w-3.5 h-3.5 transition-transform duration-200"
                         :class="{ 'rotate-180 text-primary': isExpanded(product.id) }"
                       />
+                    </div>
+                    <!-- Product Photo Thumbnail -->
+                    <div class="w-8 h-8 rounded-lg bg-surface-subtle border border-border flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                      <img
+                        v-if="product.image_url"
+                        :src="product.image_url"
+                        :alt="product.name"
+                        class="w-full h-full object-cover"
+                        @error="($event.target as HTMLElement).style.display='none'"
+                      />
+                      <Package v-else :size="15" class="text-muted-foreground/50" />
                     </div>
                     <span class="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
                       {{ product.name }}
