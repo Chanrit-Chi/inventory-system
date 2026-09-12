@@ -36,6 +36,7 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -129,7 +130,7 @@ const calculateTotals = () => {
   }
 }
 
-const fetchQuotations = async () => {
+const fetchQuotations = async (append = false) => {
   try {
     const filters = {
       page: page.value,
@@ -137,10 +138,23 @@ const fetchQuotations = async () => {
       search: search.value.trim() || undefined,
       status: selectedStatus.value === 'ALL' ? undefined : selectedStatus.value,
     }
-    await quotationStore.fetchQuotations(filters)
+    await quotationStore.fetchQuotations(filters, append)
   } catch {
     toast.error('Failed to load quotations')
   }
+}
+
+function handleLoadMore() {
+  if (quotationStore.loading) return
+  if (quotationStore.meta && page.value < quotationStore.meta.last_page) {
+    page.value++
+    fetchQuotations(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  fetchQuotations(false)
 }
 
 const openCreateModal = () => {
@@ -313,7 +327,7 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
-        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="quotationStore.loading" @click="fetchQuotations">
+        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="quotationStore.loading" @click="onRefresh">
           <RefreshCw :size="14" :class="{ 'animate-spin': quotationStore.loading }" />
           <span>Refresh</span>
         </Button>
@@ -376,7 +390,7 @@ onMounted(() => {
         <select
           v-model="selectedStatus"
           class="h-9 px-3 text-sm bg-surface border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-cta/30 focus:border-cta"
-          @change="fetchQuotations"
+          @change="onRefresh"
         >
           <option value="ALL">All Statuses</option>
           <option value="DRAFT">Draft</option>
@@ -462,6 +476,17 @@ onMounted(() => {
           </TableBody>
         </Table>
       </div>
+
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="quotationStore.loading"
+        :has-more="Boolean(quotationStore.meta && page < quotationStore.meta.last_page)"
+        :total-loaded="quotationStore.quotations.length"
+        :total="quotationStore.meta?.total ?? null"
+        :error="quotationStore.error"
+        @load-more="handleLoadMore"
+        @retry="fetchQuotations(page > 1)"
+      />
     </div>
 
     <!-- Create Quotation Modal Dialog -->

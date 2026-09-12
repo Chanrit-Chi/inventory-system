@@ -9,8 +9,6 @@ import {
   Calendar,
   Layers,
   PieChart,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
   CheckCircle2,
 } from 'lucide-vue-next'
@@ -31,6 +29,7 @@ import {
   Skeleton,
   DatePicker,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const expenseStore = useExpenseStore()
@@ -121,7 +120,7 @@ const avgExpenseValue = computed(() => {
   return expenseStore.kpis.totalAll / expenseStore.expenses.length
 })
 
-async function loadExpenses() {
+async function loadExpenses(append = false) {
   const params: Record<string, unknown> = {
     page: page.value,
   }
@@ -130,12 +129,29 @@ async function loadExpenses() {
   if (filterDateFrom.value) params.date_from = filterDateFrom.value
   if (filterDateTo.value) params.date_to = filterDateTo.value
 
-  await expenseStore.fetchExpenses(params)
+  try {
+    await expenseStore.fetchExpenses(params, append)
+  } catch {
+    // Handled in store
+  }
+}
+
+function handleLoadMore() {
+  if (expenseStore.loading) return
+  if (expenseStore.meta && page.value < expenseStore.meta.last_page) {
+    page.value++
+    loadExpenses(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  loadExpenses(false)
 }
 
 function onFilterChange() {
   page.value = 1
-  loadExpenses()
+  loadExpenses(false)
 }
 
 function resetFilters() {
@@ -144,7 +160,7 @@ function resetFilters() {
   filterDateFrom.value = ''
   filterDateTo.value = ''
   page.value = 1
-  loadExpenses()
+  loadExpenses(false)
 }
 
 async function handleRecordExpense() {
@@ -219,7 +235,7 @@ onMounted(() => {
         size="sm"
         class="h-9 px-3 gap-1.5 text-xs"
         :disabled="expenseStore.loading"
-        @click="loadExpenses"
+        @click="onRefresh"
       >
         <RefreshCw :size="14" :class="{ 'animate-spin': expenseStore.loading }" />
         <span>Refresh</span>
@@ -487,37 +503,16 @@ onMounted(() => {
             </Table>
           </div>
 
-          <!-- Pagination -->
-          <div
-            v-if="expenseStore.meta && expenseStore.meta.last_page > 1"
-            class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-          >
-            <span class="font-mono">
-              Page {{ page }} of {{ expenseStore.meta.last_page }}
-            </span>
-            <div class="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 px-2.5 text-xs gap-1"
-                :disabled="page <= 1 || expenseStore.loading"
-                @click="page--; loadExpenses()"
-              >
-                <ChevronLeft :size="14" />
-                <span>Previous</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-8 px-2.5 text-xs gap-1"
-                :disabled="page >= expenseStore.meta.last_page || expenseStore.loading"
-                @click="page++; loadExpenses()"
-              >
-                <span>Next</span>
-                <ChevronRight :size="14" />
-              </Button>
-            </div>
-          </div>
+          <!-- Infinite Scroll & Load More Trigger -->
+          <LoadMoreTrigger
+            :loading="expenseStore.loading"
+            :has-more="Boolean(expenseStore.meta && page < expenseStore.meta.last_page)"
+            :total-loaded="expenseStore.expenses.length"
+            :total="expenseStore.meta?.total ?? null"
+            :error="expenseStore.error"
+            @load-more="handleLoadMore"
+            @retry="loadExpenses(page > 1)"
+          />
         </div>
       </div>
     </div>

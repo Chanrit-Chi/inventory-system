@@ -13,8 +13,6 @@ import {
   DollarSign,
   CheckCircle2,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Check,
   User,
@@ -44,6 +42,7 @@ import {
   Skeleton,
   DatePicker,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const orderStore = useOrderStore()
@@ -88,7 +87,7 @@ const pendingOrdersCount = computed(() => {
   return list.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length
 })
 
-async function loadOrders() {
+async function loadOrders(append = false) {
   const params: Record<string, unknown> = {
     page: page.value,
   }
@@ -99,7 +98,24 @@ async function loadOrders() {
   if (dateFrom.value) params.date_from = dateFrom.value
   if (dateTo.value) params.date_to = dateTo.value
 
-  await orderStore.fetchOrders(params)
+  try {
+    await orderStore.fetchOrders(params, append)
+  } catch {
+    // Handled in store
+  }
+}
+
+function handleLoadMore() {
+  if (orderStore.loading) return
+  if (orderStore.meta && page.value < orderStore.meta.last_page) {
+    page.value++
+    loadOrders(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  loadOrders(false)
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -107,13 +123,13 @@ function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     page.value = 1
-    loadOrders()
+    loadOrders(false)
   }, 300)
 }
 
 function onFilterChange() {
   page.value = 1
-  loadOrders()
+  loadOrders(false)
 }
 
 function resetFilters() {
@@ -123,7 +139,7 @@ function resetFilters() {
   dateFrom.value = ''
   dateTo.value = ''
   page.value = 1
-  loadOrders()
+  loadOrders(false)
 }
 
 function openOrderDetails(orderId: string) {
@@ -295,7 +311,7 @@ defineExpose({
           size="sm"
           class="h-9 px-3 gap-1.5 text-xs"
           :disabled="orderStore.loading"
-          @click="loadOrders"
+          @click="onRefresh"
         >
           <RefreshCw :size="14" :class="{ 'animate-spin': orderStore.loading }" />
           <span>Refresh</span>
@@ -408,7 +424,7 @@ defineExpose({
         <AlertCircle :size="16" />
         <span>{{ orderStore.error }}</span>
       </div>
-      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadOrders">Retry</Button>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="onRefresh">Retry</Button>
     </Alert>
 
     <!-- Orders Table Container -->
@@ -485,37 +501,16 @@ defineExpose({
         </Table>
       </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="orderStore.meta && orderStore.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ page }} of {{ orderStore.meta.last_page }} ({{ orderStore.meta.total }} total)
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page <= 1 || orderStore.loading"
-            @click="page--; loadOrders()"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page >= orderStore.meta.last_page || orderStore.loading"
-            @click="page++; loadOrders()"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="orderStore.loading"
+        :has-more="Boolean(orderStore.meta && page < orderStore.meta.last_page)"
+        :total-loaded="orderStore.orders.length"
+        :total="orderStore.meta?.total ?? null"
+        :error="orderStore.error"
+        @load-more="handleLoadMore"
+        @retry="loadOrders(page > 1)"
+      />
     </div>
 
     <!-- Order Detail Dialog -->

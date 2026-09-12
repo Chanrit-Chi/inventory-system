@@ -29,12 +29,18 @@ export const useSupplierStore = defineStore('supplier', () => {
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
-  async function fetchSuppliers(filters: SupplierFilters = {}) {
+  async function fetchSuppliers(filters: SupplierFilters = {}, append = false) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/suppliers', { params: filters })
-      suppliers.value = res.data.data || []
+      const incoming = res.data.data || []
+      if (append) {
+        const existingIds = new Set(suppliers.value.map(s => s.id))
+        suppliers.value = [...suppliers.value, ...incoming.filter((s: Supplier) => !existingIds.has(s.id))]
+      } else {
+        suppliers.value = incoming
+      }
       meta.value = res.data.meta
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch suppliers'

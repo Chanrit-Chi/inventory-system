@@ -24,7 +24,7 @@ export class ApiError extends Error {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'https://inventory-backend-api.fly.dev/api/v1',
-  timeout: 15000, // 15s default timeout (matches mobile)
+  timeout: 30000, // 30s timeout handles Fly.dev cold boots
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',

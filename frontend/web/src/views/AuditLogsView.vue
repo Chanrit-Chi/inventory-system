@@ -6,8 +6,6 @@ import {
   ShieldAlert,
   Search,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   Activity,
   Key,
   Calendar,
@@ -22,6 +20,7 @@ import {
   Skeleton,
   DatePicker,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -93,7 +92,7 @@ const todayDateStr = new Date().toISOString().slice(0, 10)
 const todayEvents = computed(() => logs.value.filter(l => (l.created_at || '').startsWith(todayDateStr)).length)
 const authEvents = computed(() => logs.value.filter(l => (l.action || '').toLowerCase().includes('auth') || (l.action || '').toLowerCase().includes('login')).length)
 
-async function loadLogs() {
+async function loadLogs(append = false) {
   try {
     const bounds = computeDateBounds(selectedDatePreset.value)
     await store.fetchLogs({
@@ -103,11 +102,24 @@ async function loadLogs() {
       date_from: bounds.from,
       date_to: bounds.to,
       search: search.value.trim() || undefined,
-    })
+    }, append)
   } catch (err) {
     const e = err as { message?: string }
     toast.error(e.message || 'Failed to load audit logs')
   }
+}
+
+function handleLoadMore() {
+  if (store.loading) return
+  if (store.meta && currentPage.value < store.meta.last_page) {
+    currentPage.value += 1
+    loadLogs(true)
+  }
+}
+
+function onRefresh() {
+  currentPage.value = 1
+  loadLogs(false)
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -115,19 +127,19 @@ function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     currentPage.value = 1
-    loadLogs()
+    loadLogs(false)
   }, 350)
 }
 
 watch(selectedCategory, () => {
   currentPage.value = 1
-  loadLogs()
+  loadLogs(false)
 })
 
 watch(selectedDatePreset, (newPreset) => {
   currentPage.value = 1
   if (newPreset !== 'custom') {
-    loadLogs()
+    loadLogs(false)
   }
 })
 
@@ -136,7 +148,7 @@ function onCategoryChange(val?: string | number) {
     selectedCategory.value = String(val)
   }
   currentPage.value = 1
-  loadLogs()
+  loadLogs(false)
 }
 
 function onDatePresetChange(val?: string | number) {
@@ -145,14 +157,14 @@ function onDatePresetChange(val?: string | number) {
   }
   currentPage.value = 1
   if (selectedDatePreset.value !== 'custom') {
-    loadLogs()
+    loadLogs(false)
   }
 }
 
 function onCustomDateChange() {
   if (customDateFrom.value && customDateTo.value) {
     currentPage.value = 1
-    loadLogs()
+    loadLogs(false)
   }
 }
 
@@ -163,20 +175,7 @@ function resetFilters() {
   customDateFrom.value = ''
   customDateTo.value = ''
   currentPage.value = 1
-  loadLogs()
-}
-
-function nextPage() {
-  if (store.meta && currentPage.value < store.meta.last_page) {
-    currentPage.value += 1
-    loadLogs()
-  }
-}
-function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value -= 1
-    loadLogs()
-  }
+  loadLogs(false)
 }
 
 function actionBadge(action: string): { variant: 'success' | 'info' | 'destructive' | 'purple' | 'neutral', label: string } {
@@ -261,7 +260,7 @@ onMounted(loadLogs)
         </p>
       </div>
 
-      <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs border-border bg-card hover:bg-surface-subtle" :disabled="store.loading" @click="loadLogs">
+      <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs border-border bg-card hover:bg-surface-subtle" :disabled="store.loading" @click="onRefresh">
         <RefreshCw :size="14" :class="{ 'animate-spin': store.loading }" />
         <span>Refresh</span>
       </Button>
@@ -446,37 +445,16 @@ onMounted(loadLogs)
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="store.meta && store.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ currentPage }} of {{ store.meta.last_page }} ({{ store.meta.total }} total)
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="currentPage === 1"
-            @click="prevPage"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="!store.meta || currentPage >= store.meta.last_page"
-            @click="nextPage"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="store.loading"
+        :has-more="Boolean(store.meta && currentPage < store.meta.last_page)"
+        :total-loaded="store.logs.length"
+        :total="store.meta?.total ?? null"
+        :error="store.error"
+        @load-more="handleLoadMore"
+        @retry="loadLogs(currentPage > 1)"
+      />
     </div>
   </div>
 </template>

@@ -12,8 +12,6 @@ import {
   Phone,
   Mail,
   User,
-  ChevronLeft,
-  ChevronRight,
   Building2,
   CheckCircle2,
   Contact,
@@ -38,6 +36,7 @@ import {
   TableCell,
   EmptyState,
   Skeleton,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -57,17 +56,30 @@ const totalSuppliers = computed(() => store.meta?.total ?? store.suppliers.lengt
 const activeSuppliers = computed(() => store.suppliers.filter(s => s.is_active).length)
 const withContactPerson = computed(() => store.suppliers.filter(s => !!s.contact_person).length)
 
-async function load() {
+async function load(append = false) {
   try {
     await store.fetchSuppliers({
       page: filters.value.page,
       per_page: filters.value.per_page,
       search: filters.value.search || undefined,
-    })
+    }, append)
   } catch (err) {
     const e = err as { message?: string }
     toast.error(e.message || 'Failed to load suppliers')
   }
+}
+
+function handleLoadMore() {
+  if (store.loading) return
+  if (store.meta && filters.value.page < store.meta.last_page) {
+    filters.value.page += 1
+    load(true)
+  }
+}
+
+function onRefresh() {
+  filters.value.page = 1
+  load(false)
 }
 
 function openCreate() {
@@ -125,19 +137,6 @@ async function executeDelete() {
     toast.error(e.message || 'Failed to delete supplier')
   } finally {
     isDeleting.value = false
-  }
-}
-
-function nextPage() {
-  if (store.meta && filters.value.page < store.meta.last_page) {
-    filters.value.page += 1
-    load()
-  }
-}
-function prevPage() {
-  if (filters.value.page > 1) {
-    filters.value.page -= 1
-    load()
   }
 }
 
@@ -199,7 +198,7 @@ onMounted(load)
           type="text"
           placeholder="Search suppliers by name, contact, or email…"
           class="bg-surface"
-          @keyup.enter="load"
+          @keyup.enter="onRefresh"
         >
           <template #prefix>
             <Search :size="16" />
@@ -207,7 +206,7 @@ onMounted(load)
         </Input>
       </div>
 
-      <Button variant="outline" size="sm" class="h-9 px-3.5 text-xs gap-1.5" :disabled="store.loading" @click="load">
+      <Button variant="outline" size="sm" class="h-9 px-3.5 text-xs gap-1.5" :disabled="store.loading" @click="onRefresh">
         <RefreshCw :size="14" :class="{ 'animate-spin': store.loading }" />
         <span>Search</span>
       </Button>
@@ -296,37 +295,16 @@ onMounted(load)
         </Table>
       </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="store.meta && store.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ filters.page }} of {{ store.meta.last_page }}
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="filters.page === 1"
-            @click="prevPage"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="!store.meta || filters.page >= store.meta.last_page"
-            @click="nextPage"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="store.loading"
+        :has-more="Boolean(store.meta && filters.page < store.meta.last_page)"
+        :total-loaded="store.suppliers.length"
+        :total="store.meta?.total ?? null"
+        :error="store.error"
+        @load-more="handleLoadMore"
+        @retry="load(filters.page > 1)"
+      />
     </div>
 
     <!-- Supplier Create/Edit Modal Dialog -->

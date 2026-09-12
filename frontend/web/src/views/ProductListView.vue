@@ -15,8 +15,6 @@ import {
   Trash2,
   AlertCircle,
   Layers,
-  ChevronLeft,
-  ChevronRight,
   SlidersHorizontal,
   Copy,
 } from 'lucide-vue-next'
@@ -36,6 +34,7 @@ import {
   EmptyState,
   Skeleton,
   Alert,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const router = useRouter()
@@ -123,7 +122,7 @@ const totalVariantsCount = computed(() =>
   productStore.products.reduce((acc, p) => acc + (p.variants?.length || 0), 0)
 )
 
-async function loadProducts() {
+async function loadProducts(append = false) {
   const params: {
     page?: number
     search?: string
@@ -140,7 +139,24 @@ async function loadProducts() {
     params.is_active = false
   }
 
-  await productStore.fetchProducts(params)
+  try {
+    await productStore.fetchProducts(params, append)
+  } catch {
+    // Handled in store
+  }
+}
+
+function handleLoadMore() {
+  if (productStore.loading) return
+  if (productStore.meta && page.value < productStore.meta.last_page) {
+    page.value++
+    loadProducts(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  loadProducts(false)
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -148,19 +164,14 @@ function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     page.value = 1
-    loadProducts()
+    loadProducts(false)
   }, 300)
 }
 
 function onFilterChange(filter: string) {
   activeFilter.value = filter
   page.value = 1
-  loadProducts()
-}
-
-function changePage(newPage: number) {
-  page.value = newPage
-  loadProducts()
+  loadProducts(false)
 }
 
 async function handleToggleStatus(product: Product, checked: boolean) {
@@ -234,7 +245,7 @@ onMounted(() => {
           size="sm"
           class="h-9 px-3 gap-1.5 text-xs"
           :disabled="productStore.loading"
-          @click="loadProducts"
+          @click="onRefresh"
         >
           <RefreshCw :size="14" :class="{ 'animate-spin': productStore.loading }" />
           <span>Refresh</span>
@@ -369,7 +380,7 @@ onMounted(() => {
         <AlertCircle :size="16" />
         <span>{{ productStore.error }}</span>
       </div>
-      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadProducts">Retry</Button>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="onRefresh">Retry</Button>
     </Alert>
 
     <!-- Main Content Container -->
@@ -649,37 +660,16 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Pagination Bar -->
-      <div
-        v-if="productStore.meta && productStore.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ productStore.meta.current_page }} of {{ productStore.meta.last_page }} ({{ productStore.meta.total }} total)
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page <= 1 || productStore.loading"
-            @click="changePage(page - 1)"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page >= productStore.meta.last_page || productStore.loading"
-            @click="changePage(page + 1)"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="productStore.loading"
+        :has-more="Boolean(productStore.meta && page < productStore.meta.last_page)"
+        :total-loaded="productStore.products.length"
+        :total="productStore.meta?.total ?? null"
+        :error="productStore.error"
+        @load-more="handleLoadMore"
+        @retry="loadProducts(page > 1)"
+      />
     </div>
 
     <!-- Radix Delete Confirmation Dialog -->
@@ -714,7 +704,7 @@ onMounted(() => {
       v-model:open="showAdjustmentModal"
       :variant="selectedAdjustmentVariant"
       :product-name="selectedAdjustmentProductName"
-      @success="loadProducts"
+      @success="() => onRefresh()"
     />
   </div>
 </template>

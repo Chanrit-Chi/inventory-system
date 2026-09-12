@@ -92,3 +92,6 @@ export { default as DateRangePicker } from './DateRangePicker.vue'
 // Select Helper
 export { default as SelectField, type SelectOption } from './SelectField.vue'
 
+// Infinite Scroll / Load More
+export { default as LoadMoreTrigger } from './LoadMoreTrigger.vue'
+

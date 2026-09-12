@@ -48,12 +48,18 @@ export const useQuotationStore = defineStore('quotation', () => {
   } | null>(null)
 
   // Fetch quotations with pagination and filters
-  async function fetchQuotations(filters: QuotationFilters = {}) {
+  async function fetchQuotations(filters: QuotationFilters = {}, append = false) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/quotations', { params: filters })
-      quotations.value = res.data.data || []
+      const incoming = res.data.data || []
+      if (append) {
+        const existingIds = new Set(quotations.value.map(q => q.id))
+        quotations.value = [...quotations.value, ...incoming.filter((q: Quotation) => !existingIds.has(q.id))]
+      } else {
+        quotations.value = incoming
+      }
       meta.value = res.data.meta
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch quotations'

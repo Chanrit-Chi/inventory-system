@@ -534,7 +534,7 @@ function stockLabel(qty: number, reorder: number) {
 }
 
 onMounted(() => {
-  attrStore.fetchAttributes()
+  attrStore.fetchAttributes().catch(() => {})
   loadProduct()
 })
 

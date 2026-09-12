@@ -101,19 +101,28 @@ export const useOrderStore = defineStore('orders', () => {
     }
   }
 
-  async function fetchOrders(params: {
-    page?: number
-    status?: string
-    channel_id?: string
-    date_from?: string
-    date_to?: string
-    search?: string
-  } = {}) {
+  async function fetchOrders(
+    params: {
+      page?: number
+      status?: string
+      channel_id?: string
+      date_from?: string
+      date_to?: string
+      search?: string
+    } = {},
+    append = false
+  ) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/orders', { params })
-      orders.value = res.data.data ?? []
+      const incoming = res.data.data ?? []
+      if (append) {
+        const existingIds = new Set(orders.value.map(o => o.id))
+        orders.value = [...orders.value, ...incoming.filter((o: Order) => !existingIds.has(o.id))]
+      } else {
+        orders.value = incoming
+      }
       meta.value = res.data.meta ?? null
       return orders.value
     } catch (e: unknown) {

@@ -12,8 +12,6 @@ import {
   Trash2,
   DollarSign,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Printer,
 } from 'lucide-vue-next'
 import {
@@ -36,6 +34,7 @@ import {
   EmptyState,
   Skeleton,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 
 const toast = useToast()
@@ -83,18 +82,31 @@ const totalOutstandingAmount = computed(() =>
   }, 0)
 )
 
-async function loadInvoices() {
+async function loadInvoices(append = false) {
   try {
     await store.fetchInvoices({
       page: filters.value.page,
       per_page: filters.value.per_page,
       search: filters.value.search || undefined,
       status: filters.value.status || undefined,
-    })
+    }, append)
   } catch (err) {
     const e = err as { message?: string }
     toast.error(e.message || 'Failed to load invoices')
   }
+}
+
+function handleLoadMore() {
+  if (store.loading) return
+  if (store.meta && filters.value.page < store.meta.last_page) {
+    filters.value.page += 1
+    loadInvoices(true)
+  }
+}
+
+function onRefresh() {
+  filters.value.page = 1
+  loadInvoices(false)
 }
 
 const printStore = usePrintStore()
@@ -164,19 +176,6 @@ async function executeDelete() {
   }
 }
 
-function nextPage() {
-  if (store.meta && filters.value.page < store.meta.last_page) {
-    filters.value.page += 1
-    loadInvoices()
-  }
-}
-function prevPage() {
-  if (filters.value.page > 1) {
-    filters.value.page -= 1
-    loadInvoices()
-  }
-}
-
 function fmtMoney(amount: number | string | undefined | null): string {
   if (amount === undefined || amount === null) return '$0.00'
   const val = typeof amount === 'string' ? parseFloat(amount) : amount
@@ -213,7 +212,7 @@ onMounted(loadInvoices)
       </div>
 
       <div class="flex items-center gap-2">
-        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="store.loading" @click="loadInvoices">
+        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="store.loading" @click="onRefresh">
           <RefreshCw :size="14" :class="{ 'animate-spin': store.loading }" />
           <span>Refresh</span>
         </Button>
@@ -253,7 +252,7 @@ onMounted(loadInvoices)
           type="text"
           placeholder="Search by invoice # or customer name…"
           class="bg-surface"
-          @keyup.enter="loadInvoices"
+          @keyup.enter="onRefresh"
         >
           <template #prefix>
             <Search :size="16" />
@@ -267,10 +266,10 @@ onMounted(loadInvoices)
           :options="statusOptions"
           placeholder="All Statuses"
           class="h-9 w-36 bg-surface text-xs"
-          @change="loadInvoices"
+          @change="onRefresh"
         />
 
-        <Button variant="outline" size="sm" class="h-9 px-3.5 text-xs gap-1.5" @click="loadInvoices">
+        <Button variant="outline" size="sm" class="h-9 px-3.5 text-xs gap-1.5" @click="onRefresh">
           Search
         </Button>
       </div>
@@ -354,37 +353,16 @@ onMounted(loadInvoices)
         </Table>
       </div>
 
-      <!-- Pagination Bar -->
-      <div
-        v-if="store.meta && store.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ filters.page }} of {{ store.meta.last_page }}
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="filters.page === 1"
-            @click="prevPage"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="!store.meta || filters.page >= store.meta.last_page"
-            @click="nextPage"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="store.loading"
+        :has-more="Boolean(store.meta && filters.page < store.meta.last_page)"
+        :total-loaded="store.invoices.length"
+        :total="store.meta?.total ?? null"
+        :error="store.error"
+        @load-more="handleLoadMore"
+        @retry="loadInvoices(filters.page > 1)"
+      />
     </div>
 
     <!-- Invoice Detail Dialog -->

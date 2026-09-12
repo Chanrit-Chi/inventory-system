@@ -128,17 +128,26 @@ export const useProductStore = defineStore('products', () => {
   const error = ref<string | null>(null)
   const fieldErrors = ref<Record<string, string[]> | null>(null)
 
-  async function fetchProducts(params: {
-    page?: number
-    search?: string
-    is_active?: boolean | string
-    category_id?: string
-  } = {}) {
+  async function fetchProducts(
+    params: {
+      page?: number
+      search?: string
+      is_active?: boolean | string
+      category_id?: string
+    } = {},
+    append = false
+  ) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/products', { params })
-      products.value = res.data.data ?? []
+      const incoming = res.data.data ?? []
+      if (append) {
+        const existingIds = new Set(products.value.map(p => p.id))
+        products.value = [...products.value, ...incoming.filter((p: Product) => !existingIds.has(p.id))]
+      } else {
+        products.value = incoming
+      }
       meta.value = res.data.meta ?? null
       return products.value
     } catch (e: unknown) {

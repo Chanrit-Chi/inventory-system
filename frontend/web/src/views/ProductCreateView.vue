@@ -30,8 +30,8 @@ const productStore = useProductStore()
 const categoryStore = useCategoryStore()
 
 onMounted(() => {
-  attrStore.fetchAttributes()
-  categoryStore.fetchCategories()
+  attrStore.fetchAttributes().catch(() => {})
+  categoryStore.fetchCategories().catch(() => {})
 })
 
 // --- Base product form ---

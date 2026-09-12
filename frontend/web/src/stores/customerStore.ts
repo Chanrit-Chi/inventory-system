@@ -84,15 +84,24 @@ export const useCustomerStore = defineStore('customers', () => {
     }
   })
 
-  async function fetchCustomers(params: {
-    page?: number
-    search?: string
-  } = {}) {
+  async function fetchCustomers(
+    params: {
+      page?: number
+      search?: string
+    } = {},
+    append = false
+  ) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/customers', { params })
-      customers.value = res.data.data ?? []
+      const incoming = res.data.data ?? []
+      if (append) {
+        const existingIds = new Set(customers.value.map(c => c.id))
+        customers.value = [...customers.value, ...incoming.filter((c: Customer) => !existingIds.has(c.id))]
+      } else {
+        customers.value = incoming
+      }
       meta.value = res.data.meta ?? null
       return customers.value
     } catch (e: unknown) {

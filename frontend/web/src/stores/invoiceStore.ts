@@ -49,12 +49,18 @@ export const useInvoiceStore = defineStore('invoice', () => {
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
-  async function fetchInvoices(filters: InvoiceFilters = {}) {
+  async function fetchInvoices(filters: InvoiceFilters = {}, append = false) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/invoices', { params: filters })
-      invoices.value = res.data.data || []
+      const incoming = res.data.data || []
+      if (append) {
+        const existingIds = new Set(invoices.value.map(i => i.id))
+        invoices.value = [...invoices.value, ...incoming.filter((i: Invoice) => !existingIds.has(i.id))]
+      } else {
+        invoices.value = incoming
+      }
       meta.value = res.data.meta
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch invoices'

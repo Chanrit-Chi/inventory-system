@@ -10,8 +10,6 @@ import {
   AlertTriangle,
   XCircle,
   DollarSign,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
   SlidersHorizontal,
   ChevronDown,
@@ -25,6 +23,7 @@ import {
   EmptyState,
   Skeleton,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
 
@@ -171,7 +170,7 @@ function openAdjustmentModal(v: Variant, prodName: string) {
   showAdjustmentModal.value = true
 }
 
-async function loadInventory() {
+async function loadInventory(append = false) {
   loading.value = true
   error.value = null
   try {
@@ -181,12 +180,17 @@ async function loadInventory() {
     }
 
     const res = await api.get('/products', { params })
-    const list = (res.data.data ?? []) as Product[]
-    products.value = list
+    const incoming = (res.data.data ?? []) as Product[]
+    if (append) {
+      const existingIds = new Set(products.value.map(p => p.id))
+      products.value = [...products.value, ...incoming.filter(p => !existingIds.has(p.id))]
+    } else {
+      products.value = incoming
+    }
     meta.value = res.data.meta ?? null
     // Auto-expand if list is small or single product
-    if (list.length <= 5) {
-      expandedGroups.value = new Set(list.map(p => p.id))
+    if (incoming.length <= 5) {
+      incoming.forEach(p => expandedGroups.value.add(p.id))
     }
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Failed to load inventory ledger.'
@@ -195,12 +199,25 @@ async function loadInventory() {
   }
 }
 
+function handleLoadMore() {
+  if (loading.value) return
+  if (meta.value && page.value < meta.value.last_page) {
+    page.value++
+    loadInventory(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  loadInventory(false)
+}
+
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     page.value = 1
-    loadInventory()
+    loadInventory(false)
   }, 300)
 }
 
@@ -259,7 +276,7 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
-        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="loading" @click="loadInventory">
+        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="loading" @click="onRefresh">
           <RefreshCw :size="14" :class="{ 'animate-spin': loading }" />
           <span>Refresh</span>
         </Button>
@@ -348,7 +365,7 @@ onMounted(() => {
         <AlertCircle :size="16" />
         <span>{{ error }}</span>
       </div>
-      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadInventory">Retry</Button>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="onRefresh">Retry</Button>
     </Alert>
 
     <!-- Inventory Table Container -->
@@ -575,37 +592,16 @@ onMounted(() => {
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="meta && meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ page }} of {{ meta.last_page }} ({{ meta.total }} total)
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page <= 1 || loading"
-            @click="page--; loadInventory()"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page >= meta.last_page || loading"
-            @click="page++; loadInventory()"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="loading"
+        :has-more="Boolean(meta && page < meta.last_page)"
+        :total-loaded="products.length"
+        :total="meta?.total ?? null"
+        :error="error"
+        @load-more="handleLoadMore"
+        @retry="loadInventory(page > 1)"
+      />
     </div>
 
     <!-- Movement Audit Trail Legend -->
@@ -631,7 +627,7 @@ onMounted(() => {
       v-model:open="showAdjustmentModal"
       :variant="selectedAdjustmentVariant"
       :product-name="selectedProductName"
-      @success="loadInventory"
+      @success="() => onRefresh()"
     />
   </div>
 </template>

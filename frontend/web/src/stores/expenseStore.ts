@@ -66,18 +66,27 @@ export const useExpenseStore = defineStore('expenses', () => {
     }
   })
 
-  async function fetchExpenses(params: {
-    page?: number
-    date_from?: string
-    date_to?: string
-    category?: string
-    payment_method?: string
-  } = {}) {
+  async function fetchExpenses(
+    params: {
+      page?: number
+      date_from?: string
+      date_to?: string
+      category?: string
+      payment_method?: string
+    } = {},
+    append = false
+  ) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/expenses', { params })
-      expenses.value = res.data.data ?? []
+      const incoming = res.data.data ?? []
+      if (append) {
+        const existingIds = new Set(expenses.value.map(e => e.id))
+        expenses.value = [...expenses.value, ...incoming.filter((e: Expense) => !existingIds.has(e.id))]
+      } else {
+        expenses.value = incoming
+      }
       meta.value = res.data.meta ?? null
       return expenses.value
     } catch (e: unknown) {

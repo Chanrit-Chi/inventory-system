@@ -44,12 +44,18 @@ export const useAuditLogStore = defineStore('auditLog', () => {
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
-  async function fetchLogs(filters: AuditLogFilters = {}) {
+  async function fetchLogs(filters: AuditLogFilters = {}, append = false) {
     loading.value = true
     error.value = null
     try {
       const res = await api.get('/audit-logs', { params: filters })
-      logs.value = res.data.data || []
+      const incoming = res.data.data || []
+      if (append) {
+        const existingIds = new Set(logs.value.map(l => l.id))
+        logs.value = [...logs.value, ...incoming.filter((l: AuditLog) => !existingIds.has(l.id))]
+      } else {
+        logs.value = incoming
+      }
       meta.value = res.data.meta
     } catch (e: unknown) {
       error.value = e instanceof ApiError ? e.message : 'Failed to fetch audit logs'

@@ -12,8 +12,6 @@ import {
   DollarSign,
   Star,
   Crown,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   AlertCircle,
@@ -45,6 +43,7 @@ import {
   EmptyState,
   Skeleton,
   SelectField,
+  LoadMoreTrigger,
 } from '@/components/ui'
 import { getTier as computeTier, type Tier } from '@/utils/loyalty'
 
@@ -155,7 +154,7 @@ const vipCount = computed(() =>
   }).length
 )
 
-async function loadCustomers() {
+async function loadCustomers(append = false) {
   const params: Record<string, unknown> = {
     page: page.value,
     sort_by: sortBy.value,
@@ -164,7 +163,24 @@ async function loadCustomers() {
     params.search = search.value.trim()
   }
 
-  await customerStore.fetchCustomers(params)
+  try {
+    await customerStore.fetchCustomers(params, append)
+  } catch {
+    // Handled in store
+  }
+}
+
+function handleLoadMore() {
+  if (customerStore.loading) return
+  if (customerStore.meta && page.value < customerStore.meta.last_page) {
+    page.value++
+    loadCustomers(true)
+  }
+}
+
+function onRefresh() {
+  page.value = 1
+  loadCustomers(false)
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -172,7 +188,7 @@ function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     page.value = 1
-    loadCustomers()
+    loadCustomers(false)
   }, 300)
 }
 
@@ -318,7 +334,7 @@ onMounted(() => {
           size="sm"
           class="h-9 px-3 gap-1.5 text-xs"
           :disabled="customerStore.loading"
-          @click="loadCustomers"
+          @click="onRefresh"
         >
           <RefreshCw :size="14" :class="{ 'animate-spin': customerStore.loading }" />
           <span>Refresh CRM</span>
@@ -431,7 +447,7 @@ onMounted(() => {
         <AlertCircle :size="16" />
         <span>{{ customerStore.error }}</span>
       </div>
-      <Button variant="ghost" size="sm" class="text-xs h-7" @click="loadCustomers">Retry</Button>
+      <Button variant="ghost" size="sm" class="text-xs h-7" @click="onRefresh">Retry</Button>
     </Alert>
 
     <!-- Customers View Container -->
@@ -633,37 +649,16 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Pagination -->
-      <div
-        v-if="customerStore.meta && customerStore.meta.last_page > 1"
-        class="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-subtle/50 text-xs text-muted-foreground"
-      >
-        <span class="font-mono">
-          Page {{ page }} of {{ customerStore.meta.last_page }} ({{ customerStore.meta.total }} total)
-        </span>
-        <div class="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page <= 1 || customerStore.loading"
-            @click="page--; loadCustomers()"
-          >
-            <ChevronLeft :size="14" />
-            <span>Previous</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-8 px-2.5 text-xs gap-1"
-            :disabled="page >= customerStore.meta.last_page || customerStore.loading"
-            @click="page++; loadCustomers()"
-          >
-            <span>Next</span>
-            <ChevronRight :size="14" />
-          </Button>
-        </div>
-      </div>
+      <!-- Infinite Scroll & Load More Trigger -->
+      <LoadMoreTrigger
+        :loading="customerStore.loading"
+        :has-more="Boolean(customerStore.meta && page < customerStore.meta.last_page)"
+        :total-loaded="customerStore.customers.length"
+        :total="customerStore.meta?.total ?? null"
+        :error="customerStore.error"
+        @load-more="handleLoadMore"
+        @retry="loadCustomers(page > 1)"
+      />
     </div>
 
     <!-- Customer History Modal Dialog -->
