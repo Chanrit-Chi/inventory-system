@@ -286,6 +286,7 @@ class ReportController extends BaseApiController
 
             if ($qty <= 0) {
                 $outOfStockCount++;
+                $lowStockCount++;
             } elseif ($qty <= $reorder) {
                 $lowStockCount++;
             } else {

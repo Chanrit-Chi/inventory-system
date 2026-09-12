@@ -133,7 +133,7 @@ async function loadSummaryStats() {
 const totalSkus = computed(() => summaryStats.value?.total_skus ?? allVariants.value.length)
 const totalProductsCount = computed(() => summaryStats.value?.total_products ?? (meta.value?.total ?? products.value.length))
 const lowStockCount = computed(() => summaryStats.value?.low_stock_count ??
-  allVariants.value.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level).length
+  allVariants.value.filter(v => v.quantity_on_hand <= v.reorder_level).length
 )
 const outOfStockCount = computed(() => summaryStats.value?.out_of_stock_count ??
   allVariants.value.filter(v => v.quantity_on_hand === 0).length
