@@ -594,22 +594,6 @@ onMounted(() => {
                 </tr>
               </template>
             </template>
-
-            <!-- Inline loading skeleton rows when appending next page -->
-            <tr
-              v-if="loadingMore"
-              v-for="s in 3"
-              :key="'skel-inv-' + s"
-              class="animate-pulse bg-muted/20"
-            >
-              <td colspan="2" class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-48" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-16" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-16 ml-auto" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-16 ml-auto" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-7 bg-muted/60 rounded w-24 ml-auto" /></td>
-            </tr>
           </tbody>
         </table>
       </div>

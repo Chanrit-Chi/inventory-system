@@ -349,22 +349,6 @@ onMounted(loadInvoices)
                 </div>
               </TableCell>
             </TableRow>
-
-            <!-- Inline loading skeleton rows when appending next page -->
-            <TableRow
-              v-if="store.loadingMore"
-              v-for="s in 3"
-              :key="'skel-inv-' + s"
-              class="animate-pulse bg-muted/20"
-            >
-              <TableCell><div class="h-4 bg-muted/60 rounded w-28" /></TableCell>
-              <TableCell><div class="h-4 bg-muted/60 rounded w-36" /></TableCell>
-              <TableCell><div class="h-5 bg-muted/60 rounded-full w-16" /></TableCell>
-              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
-              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
-              <TableCell><div class="h-4 bg-muted/60 rounded w-20" /></TableCell>
-              <TableCell class="text-right"><div class="h-8 bg-muted/60 rounded w-20 ml-auto" /></TableCell>
-            </TableRow>
           </TableBody>
         </Table>
       </div>

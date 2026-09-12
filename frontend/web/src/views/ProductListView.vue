@@ -553,24 +553,6 @@ onMounted(() => {
                 </div>
               </td>
             </tr>
-
-            <!-- Inline loading skeleton rows when appending next page -->
-            <tr
-              v-if="productStore.loadingMore"
-              v-for="s in 3"
-              :key="'skel-row-' + s"
-              class="animate-pulse bg-surface-subtle/30"
-            >
-              <td class="px-4 py-3"><div class="w-10 h-10 rounded-lg bg-muted/60" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-40 mb-1.5" /><div class="h-3 bg-muted/40 rounded w-20" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-28" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-16" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-16 ml-auto" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-24 ml-auto" /></td>
-              <td class="px-4 py-3 text-center"><div class="h-4 bg-muted/60 rounded w-10 mx-auto" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-20 ml-auto" /></td>
-            </tr>
           </tbody>
         </table>
       </div>
@@ -676,24 +658,6 @@ onMounted(() => {
             </Button>
           </div>
         </div>
-
-        <!-- Inline loading skeleton cards when appending next page in grid view -->
-        <template v-if="productStore.loadingMore">
-          <div
-            v-for="s in 3"
-            :key="'skel-card-' + s"
-            class="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between gap-3 animate-pulse"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="w-12 h-12 rounded-xl bg-muted/60" />
-              <div class="flex-1 space-y-2">
-                <div class="h-4 bg-muted/60 rounded w-3/4" />
-                <div class="h-3 bg-muted/40 rounded w-1/2" />
-              </div>
-            </div>
-            <div class="h-4 bg-muted/40 rounded w-1/3 mt-2" />
-          </div>
-        </template>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->

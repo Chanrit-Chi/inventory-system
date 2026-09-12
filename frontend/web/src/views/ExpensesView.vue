@@ -499,20 +499,6 @@ onMounted(() => {
                     {{ e.notes || '—' }}
                   </TableCell>
                 </TableRow>
-
-                <!-- Inline loading skeleton rows when appending next page -->
-                <TableRow
-                  v-if="expenseStore.loadingMore"
-                  v-for="s in 3"
-                  :key="'skel-exp-' + s"
-                  class="animate-pulse bg-muted/20"
-                >
-                  <TableCell><div class="h-4 bg-muted/60 rounded w-28" /></TableCell>
-                  <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
-                  <TableCell><div class="h-5 bg-muted/60 rounded-full w-14" /></TableCell>
-                  <TableCell><div class="h-4 bg-muted/60 rounded w-20" /></TableCell>
-                  <TableCell><div class="h-4 bg-muted/40 rounded w-36" /></TableCell>
-                </TableRow>
               </TableBody>
             </Table>
           </div>

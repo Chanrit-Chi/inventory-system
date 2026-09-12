@@ -441,21 +441,6 @@ onMounted(loadLogs)
                 </div>
               </td>
             </tr>
-
-            <!-- Inline loading skeleton rows when appending next page -->
-            <tr
-              v-if="store.loadingMore"
-              v-for="s in 3"
-              :key="'skel-audit-' + s"
-              class="animate-pulse bg-muted/20 border-b border-border/50"
-            >
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-24" /></td>
-              <td class="px-4 py-3"><div class="h-5 bg-muted/60 rounded-full w-20" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-24" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-48" /></td>
-              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
-              <td class="px-4 py-3 text-right"><div class="h-5 bg-muted/60 rounded w-24 ml-auto" /></td>
-            </tr>
           </tbody>
         </table>
       </div>
