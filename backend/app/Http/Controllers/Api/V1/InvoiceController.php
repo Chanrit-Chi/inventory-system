@@ -38,7 +38,14 @@ class InvoiceController extends BaseApiController
 
         $invoices = $query->latest()->paginate($request->integer('per_page', 20));
 
-        return $this->paginatedResponse($invoices);
+        $stats = [
+            'total_paid'        => (float) Invoice::whereNull('deleted_at')->sum('amount_paid'),
+            'total_outstanding' => (float) (Invoice::whereNull('deleted_at')
+                ->selectRaw('SUM(GREATEST(0, total_amount - amount_paid)) as outstanding')
+                ->value('outstanding') ?? 0),
+        ];
+
+        return $this->paginatedResponse($invoices, null, $stats);
     }
 
     /**

@@ -37,33 +37,34 @@ export const useExpenseStore = defineStore('expenses', () => {
   const fieldErrors = ref<Record<string, string[]> | null>(null)
 
   const kpis = computed(() => {
+    const metaAny = meta.value as any
     const todayStr = new Date().toISOString().slice(0, 10)
-    let totalAll = 0
-    let totalToday = 0
+    let totalAllFallback = 0
+    let totalTodayFallback = 0
     const catMap: Record<string, number> = {}
 
     for (const exp of expenses.value) {
       const amt = parseFloat(String(exp.amount)) || 0
-      totalAll += amt
-      if (exp.expense_date.startsWith(todayStr)) {
-        totalToday += amt
+      totalAllFallback += amt
+      if (exp.expense_date && exp.expense_date.startsWith(todayStr)) {
+        totalTodayFallback += amt
       }
       catMap[exp.category] = (catMap[exp.category] || 0) + amt
     }
 
-    let topCategory = 'None'
+    let topCatFallback = 'None'
     let maxCatAmt = 0
     for (const [cat, amt] of Object.entries(catMap)) {
       if (amt > maxCatAmt) {
         maxCatAmt = amt
-        topCategory = cat
+        topCatFallback = cat
       }
     }
 
     return {
-      totalAll,
-      totalToday,
-      topCategory,
+      totalAll: metaAny?.total_amount !== undefined ? Number(metaAny.total_amount) : totalAllFallback,
+      totalToday: metaAny?.today_amount !== undefined ? Number(metaAny.today_amount) : totalTodayFallback,
+      topCategory: metaAny?.top_category ?? topCatFallback,
     }
   })
 

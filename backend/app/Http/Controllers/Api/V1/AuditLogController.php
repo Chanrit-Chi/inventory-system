@@ -96,6 +96,16 @@ class AuditLogController extends BaseApiController
 
         $logs = $query->paginate($perPage);
 
-        return $this->paginatedResponse($logs);
+        $stats = [
+            'today_count' => (int) AuditLog::whereDate('occurred_at', now()->toDateString())->count(),
+            'auth_count'  => (int) AuditLog::where(function ($q) {
+                $q->whereIn('category', ['SECURITY', 'AUTH'])
+                  ->orWhere('action', 'like', '%LOGIN%')
+                  ->orWhere('action', 'like', '%LOGOUT%')
+                  ->orWhere('action', 'like', '%AUTH%');
+            })->count(),
+        ];
+
+        return $this->paginatedResponse($logs, null, $stats);
     }
 }

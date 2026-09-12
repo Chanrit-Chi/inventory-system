@@ -144,8 +144,9 @@ const TIER_THRESHOLDS: Record<Exclude<Tier, 'BRONZE'>, { spent: number; orders: 
   PLATINUM: { spent: 1000, orders: 20 },
 }
 
-// VIP counts — Gold & Platinum tier members (dual-criteria)
+// VIP counts — Gold & Platinum tier members (server-wide with loaded fallback)
 const vipCount = computed(() =>
+  customerStore.summaryStats.vipCount ??
   customerStore.customers.filter(c => {
     const spent = parseFloat(String(c.total_spent)) || 0
     const orders = c.total_purchased ?? 0

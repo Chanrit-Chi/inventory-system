@@ -115,10 +115,10 @@ function openStockAdjust(p: Product) {
   showAdjustmentModal.value = true
 }
 
-// Computed KPIs from loaded products
-const totalProductsCount = computed(() => productStore.meta?.total ?? productStore.products.length)
-const activeProductsCount = computed(() => productStore.products.filter(p => p.is_active).length)
-const totalVariantsCount = computed(() =>
+// Computed KPIs: server-wide totals with loaded items fallback
+const totalProductsCount = computed(() => (productStore.meta as any)?.total ?? productStore.products.length)
+const activeProductsCount = computed(() => (productStore.meta as any)?.total_active ?? productStore.products.filter(p => p.is_active).length)
+const totalVariantsCount = computed(() => (productStore.meta as any)?.total_variants ??
   productStore.products.reduce((acc, p) => acc + (p.variants?.length || 0), 0)
 )
 

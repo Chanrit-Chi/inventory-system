@@ -72,17 +72,23 @@ const statusOptions = [
 const isCopied = ref(false)
 const showPrintReceipt = ref(false)
 
-// KPI Summary Computations
+// KPI Summary Computations: server-wide totals with loaded items fallback
 const totalOrdersCount = computed(() => orderStore.meta?.total ?? (Array.isArray(orderStore.orders) ? orderStore.orders.length : 0))
 const totalGrossSales = computed(() => {
+  const metaAny = orderStore.meta as any
+  if (metaAny?.gross_sales !== undefined) return Number(metaAny.gross_sales)
   const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
   return list.reduce((sum, o) => sum + (parseFloat(String(o.total_amount)) || 0), 0)
 })
 const completedOrdersCount = computed(() => {
+  const metaAny = orderStore.meta as any
+  if (metaAny?.completed_orders !== undefined) return Number(metaAny.completed_orders)
   const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
   return list.filter(o => o.status === 'COMPLETED').length
 })
 const pendingOrdersCount = computed(() => {
+  const metaAny = orderStore.meta as any
+  if (metaAny?.pending_orders !== undefined) return Number(metaAny.pending_orders)
   const list = Array.isArray(orderStore.orders) ? orderStore.orders : []
   return list.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length
 })

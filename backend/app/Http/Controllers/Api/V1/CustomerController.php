@@ -55,7 +55,15 @@ class CustomerController extends BaseApiController
         $perPage = min(100, max(1, (int) $request->input('per_page', 15)));
         $customers = $query->paginate($perPage);
 
-        return $this->paginatedResponse($customers);
+        $stats = [
+            'total_spend' => (float) Customer::sum('total_spent'),
+            'avg_ltv'     => (float) round(Customer::avg('total_spent') ?? 0, 2),
+            'vip_count'   => (int) Customer::where(function ($q) {
+                $q->where('total_spent', '>=', 500)->orWhere('total_purchased', '>=', 10);
+            })->count(),
+        ];
+
+        return $this->paginatedResponse($customers, null, $stats);
     }
 
     /**

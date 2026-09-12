@@ -35,7 +35,17 @@ class QuotationController extends BaseApiController
 
         $quotations = $query->latest()->paginate($request->integer('per_page', 20));
 
-        return $this->paginatedResponse($quotations);
+        $stats = [
+            'pipeline_total'  => (float) Quotation::whereNull('deleted_at')->sum('total_amount'),
+            'pending_count'   => (int) Quotation::whereNull('deleted_at')
+                ->whereIn(DB::raw('LOWER(status)'), ['draft', 'sent'])
+                ->count(),
+            'converted_count' => (int) Quotation::whereNull('deleted_at')
+                ->whereIn(DB::raw('LOWER(status)'), ['accepted', 'converted'])
+                ->count(),
+        ];
+
+        return $this->paginatedResponse($quotations, null, $stats);
     }
 
     /**

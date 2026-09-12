@@ -342,28 +342,28 @@ onMounted(() => {
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard
         label="Total Quotes"
-        :value="filteredQuotations.length"
+        :value="quotationStore.meta?.total ?? filteredQuotations.length"
         sub="Recorded bids"
         :icon="FileText"
         icon-variant="primary"
       />
       <StatCard
         label="Quotation Pipeline"
-        :value="fmtMoney(filteredQuotations.reduce((sum, q) => sum + (parseFloat(String(q.total_amount)) || 0), 0))"
+        :value="fmtMoney((quotationStore.meta as any)?.pipeline_total ?? filteredQuotations.reduce((sum, q) => sum + (parseFloat(String(q.total_amount)) || 0), 0))"
         sub="Combined proposed value"
         :icon="DollarSign"
         icon-variant="success"
       />
       <StatCard
         label="Active Pending"
-        :value="filteredQuotations.filter(q => (q.status || '').toLowerCase() === 'draft' || (q.status || '').toLowerCase() === 'sent').length"
+        :value="(quotationStore.meta as any)?.pending_count ?? filteredQuotations.filter(q => (q.status || '').toLowerCase() === 'draft' || (q.status || '').toLowerCase() === 'sent').length"
         sub="Awaiting customer signoff"
         :icon="Clock"
         icon-variant="warning"
       />
       <StatCard
         label="Converted Orders"
-        :value="filteredQuotations.filter(q => (q.status || '').toLowerCase() === 'accepted' || (q.status || '').toLowerCase() === 'converted').length"
+        :value="(quotationStore.meta as any)?.converted_count ?? filteredQuotations.filter(q => (q.status || '').toLowerCase() === 'accepted' || (q.status || '').toLowerCase() === 'converted').length"
         sub="Converted into sales"
         :icon="CheckCircle2"
         icon-variant="purple"

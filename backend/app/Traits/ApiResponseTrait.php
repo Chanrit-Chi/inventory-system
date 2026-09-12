@@ -42,17 +42,17 @@ trait ApiResponseTrait
     /**
      * Return a standardized paginated JSON response.
      */
-    public function paginatedResponse(LengthAwarePaginator $paginator, ?string $message = null): JsonResponse
+    public function paginatedResponse(LengthAwarePaginator $paginator, ?string $message = null, array $extra = []): JsonResponse
     {
         $payload = [
             'success' => true,
             'data' => $paginator->items(),
-            'meta' => [
+            'meta' => array_merge([
                 'current_page' => $paginator->currentPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
                 'last_page' => $paginator->lastPage(),
-            ],
+            ], $extra),
         ];
 
         if ($message !== null) {

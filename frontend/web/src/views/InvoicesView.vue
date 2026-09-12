@@ -69,17 +69,21 @@ const isDeleting = ref(false)
 const filters = ref({ page: 1, per_page: 15, search: '', status: '' })
 const invoices = computed(() => store.invoices)
 
-// KPI Computations
+// KPI Computations: server-wide totals with loaded items fallback
 const totalInvoicesCount = computed(() => store.meta?.total ?? store.invoices.length)
 const totalPaidAmount = computed(() =>
-  store.invoices.reduce((sum, inv) => sum + (parseFloat(String(inv.amount_paid)) || 0), 0)
+  (store.meta as any)?.total_paid !== undefined
+    ? Number((store.meta as any).total_paid)
+    : store.invoices.reduce((sum, inv) => sum + (parseFloat(String(inv.amount_paid)) || 0), 0)
 )
 const totalOutstandingAmount = computed(() =>
-  store.invoices.reduce((sum, inv) => {
-    const total = parseFloat(String(inv.total_amount)) || 0
-    const paid = parseFloat(String(inv.amount_paid)) || 0
-    return sum + Math.max(0, total - paid)
-  }, 0)
+  (store.meta as any)?.total_outstanding !== undefined
+    ? Number((store.meta as any).total_outstanding)
+    : store.invoices.reduce((sum, inv) => {
+        const total = parseFloat(String(inv.total_amount)) || 0
+        const paid = parseFloat(String(inv.amount_paid)) || 0
+        return sum + Math.max(0, total - paid)
+      }, 0)
 )
 
 async function loadInvoices(append = false) {

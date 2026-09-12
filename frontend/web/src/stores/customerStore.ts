@@ -75,13 +75,22 @@ export const useCustomerStore = defineStore('customers', () => {
   const error = ref<string | null>(null)
 
   const summaryStats = computed(() => {
-    const totalCustomers = meta.value?.total ?? customers.value.length
-    const totalSpend = customers.value.reduce((acc, c) => acc + (parseFloat(String(c.total_spent)) || 0), 0)
-    const avgLtv = customers.value.length > 0 ? totalSpend / customers.value.length : 0
+    const metaAny = meta.value as any
+    const totalCustomers = metaAny?.total ?? customers.value.length
+    const totalSpend = metaAny?.total_spend !== undefined
+      ? Number(metaAny.total_spend)
+      : customers.value.reduce((acc, c) => acc + (parseFloat(String(c.total_spent)) || 0), 0)
+    const avgLtv = metaAny?.avg_ltv !== undefined
+      ? Number(metaAny.avg_ltv)
+      : (customers.value.length > 0 ? totalSpend / customers.value.length : 0)
+    const vipCount = metaAny?.vip_count !== undefined
+      ? Number(metaAny.vip_count)
+      : undefined
     return {
       totalCustomers,
       totalSpend,
       avgLtv,
+      vipCount,
     }
   })
 

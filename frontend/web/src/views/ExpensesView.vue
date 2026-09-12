@@ -116,8 +116,9 @@ const categoryBreakdown = computed(() => {
 })
 
 const avgExpenseValue = computed(() => {
-  if (expenseStore.expenses.length === 0) return 0
-  return expenseStore.kpis.totalAll / expenseStore.expenses.length
+  const totalCount = expenseStore.meta?.total || expenseStore.expenses.length
+  if (totalCount === 0) return 0
+  return expenseStore.kpis.totalAll / totalCount
 })
 
 async function loadExpenses(append = false) {

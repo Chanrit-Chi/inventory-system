@@ -57,7 +57,12 @@ class ProductController extends BaseApiController
         $perPage = min((int) $request->input('per_page', 15), 2000);
         $products = $query->latest()->paginate($perPage > 0 ? $perPage : 15);
 
-        return $this->paginatedResponse($products);
+        $stats = [
+            'total_active'   => (int) Product::where('is_active', true)->count(),
+            'total_variants' => (int) ProductVariant::count(),
+        ];
+
+        return $this->paginatedResponse($products, null, $stats);
     }
 
     /**

@@ -89,8 +89,8 @@ const logs = computed(() => store.logs)
 
 const totalEvents = computed(() => store.meta?.total ?? logs.value.length)
 const todayDateStr = new Date().toISOString().slice(0, 10)
-const todayEvents = computed(() => logs.value.filter(l => (l.created_at || '').startsWith(todayDateStr)).length)
-const authEvents = computed(() => logs.value.filter(l => (l.action || '').toLowerCase().includes('auth') || (l.action || '').toLowerCase().includes('login')).length)
+const todayEvents = computed(() => (store.meta as any)?.today_count ?? logs.value.filter(l => (l.created_at || (l as any).occurred_at || '').startsWith(todayDateStr)).length)
+const authEvents = computed(() => (store.meta as any)?.auth_count ?? logs.value.filter(l => (l.action || '').toLowerCase().includes('auth') || (l.action || '').toLowerCase().includes('login')).length)
 
 async function loadLogs(append = false) {
   try {

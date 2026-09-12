@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BaseApiController;
 use App\Models\Expense;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ExpenseController extends BaseApiController
 {
@@ -45,7 +46,16 @@ class ExpenseController extends BaseApiController
         $perPage = min((int) $request->input('per_page', 15), 100);
         $expenses = $query->latest('expense_date')->latest('created_at')->paginate($perPage);
 
-        return $this->paginatedResponse($expenses);
+        $stats = [
+            'total_amount' => (float) Expense::sum('amount'),
+            'today_amount' => (float) Expense::whereDate('expense_date', now()->toDateString())->sum('amount'),
+            'top_category' => Expense::select('category', DB::raw('SUM(amount) as cat_sum'))
+                ->groupBy('category')
+                ->orderByDesc('cat_sum')
+                ->value('category') ?? 'None',
+        ];
+
+        return $this->paginatedResponse($expenses, null, $stats);
     }
 
     /**

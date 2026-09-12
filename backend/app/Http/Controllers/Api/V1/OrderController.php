@@ -81,7 +81,13 @@ class OrderController extends BaseApiController
         $perPage = min((int) $request->input('per_page', 15), 100);
         $orders = $query->latest()->paginate($perPage > 0 ? $perPage : 15);
 
-        return $this->paginatedResponse($orders);
+        $stats = [
+            'gross_sales'      => (float) Order::whereNull('deleted_at')->whereRaw("UPPER(TRIM(status)) != 'CANCELLED'")->sum('total_amount'),
+            'completed_orders' => (int) Order::whereNull('deleted_at')->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'")->count(),
+            'pending_orders'   => (int) Order::whereNull('deleted_at')->whereRaw("UPPER(TRIM(status)) IN ('PENDING', 'PROCESSING')")->count(),
+        ];
+
+        return $this->paginatedResponse($orders, null, $stats);
     }
 
     /**
