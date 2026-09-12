@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios'
 import type { ApiResponse } from '../types'
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://backend.test/api/v1'
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://inventory-backend-api.fly.dev/api/v1'
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,
@@ -10,7 +10,7 @@ export const apiClient: AxiosInstance = axios.create({
     Accept: 'application/json',
     'ngrok-skip-browser-warning': 'true',
   },
-  timeout: 15000,
+  timeout: 30000,
 })
 
 // Module-level token getter — set by AuthContext on mount
