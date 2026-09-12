@@ -259,60 +259,104 @@ class ReportController extends BaseApiController
     public function inventory(Request $request): JsonResponse
     {
         // 1. Core Inventory KPIs
-        $variants = ProductVariant::query()
+        $products = Product::query()
             ->whereNull('deleted_at')
-            ->whereHas('product', fn ($q) => $q->whereNull('deleted_at'))
-            ->with(['product.category'])
+            ->with([
+                'variants' => fn ($q) => $q->whereNull('deleted_at'),
+                'category',
+            ])
             ->get();
 
-        $totalSkus = $variants->count();
-        $totalProducts = Product::whereNull('deleted_at')->count();
+        $totalProducts = $products->count();
+        $totalSkus = 0;
         $totalUnits = 0;
         $costValue = 0.0;
         $retailValue = 0.0;
-        $healthyCount = 0;
-        $lowStockCount = 0;
-        $outOfStockCount = 0;
+
+        $healthyProductCount = 0;
+        $lowStockProductCount = 0;
+        $outOfStockProductCount = 0;
+
+        $healthySkuCount = 0;
+        $lowStockSkuCount = 0;
+        $outOfStockSkuCount = 0;
 
         $categoryMap = [];
+        $allVariants = [];
 
-        foreach ($variants as $v) {
-            $qty = (int) $v->quantity_on_hand;
-            $reorder = (int) ($v->reorder_level ?? $v->product?->default_reorder_level ?? 5);
-            $cost = (float) ($v->cost_price ?? $v->product?->cost_price ?? 0);
-            $price = (float) ($v->selling_price ?? $v->product?->selling_price ?? 0);
-            $isActive = (bool) ($v->is_active ?? true) && (bool) ($v->product?->is_active ?? true);
+        foreach ($products as $p) {
+            $isProductActive = (bool) $p->is_active;
+            $productThreshold = (int) ($p->default_reorder_level ?? 5);
+            $productUnits = 0;
+            $variantsList = $p->variants ?? collect();
 
-            $totalUnits += $qty;
-            $costValue += ($qty * $cost);
-            $retailValue += ($qty * $price);
+            if ($variantsList->isNotEmpty()) {
+                foreach ($variantsList as $v) {
+                    $allVariants[] = $v;
+                    $totalSkus++;
+                    $qty = (int) $v->quantity_on_hand;
+                    $cost = (float) ($v->cost_price ?? $v->cost_price_override ?? $p->cost_price ?? $p->purchase_price ?? 0);
+                    $price = (float) ($v->selling_price ?? $v->selling_price_override ?? $p->selling_price ?? 0);
+                    $isActive = (bool) ($v->is_active ?? true) && $isProductActive;
+                    $skuThreshold = (int) ($v->reorder_level ?? $productThreshold);
 
-            // Only active products trigger reorder/depleted stock alerts
-            if ($isActive) {
-                if ($qty <= 0) {
-                    $outOfStockCount++;
-                    $lowStockCount++;
-                } elseif ($qty <= $reorder) {
-                    $lowStockCount++;
+                    $totalUnits += $qty;
+                    $productUnits += $qty;
+                    $costValue += ($qty * $cost);
+                    $retailValue += ($qty * $price);
+
+                    if ($isActive) {
+                        if ($qty <= 0) {
+                            $outOfStockSkuCount++;
+                            $lowStockSkuCount++;
+                        } elseif ($qty <= $skuThreshold) {
+                            $lowStockSkuCount++;
+                        } else {
+                            $healthySkuCount++;
+                        }
+                    }
+
+                    $catName = $p->category?->name ?? 'Uncategorized';
+                    if (!isset($categoryMap[$catName])) {
+                        $categoryMap[$catName] = [
+                            'category'     => $catName,
+                            'items_count'  => 0,
+                            'total_units'  => 0,
+                            'cost_value'   => 0.0,
+                            'retail_value' => 0.0,
+                        ];
+                    }
+                    $categoryMap[$catName]['items_count']++;
+                    $categoryMap[$catName]['total_units'] += $qty;
+                    $categoryMap[$catName]['cost_value'] += ($qty * $cost);
+                    $categoryMap[$catName]['retail_value'] += ($qty * $price);
+                }
+            } else {
+                $totalSkus++;
+                $catName = $p->category?->name ?? 'Uncategorized';
+                if (!isset($categoryMap[$catName])) {
+                    $categoryMap[$catName] = [
+                        'category'     => $catName,
+                        'items_count'  => 0,
+                        'total_units'  => 0,
+                        'cost_value'   => 0.0,
+                        'retail_value' => 0.0,
+                    ];
+                }
+                $categoryMap[$catName]['items_count']++;
+            }
+
+            // Option 1: Product-level KPI aggregation
+            if ($isProductActive) {
+                if ($productUnits <= 0) {
+                    $outOfStockProductCount++;
+                    $lowStockProductCount++;
+                } elseif ($productUnits <= $productThreshold) {
+                    $lowStockProductCount++;
                 } else {
-                    $healthyCount++;
+                    $healthyProductCount++;
                 }
             }
-
-            $catName = $v->product?->category?->name ?? 'Uncategorized';
-            if (!isset($categoryMap[$catName])) {
-                $categoryMap[$catName] = [
-                    'category'     => $catName,
-                    'items_count'  => 0,
-                    'total_units'  => 0,
-                    'cost_value'   => 0.0,
-                    'retail_value' => 0.0,
-                ];
-            }
-            $categoryMap[$catName]['items_count']++;
-            $categoryMap[$catName]['total_units'] += $qty;
-            $categoryMap[$catName]['cost_value'] += ($qty * $cost);
-            $categoryMap[$catName]['retail_value'] += ($qty * $price);
         }
 
         $potentialProfit = (float) round($retailValue - $costValue, 2);
@@ -332,7 +376,7 @@ class ReportController extends BaseApiController
             ->values()
             ->all();
 
-        $deadStockItems = $variants
+        $deadStockItems = collect($allVariants)
             ->filter(fn($v) => $v->quantity_on_hand > 0 && !in_array($v->id, $recentSoldVariantIds))
             ->take(8)
             ->map(function ($v) {
@@ -350,18 +394,26 @@ class ReportController extends BaseApiController
             ->toArray();
 
         return $this->successResponse([
-            'total_skus'           => $totalSkus,
-            'total_products'       => $totalProducts,
-            'total_units'          => $totalUnits,
-            'cost_value'           => (float) round($costValue, 2),
-            'retail_value'         => (float) round($retailValue, 2),
-            'potential_profit'     => $potentialProfit,
-            'potential_margin_pct' => $potentialMarginPct,
-            'healthy_count'        => $healthyCount,
-            'low_stock_count'      => $lowStockCount,
-            'out_of_stock_count'   => $outOfStockCount,
-            'categories_breakdown' => $categoriesBreakdown,
-            'dead_stock_items'     => $deadStockItems,
+            'total_skus'             => $totalSkus,
+            'total_products'         => $totalProducts,
+            'total_units'            => $totalUnits,
+            'cost_value'             => (float) round($costValue, 2),
+            'retail_value'           => (float) round($retailValue, 2),
+            'potential_profit'       => $potentialProfit,
+            'potential_margin_pct'   => $potentialMarginPct,
+            // Product-level counts (matching 293 product rows)
+            'healthy_count'          => $healthyProductCount,
+            'low_stock_count'        => $lowStockProductCount,
+            'out_of_stock_count'     => $outOfStockProductCount,
+            'healthy_product_count'  => $healthyProductCount,
+            'low_stock_product_count'=> $lowStockProductCount,
+            'out_of_stock_product_count' => $outOfStockProductCount,
+            // Variant-level SKU counts
+            'healthy_sku_count'      => $healthySkuCount,
+            'low_stock_sku_count'    => $lowStockSkuCount,
+            'out_of_stock_sku_count' => $outOfStockSkuCount,
+            'categories_breakdown'   => $categoriesBreakdown,
+            'dead_stock_items'       => $deadStockItems,
         ]);
     }
 }
