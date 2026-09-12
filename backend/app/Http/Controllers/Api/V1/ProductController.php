@@ -142,6 +142,10 @@ class ProductController extends BaseApiController
 
             $product->update($productFields);
 
+            if (array_key_exists('is_active', $validated)) {
+                $product->variants()->update(['is_active' => (bool) $validated['is_active']]);
+            }
+
             // If product barcode/stock was updated and it has exactly 1 base variant (simple product)
             if (empty($validated['variants']) && $product->variants()->count() === 1) {
                 $baseVar = $product->variants()->first();

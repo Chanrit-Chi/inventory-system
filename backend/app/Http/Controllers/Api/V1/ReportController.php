@@ -260,11 +260,13 @@ class ReportController extends BaseApiController
     {
         // 1. Core Inventory KPIs
         $variants = ProductVariant::query()
+            ->whereNull('deleted_at')
+            ->whereHas('product', fn ($q) => $q->whereNull('deleted_at'))
             ->with(['product.category'])
             ->get();
 
         $totalSkus = $variants->count();
-        $totalProducts = Product::count();
+        $totalProducts = Product::whereNull('deleted_at')->count();
         $totalUnits = 0;
         $costValue = 0.0;
         $retailValue = 0.0;
@@ -276,7 +278,7 @@ class ReportController extends BaseApiController
 
         foreach ($variants as $v) {
             $qty = (int) $v->quantity_on_hand;
-            $reorder = (int) ($v->reorder_level ?: 5);
+            $reorder = (int) ($v->reorder_level ?? $v->product?->default_reorder_level ?? 5);
             $cost = (float) ($v->cost_price ?? $v->product?->cost_price ?? 0);
             $price = (float) ($v->selling_price ?? $v->product?->selling_price ?? 0);
             $isActive = (bool) ($v->is_active ?? true) && (bool) ($v->product?->is_active ?? true);

@@ -177,9 +177,9 @@ function onFilterChange(filter: string) {
 async function handleToggleStatus(product: Product, checked: boolean) {
   try {
     product.is_active = checked
-    await productStore.toggleProductStatus(product)
+    await productStore.toggleProductStatus(product, checked)
   } catch {
-    // Error handled in store
+    product.is_active = !checked
   }
 }
 

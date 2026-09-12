@@ -68,6 +68,8 @@ class DashboardController extends BaseApiController
             ->join('products', 'product_variants.product_id', '=', 'products.id')
             ->where('product_variants.is_active', true)
             ->where('products.is_active', true)
+            ->whereNull('products.deleted_at')
+            ->whereNull('product_variants.deleted_at')
             ->whereRaw('product_variants.quantity_on_hand <= COALESCE(product_variants.reorder_level, products.default_reorder_level, 5)')
             ->count();
 

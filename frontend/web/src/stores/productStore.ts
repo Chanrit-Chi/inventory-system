@@ -262,8 +262,9 @@ export const useProductStore = defineStore('products', () => {
     }
   }
 
-  async function toggleProductStatus(product: Product) {
-    return updateProduct(product.id, { is_active: !product.is_active })
+  async function toggleProductStatus(product: Product, targetActive?: boolean) {
+    const is_active = targetActive !== undefined ? targetActive : !product.is_active
+    return updateProduct(product.id, { is_active })
   }
 
   return {
