@@ -454,7 +454,7 @@ onMounted(() => {
 
         <!-- Expenses Table Container -->
         <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-          <div v-if="expenseStore.loading" class="p-6 space-y-3">
+          <div v-if="expenseStore.loading && expenseStore.expenses.length === 0" class="p-6 space-y-3">
             <Skeleton v-for="i in 4" :key="i" class="h-10 w-full" />
           </div>
 

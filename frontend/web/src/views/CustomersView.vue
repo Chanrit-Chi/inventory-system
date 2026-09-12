@@ -452,7 +452,7 @@ onMounted(() => {
 
     <!-- Customers View Container -->
     <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-      <div v-if="customerStore.loading" class="p-6 space-y-3">
+      <div v-if="customerStore.loading && customerStore.customers.length === 0" class="p-6 space-y-3">
         <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
       </div>
 

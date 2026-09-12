@@ -385,8 +385,8 @@ onMounted(() => {
 
     <!-- Main Content Container -->
     <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-      <!-- Loading Skeleton -->
-      <div v-if="productStore.loading" class="p-6 space-y-3">
+      <!-- Loading Skeleton (only on initial load when empty) -->
+      <div v-if="productStore.loading && productStore.products.length === 0" class="p-6 space-y-3">
         <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
       </div>
 

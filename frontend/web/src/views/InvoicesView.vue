@@ -277,7 +277,7 @@ onMounted(loadInvoices)
 
     <!-- Invoices Table Container -->
     <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-      <div v-if="store.loading" class="p-6 space-y-3">
+      <div v-if="store.loading && !invoices.length" class="p-6 space-y-3">
         <Skeleton v-for="i in 5" :key="i" class="h-12 w-full" />
       </div>
 
