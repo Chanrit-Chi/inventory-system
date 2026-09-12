@@ -40,6 +40,7 @@ interface Product {
   image_url?: string | null
   cost_price?: number | string
   purchase_price?: number | string
+  is_active?: boolean
   category?: { name: string }
   variants: Variant[]
 }
@@ -56,6 +57,7 @@ interface Variant {
   product?: {
     id: string
     name: string
+    is_active?: boolean
     cost_price?: number | string
     category?: { name: string }
   }
@@ -94,7 +96,7 @@ const allVariants = computed<Variant[]>(() =>
   products.value.flatMap(p =>
     (p.variants ?? []).map(v => ({
       ...v,
-      product: { id: p.id, name: p.name, cost_price: p.cost_price ?? p.purchase_price, category: p.category },
+      product: { id: p.id, name: p.name, is_active: p.is_active, cost_price: p.cost_price ?? p.purchase_price, category: p.category },
     }))
   )
 )
@@ -133,10 +135,10 @@ async function loadSummaryStats() {
 const totalSkus = computed(() => summaryStats.value?.total_skus ?? allVariants.value.length)
 const totalProductsCount = computed(() => summaryStats.value?.total_products ?? (meta.value?.total ?? products.value.length))
 const lowStockCount = computed(() => summaryStats.value?.low_stock_count ??
-  allVariants.value.filter(v => v.quantity_on_hand <= v.reorder_level).length
+  allVariants.value.filter(v => (v.is_active ?? true) && (v.product?.is_active !== false) && v.quantity_on_hand <= v.reorder_level).length
 )
 const outOfStockCount = computed(() => summaryStats.value?.out_of_stock_count ??
-  allVariants.value.filter(v => v.quantity_on_hand === 0).length
+  allVariants.value.filter(v => (v.is_active ?? true) && (v.product?.is_active !== false) && v.quantity_on_hand === 0).length
 )
 const totalInventoryUnits = computed(() => summaryStats.value?.total_units ??
   allVariants.value.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)

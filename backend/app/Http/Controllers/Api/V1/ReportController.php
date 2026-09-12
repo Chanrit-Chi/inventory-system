@@ -279,18 +279,22 @@ class ReportController extends BaseApiController
             $reorder = (int) ($v->reorder_level ?: 5);
             $cost = (float) ($v->cost_price ?? $v->product?->cost_price ?? 0);
             $price = (float) ($v->selling_price ?? $v->product?->selling_price ?? 0);
+            $isActive = (bool) ($v->is_active ?? true) && (bool) ($v->product?->is_active ?? true);
 
             $totalUnits += $qty;
             $costValue += ($qty * $cost);
             $retailValue += ($qty * $price);
 
-            if ($qty <= 0) {
-                $outOfStockCount++;
-                $lowStockCount++;
-            } elseif ($qty <= $reorder) {
-                $lowStockCount++;
-            } else {
-                $healthyCount++;
+            // Only active products trigger reorder/depleted stock alerts
+            if ($isActive) {
+                if ($qty <= 0) {
+                    $outOfStockCount++;
+                    $lowStockCount++;
+                } elseif ($qty <= $reorder) {
+                    $lowStockCount++;
+                } else {
+                    $healthyCount++;
+                }
             }
 
             $catName = $v->product?->category?->name ?? 'Uncategorized';
