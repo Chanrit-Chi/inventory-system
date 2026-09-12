@@ -82,7 +82,8 @@ class StockAdjustmentController extends BaseApiController
             }
 
             try {
-                $results = DB::transaction(function () use ($itemsList, $userId, $request) {
+                $adjustedVariantsToDispatch = [];
+                $results = DB::transaction(function () use ($itemsList, $userId, $request, &$adjustedVariantsToDispatch) {
                     $processed = [];
                     foreach ($itemsList as $item) {
                         $vId = $item['variant_id'];
@@ -126,7 +127,7 @@ class StockAdjustmentController extends BaseApiController
                             ]);
                         }
 
-                        \App\Events\StockAdjusted::dispatch($variant);
+                        $adjustedVariantsToDispatch[] = $variant;
 
                         $processed[] = [
                             'variant_id'   => $variant->id,
@@ -137,6 +138,11 @@ class StockAdjustmentController extends BaseApiController
                     }
                     return $processed;
                 });
+
+                // Dispatch events safely after transaction commits
+                foreach ($adjustedVariantsToDispatch as $v) {
+                    \App\Events\StockAdjusted::dispatch($v);
+                }
 
                 return $this->successResponse([
                     'adjusted_count' => count($results),
@@ -217,12 +223,16 @@ class StockAdjustmentController extends BaseApiController
                     'new_quantity' => $newQuantity,
                     'difference'   => $difference,
                     'reason'       => $reason,
+                    '_variant'     => $variant,
                 ];
-
-                \App\Events\StockAdjusted::dispatch($variant);
 
                 return $data;
             });
+
+            if (isset($result['_variant'])) {
+                \App\Events\StockAdjusted::dispatch($result['_variant']);
+                unset($result['_variant']);
+            }
 
             return $this->successResponse($result, 'Stock adjusted successfully.');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
