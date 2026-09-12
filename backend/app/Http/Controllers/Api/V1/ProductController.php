@@ -156,6 +156,9 @@ class ProductController extends BaseApiController
                 if (isset($validated['quantity_on_hand']) || isset($validated['stock']) || isset($validated['simple_stock'])) {
                     $baseUpdates['quantity_on_hand'] = $this->variantGenerator->resolveInitialStock($validated, 'simple_stock');
                 }
+                if (isset($validated['default_reorder_level'])) {
+                    $baseUpdates['reorder_level'] = (int) $validated['default_reorder_level'];
+                }
                 if (isset($validated['purchase_price'])) {
                     $baseUpdates['cost_price'] = (float) $validated['purchase_price'];
                 }

@@ -708,7 +708,7 @@ defineExpose({
               <span>Simple Inventory Details</span>
             </h3>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-foreground mb-1 whitespace-nowrap truncate" title="Barcode / UPC">Barcode / UPC</label>
                 <Input
@@ -739,6 +739,18 @@ defineExpose({
                   type="number"
                   min="0"
                   class="h-9 bg-surface text-sm font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-foreground mb-1 whitespace-nowrap truncate" title="Reorder Alert Level">Reorder Alert Level</label>
+                <Input
+                  id="product-edit-simple-reorder"
+                  v-model="form.default_reorder_level"
+                  type="number"
+                  min="0"
+                  placeholder="5"
+                  class="h-9 bg-surface text-sm font-mono"
                 />
               </div>
             </div>

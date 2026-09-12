@@ -515,7 +515,7 @@ defineExpose({
               </label>
             </div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-semibold text-foreground mb-1">Master Barcode</label>
               <Input
@@ -535,6 +535,18 @@ defineExpose({
                 type="number"
                 min="0"
                 placeholder="0"
+                class="h-9 bg-surface text-sm font-mono"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-foreground mb-1">Reorder Alert Level</label>
+              <Input
+                id="product-reorder-level"
+                v-model="form.default_reorder_level"
+                type="number"
+                min="0"
+                placeholder="5"
                 class="h-9 bg-surface text-sm font-mono"
               />
             </div>
