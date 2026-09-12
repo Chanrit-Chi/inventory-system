@@ -296,6 +296,9 @@ export const styles = StyleSheet.create({
   stockBadgeLow: {
     backgroundColor: '#FFDAD6',
   },
+  stockBadgeInactive: {
+    backgroundColor: '#F1F5F9',
+  },
   stockBadgeText: {
     fontSize: 11,
     fontWeight: '700',
@@ -305,6 +308,9 @@ export const styles = StyleSheet.create({
   },
   stockTextLow: {
     color: '#93000A',
+  },
+  stockTextInactive: {
+    color: '#64748B',
   },
   variantSummaryBox: {
     flexDirection: 'row',

@@ -140,17 +140,35 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
 
           <View style={[
             styles.stockDotBadge,
-            isOutOfStock ? styles.stockDotOos : isLowStock ? styles.stockDotLow : styles.stockDotOk,
+            product.is_active === false
+              ? styles.stockDotInactive
+              : isOutOfStock
+              ? styles.stockDotOos
+              : isLowStock
+              ? styles.stockDotLow
+              : styles.stockDotOk,
           ]}>
             <View style={[
               styles.dot,
-              isOutOfStock ? styles.dotOos : isLowStock ? styles.dotLow : styles.dotOk,
+              product.is_active === false
+                ? styles.dotInactive
+                : isOutOfStock
+                ? styles.dotOos
+                : isLowStock
+                ? styles.dotLow
+                : styles.dotOk,
             ]} />
             <Text style={[
               styles.stockLabel,
-              isOutOfStock ? styles.stockLabelOos : isLowStock ? styles.stockLabelLow : styles.stockLabelOk,
+              product.is_active === false
+                ? styles.stockLabelInactive
+                : isOutOfStock
+                ? styles.stockLabelOos
+                : isLowStock
+                ? styles.stockLabelLow
+                : styles.stockLabelOk,
             ]} numberOfLines={1}>
-              {isOutOfStock ? '0 Stock' : isLowStock ? `${totalStock} low` : `${totalStock}`}
+              {product.is_active === false ? 'Inactive' : isOutOfStock ? '0 Stock' : isLowStock ? `${totalStock} low` : `${totalStock}`}
             </Text>
           </View>
         </View>
@@ -375,6 +393,7 @@ const styles = StyleSheet.create({
   stockDotOk: { backgroundColor: tokens.colors.badgeSuccessBg },
   stockDotLow: { backgroundColor: tokens.colors.errorContainer },
   stockDotOos: { backgroundColor: tokens.colors.errorContainer },
+  stockDotInactive: { backgroundColor: '#F1F5F9' },
   dot: {
     width: 5,
     height: 5,
@@ -383,6 +402,7 @@ const styles = StyleSheet.create({
   dotOk: { backgroundColor: tokens.colors.statusSuccess },
   dotLow: { backgroundColor: tokens.colors.statusError },
   dotOos: { backgroundColor: tokens.colors.statusError },
+  dotInactive: { backgroundColor: '#94A3B8' },
   stockLabel: {
     fontSize: 9,
     fontWeight: '700',
@@ -390,6 +410,7 @@ const styles = StyleSheet.create({
   stockLabelOk: { color: tokens.colors.statusSuccess },
   stockLabelLow: { color: tokens.colors.statusError },
   stockLabelOos: { color: tokens.colors.statusError },
+  stockLabelInactive: { color: '#64748B' },
 
   // ── Bottom row: price + action ─────────────────────────
   bottomRow: {

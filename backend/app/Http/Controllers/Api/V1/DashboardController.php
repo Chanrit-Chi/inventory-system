@@ -63,8 +63,11 @@ class DashboardController extends BaseApiController
                 ->whereRaw("UPPER(TRIM(status)) = 'COMPLETED'");
         })->sum('quantity');
 
-        // 6. Low Stock SKUs: Count of variants where quantity_on_hand <= 5
-        $lowStockSkus = (int) ProductVariant::where('quantity_on_hand', '<=', 5)->count();
+        // 6. Low Stock SKUs: Count of active variants where quantity_on_hand <= 5
+        $lowStockSkus = (int) ProductVariant::where('is_active', true)
+            ->whereHas('product', fn ($q) => $q->where('is_active', true))
+            ->where('quantity_on_hand', '<=', 5)
+            ->count();
 
         // 7. Revenue Trend: Compare today's revenue to yesterday's revenue and return % difference
         $yesterdayRevenue = (float) Order::where('created_at', '>=', $yesterdayStart)

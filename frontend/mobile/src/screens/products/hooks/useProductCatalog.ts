@@ -234,9 +234,9 @@ export function useProductCatalog() {
       const totalStock = getProductTotalStock(p)
       if (stockFilter === 'LOW_STOCK') {
         const reorder = p.default_reorder_level ?? 10
-        matchStock = totalStock <= reorder && totalStock > 0
+        matchStock = p.is_active !== false && totalStock <= reorder
       } else if (stockFilter === 'OUT_OF_STOCK') {
-        matchStock = totalStock <= 0
+        matchStock = p.is_active !== false && totalStock <= 0
       }
 
       return matchSearch && matchCat && matchStatus && matchStock

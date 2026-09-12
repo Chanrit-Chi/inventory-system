@@ -63,7 +63,9 @@ export const ProductGridCard = React.memo(({ product, onPress, onQuickScanBarcod
         <View
           style={[
             gridStyles.floatingStockBadge,
-            isOutOfStock
+            product.is_active === false
+              ? gridStyles.stockBadgeInactive
+              : isOutOfStock
               ? gridStyles.stockBadgeOut
               : isLowStock
               ? gridStyles.stockBadgeLow
@@ -73,14 +75,16 @@ export const ProductGridCard = React.memo(({ product, onPress, onQuickScanBarcod
           <Text
             style={[
               gridStyles.floatingStockText,
-              isOutOfStock
+              product.is_active === false
+                ? gridStyles.stockTextInactive
+                : isOutOfStock
                 ? gridStyles.stockTextOut
                 : isLowStock
                 ? gridStyles.stockTextLow
                 : gridStyles.stockTextOk,
             ]}
           >
-            {isOutOfStock ? '0 Stock' : isLowStock ? `${totalStock} Low` : `${totalStock}`}
+            {product.is_active === false ? 'Inactive' : isOutOfStock ? '0 Stock' : isLowStock ? `${totalStock} Low` : `${totalStock}`}
           </Text>
         </View>
 
@@ -180,6 +184,10 @@ const gridStyles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     borderColor: '#FCA5A5',
   },
+  stockBadgeInactive: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+  },
   floatingStockText: {
     fontSize: 9.5,
     fontWeight: '800',
@@ -192,6 +200,9 @@ const gridStyles = StyleSheet.create({
   },
   stockTextOut: {
     color: '#DC2626',
+  },
+  stockTextInactive: {
+    color: '#64748B',
   },
   floatingTypePill: {
     position: 'absolute',

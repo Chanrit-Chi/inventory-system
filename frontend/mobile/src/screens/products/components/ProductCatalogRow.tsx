@@ -66,9 +66,27 @@ export const ProductCatalogRow = React.memo(({ product, onPress, onQuickScanBarc
             {product.category?.name || 'General'}
           </Text>
         </View>
-        <View style={[styles.stockBadge, isLowStock ? styles.stockBadgeLow : styles.stockBadgeOk]}>
-          <Text style={[styles.stockBadgeText, isLowStock ? styles.stockTextLow : styles.stockTextOk]}>
-            {totalStock} in stock
+        <View
+          style={[
+            styles.stockBadge,
+            product.is_active === false
+              ? styles.stockBadgeInactive
+              : isLowStock
+              ? styles.stockBadgeLow
+              : styles.stockBadgeOk,
+          ]}
+        >
+          <Text
+            style={[
+              styles.stockBadgeText,
+              product.is_active === false
+                ? styles.stockTextInactive
+                : isLowStock
+                ? styles.stockTextLow
+                : styles.stockTextOk,
+            ]}
+          >
+            {product.is_active === false ? 'Inactive' : `${totalStock} in stock`}
           </Text>
         </View>
       </View>
