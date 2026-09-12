@@ -9,6 +9,7 @@ export interface ProductGroupHeaderProps {
   totalQty: number
   totalCost?: number       // optional • hidden when undefined (e.g. Stock Adjustment)
   onRemoveAll?: () => void // optional • hidden when undefined (read-only views)
+  onBatchSetQty?: () => void // optional • batch set quantity for all variants
 }
 
 export const ProductGroupHeader: React.FC<ProductGroupHeaderProps> = ({
@@ -17,6 +18,7 @@ export const ProductGroupHeader: React.FC<ProductGroupHeaderProps> = ({
   totalQty,
   totalCost,
   onRemoveAll,
+  onBatchSetQty,
 }) => {
   const metaParts: string[] = [
     `${variantCount} variant${variantCount !== 1 ? 's' : ''}`,
@@ -37,17 +39,31 @@ export const ProductGroupHeader: React.FC<ProductGroupHeaderProps> = ({
         </Text>
       </View>
 
-      {Boolean(onRemoveAll) && (
-        <TouchableOpacity
-          style={styles.removeAllBtn}
-          onPress={onRemoveAll}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          activeOpacity={0.75}
-        >
-          <Ionicons name="trash-outline" size={12} color="#DC2626" />
-          <Text style={styles.removeAllText}>Remove All</Text>
-        </TouchableOpacity>
-      )}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {Boolean(onBatchSetQty) && (
+          <TouchableOpacity
+            style={styles.batchSetBtn}
+            onPress={onBatchSetQty}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="copy-outline" size={12} color="#2563EB" />
+            <Text style={styles.batchSetText}>Set All</Text>
+          </TouchableOpacity>
+        )}
+
+        {Boolean(onRemoveAll) && (
+          <TouchableOpacity
+            style={styles.removeAllBtn}
+            onPress={onRemoveAll}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="trash-outline" size={12} color="#DC2626" />
+            <Text style={styles.removeAllText}>Remove All</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   )
 }
@@ -93,5 +109,21 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '700',
     color: '#DC2626',
+  },
+  batchSetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  batchSetText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#2563EB',
   },
 })

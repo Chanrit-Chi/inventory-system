@@ -750,20 +750,29 @@ export async function deleteAttribute(id: string): Promise<{ success: boolean; m
 
 
 /**
- * Adjust variant inventory stock count
+ * Adjust variant inventory stock count (single item or bulk items)
  * POST /api/v1/inventory/adjust
  */
 export async function adjustStock(payload: {
-  variant_id: string
-  new_quantity: number
+  variant_id?: string
+  product_id?: string
+  new_quantity?: number
   current_quantity?: number
   difference?: number
-  reason: string
+  reason?: string
   notes?: string
   adjusted_at?: string
   client_mutation_id?: string
-}): Promise<ApiResponse<{ variant_id: string; new_quantity: number; difference: number; reason: string }>> {
-  const response = await apiClient.post<ApiResponse<{ variant_id: string; new_quantity: number; difference: number; reason: string }>>('/inventory/adjust', payload)
+  items?: Array<{
+    variant_id: string
+    new_quantity: number
+    current_quantity?: number
+    difference?: number
+    reason?: string
+    notes?: string
+  }>
+}): Promise<ApiResponse<any>> {
+  const response = await apiClient.post<ApiResponse<any>>('/inventory/adjust', payload)
   return response.data
 }
 

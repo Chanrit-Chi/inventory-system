@@ -341,39 +341,65 @@ export function ProductDetailModal({
                                 </Text>
                               </View>
 
-                              {/* Per-variant visibility toggle */}
-                              <TouchableOpacity
-                                style={{
-                                  flexDirection: 'row',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  marginTop: 3,
-                                  paddingHorizontal: 6,
-                                  paddingVertical: 2,
-                                  borderRadius: 4,
-                                  backgroundColor: v.is_active !== false ? tokens.colors.actionPrimaryBg : '#F3F4F6',
-                                  borderWidth: 1,
-                                  borderColor: v.is_active !== false ? tokens.colors.primaryFixedDim : tokens.colors.borderDark,
-                                }}
-                                onPress={() => handleToggleVariantActive(detailProduct, v.id)}
-                                activeOpacity={0.7}
-                                hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-                              >
-                                <Ionicons
-                                  name={v.is_active !== false ? 'eye-outline' : 'eye-off-outline'}
-                                  size={11}
-                                  color={v.is_active !== false ? tokens.colors.primaryContainer : tokens.colors.secondary}
-                                />
-                                <Text
+                              {/* Per-variant actions: Adjust & Visibility */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                                {Boolean(can('inventory:adjust')) && (
+                                  <TouchableOpacity
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 2,
+                                      paddingHorizontal: 6,
+                                      paddingVertical: 2,
+                                      borderRadius: 4,
+                                      backgroundColor: '#F0F9FF',
+                                      borderWidth: 1,
+                                      borderColor: '#BAE6FD',
+                                    }}
+                                    onPress={() => {
+                                      setDetailModalOpen(false)
+                                      onOpenStockAdjustment?.(detailProduct, v)
+                                    }}
+                                    activeOpacity={0.7}
+                                    hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+                                  >
+                                    <Ionicons name="options-outline" size={11} color="#0284C7" />
+                                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#0284C7' }}>Adjust</Text>
+                                  </TouchableOpacity>
+                                )}
+
+                                <TouchableOpacity
                                   style={{
-                                    fontSize: 9,
-                                    fontWeight: '700',
-                                    color: v.is_active !== false ? tokens.colors.primaryContainer : tokens.colors.secondary,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 2,
+                                    borderRadius: 4,
+                                    backgroundColor: v.is_active !== false ? tokens.colors.actionPrimaryBg : '#F3F4F6',
+                                    borderWidth: 1,
+                                    borderColor: v.is_active !== false ? tokens.colors.primaryFixedDim : tokens.colors.borderDark,
                                   }}
+                                  onPress={() => handleToggleVariantActive(detailProduct, v.id)}
+                                  activeOpacity={0.7}
+                                  hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
                                 >
-                                  {v.is_active !== false ? 'For Sale' : 'Hidden'}
-                                </Text>
-                              </TouchableOpacity>
+                                  <Ionicons
+                                    name={v.is_active !== false ? 'eye-outline' : 'eye-off-outline'}
+                                    size={11}
+                                    color={v.is_active !== false ? tokens.colors.primaryContainer : tokens.colors.secondary}
+                                  />
+                                  <Text
+                                    style={{
+                                      fontSize: 9,
+                                      fontWeight: '700',
+                                      color: v.is_active !== false ? tokens.colors.primaryContainer : tokens.colors.secondary,
+                                    }}
+                                  >
+                                    {v.is_active !== false ? 'For Sale' : 'Hidden'}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
                             </View>
                           </View>
                         )

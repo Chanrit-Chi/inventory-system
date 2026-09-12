@@ -67,10 +67,89 @@ class StockAdjustmentController extends BaseApiController
      * POST /api/v1/inventory/adjust
      *
      * Perform physical stock count variance adjustment with ledger auditing.
+     * Supports single item or bulk items payload.
      */
     public function adjust(StockAdjustmentRequest $request): JsonResponse
     {
-        $validated   = $request->validated();
+        $validated = $request->validated();
+        $userId    = $request->user()?->id;
+
+        // 1. Bulk adjustments handling
+        if ($request->has('items') && is_array($validated['items'])) {
+            $itemsList = $validated['items'];
+            if (empty($itemsList)) {
+                return $this->errorResponse('Items list cannot be empty.', null, 422);
+            }
+
+            try {
+                $results = DB::transaction(function () use ($itemsList, $userId, $request) {
+                    $processed = [];
+                    foreach ($itemsList as $item) {
+                        $vId = $item['variant_id'];
+                        $newQty = (int) $item['new_quantity'];
+                        if ($newQty < 0) {
+                            throw new \InvalidArgumentException("New quantity cannot be negative for variant {$vId}.");
+                        }
+
+                        $reason = $item['reason'] ?? 'Audit';
+                        $movementType = match ($reason) {
+                            'Damaged'   => 'DAMAGE',
+                            'Audit'     => 'ADJUSTMENT',
+                            'Restock'   => 'RESTOCK',
+                            'Return'    => 'RETURN',
+                            'Shrinkage' => 'SHRINKAGE',
+                            default     => 'ADJUSTMENT',
+                        };
+
+                        /** @var ProductVariant $variant */
+                        $variant = ProductVariant::lockForUpdate()->findOrFail($vId);
+                        $qtyBefore = (int) $variant->quantity_on_hand;
+                        $difference = $newQty - $qtyBefore;
+
+                        $variant->quantity_on_hand = $newQty;
+                        $variant->save();
+
+                        if ($difference !== 0) {
+                            $refId = 'ADJ-' . strtoupper(Str::random(8));
+                            StockMovement::create([
+                                'product_id'      => $variant->product_id,
+                                'variant_id'      => $variant->id,
+                                'movement_type'   => $movementType,
+                                'quantity_before' => $qtyBefore,
+                                'quantity_after'  => $newQty,
+                                'quantity_change' => $difference,
+                                'reference_id'    => $refId,
+                                'notes'           => $item['notes'] ?? "Stock adjustment: {$reason}",
+                                'user_id'         => $userId,
+                                'created_by'      => $userId,
+                                'created_at'      => now(),
+                            ]);
+                        }
+
+                        \App\Events\StockAdjusted::dispatch($variant);
+
+                        $processed[] = [
+                            'variant_id'   => $variant->id,
+                            'new_quantity' => $newQty,
+                            'difference'   => $difference,
+                            'reason'       => $reason,
+                        ];
+                    }
+                    return $processed;
+                });
+
+                return $this->successResponse([
+                    'adjusted_count' => count($results),
+                    'items'          => $results,
+                ], 'Bulk stock adjusted successfully.');
+            } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
+                return $this->errorResponse('One or more product variants not found.', null, 404);
+            } catch (\Throwable $e) {
+                return $this->errorResponse($e->getMessage(), null, 422);
+            }
+        }
+
+        // 2. Single item adjustment handling
         $variantId   = $validated['variant_id'];
         $newQuantity = (int) $validated['new_quantity'];
         $reason      = $validated['reason'];

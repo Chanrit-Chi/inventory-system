@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
 import { adjustStock, scanBarcode, getProducts } from '../api/endpoints'
+import { apiClient } from '../api/client'
 import { CameraScannerModal } from './CameraScannerModal'
 import { ProductPickerModal, SelectedProductItem } from './ProductPickerModal'
 import { ProductGroupHeader } from './ProductGroupHeader'
@@ -136,14 +137,14 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
         }
         setItems([initItem])
       } else if (isRealProduct) {
-        if (product.variants && product.variants.length > 0) {
-          const initItems: StockAdjustmentItem[] = product.variants.map((v, idx) => {
-            const attrSummary = v.attribute_values?.map((av: ScannedAttributeValue) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
-            const varName = v.name || attrSummary || v.sku
+        const buildItemsFromVariants = (pro: Product, vars: (ProductVariant | ScannedVariant)[]): StockAdjustmentItem[] => {
+          return vars.map((v, idx) => {
+            const attrSummary = (v as ProductVariant).attribute_values?.map((av: ScannedAttributeValue) => av.value_name || av.attribute?.name).filter(Boolean).join(' / ')
+            const varName = (v as ProductVariant).name || attrSummary || v.sku
             return {
               id: `adj-${v.id || idx}-${Date.now()}`,
               variant_id: v.id,
-              product_name: product.name,
+              product_name: pro.name,
               variant_name: varName,
               sku: v.sku,
               barcode: v.barcode,
@@ -153,20 +154,37 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
               reason: 'Audit',
             }
           })
-          setItems(initItems)
+        }
+
+        if (product.variants && product.variants.length > 0) {
+          setItems(buildItemsFromVariants(product, product.variants))
         } else {
-          const initItem: StockAdjustmentItem = {
+          // If variants missing or empty on product object, fetch live detail from API
+          const initialQty = ((product as any).quantity_on_hand ?? (product as any).stock ?? 0)
+          const fallbackItem: StockAdjustmentItem = {
             id: `adj-${product.id}-${Date.now()}`,
-            variant_id: product.id,
+            variant_id: product.id, // Handled by backend fallback
             product_name: product.name,
             sku: product.sku || 'SKU-UNKNOWN',
             barcode: product.barcode,
-            current_quantity: 0,
-            new_quantity: 0,
+            current_quantity: initialQty,
+            new_quantity: initialQty,
             difference: 0,
             reason: 'Audit',
           }
-          setItems([initItem])
+          setItems([fallbackItem])
+
+          // Async fetch product detail with eager-loaded variants
+          apiClient.get(`/products/${product.id}`)
+            .then((res) => {
+              const freshProd = res.data?.data as Product | undefined
+              if (freshProd?.variants && freshProd.variants.length > 0) {
+                setItems(buildItemsFromVariants(freshProd, freshProd.variants))
+              }
+            })
+            .catch(() => {
+              // Ignore network error on background detail fetch; backend resolves product_id fallback
+            })
         }
       } else {
         setItems([])
@@ -406,6 +424,59 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
     )
   }
 
+  const handleBatchSetGroupQty = (group: StockAdjustmentGroup) => {
+    Alert.alert(
+      'Batch Set Stock',
+      `Quickly adjust all ${group.items.length} variants of "${group.parentName}":`,
+      [
+        {
+          text: 'Set All to 0',
+          style: 'destructive',
+          onPress: () => {
+            const groupItemIds = new Set(group.items.map((i) => i.id))
+            setItems((prev) =>
+              prev.map((it) =>
+                groupItemIds.has(it.id)
+                  ? { ...it, new_quantity: 0, difference: 0 - it.current_quantity }
+                  : it
+              )
+            )
+            showToast(`Set all ${group.items.length} variants to 0`)
+          },
+        },
+        {
+          text: '+5 to Each',
+          onPress: () => {
+            const groupItemIds = new Set(group.items.map((i) => i.id))
+            setItems((prev) =>
+              prev.map((it) =>
+                groupItemIds.has(it.id)
+                  ? { ...it, new_quantity: it.new_quantity + 5, difference: it.new_quantity + 5 - it.current_quantity }
+                  : it
+              )
+            )
+            showToast(`Added +5 to ${group.items.length} variants`)
+          },
+        },
+        {
+          text: '+10 to Each',
+          onPress: () => {
+            const groupItemIds = new Set(group.items.map((i) => i.id))
+            setItems((prev) =>
+              prev.map((it) =>
+                groupItemIds.has(it.id)
+                  ? { ...it, new_quantity: it.new_quantity + 10, difference: it.new_quantity + 10 - it.current_quantity }
+                  : it
+              )
+            )
+            showToast(`Added +10 to ${group.items.length} variants`)
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    )
+  }
+
   // Summary counts
   const totalDifference = useMemo(() => {
     return items.reduce((acc, curr) => acc + curr.difference, 0)
@@ -422,7 +493,9 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
       return
     }
 
-    if (adjustedItemsCount === 0) {
+    const itemsToSave = items.filter((i) => i.difference !== 0)
+
+    if (itemsToSave.length === 0) {
       Alert.alert('No Changes', 'All item counts match current stock. No adjustments needed.')
       return
     }
@@ -431,8 +504,25 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
     try {
       const adjustedVariantsList: Array<{ variant_id: string; new_quantity: number }> = []
 
-      for (const item of items) {
-        if (item.difference !== 0) {
+      if (!onSave && itemsToSave.length > 1) {
+        // Bulk atomic submission
+        await adjustStock({
+          items: itemsToSave.map((it) => ({
+            variant_id: it.variant_id,
+            current_quantity: it.current_quantity,
+            new_quantity: it.new_quantity,
+            difference: it.difference,
+            reason: it.reason,
+            notes: notes.trim() || undefined,
+          })),
+        })
+
+        itemsToSave.forEach((it) => {
+          adjustedVariantsList.push({ variant_id: it.variant_id, new_quantity: it.new_quantity })
+        })
+      } else {
+        // Single item or custom onSave callback
+        for (const item of itemsToSave) {
           const payload: StockAdjustmentPayload = {
             variant_id: item.variant_id,
             current_quantity: item.current_quantity,
@@ -651,6 +741,7 @@ export const StockAdjustmentModal: React.FC<StockAdjustmentModalProps> = ({
                         variantCount={group.items.length}
                         totalQty={group.totalQty}
                         onRemoveAll={() => handleRemoveAdjParentGroupWithConfirm(group)}
+                        onBatchSetQty={group.items.length > 1 ? () => handleBatchSetGroupQty(group) : undefined}
                       />
 
                       {group.items.map((item) => {
