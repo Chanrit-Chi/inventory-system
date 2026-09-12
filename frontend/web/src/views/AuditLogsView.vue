@@ -110,7 +110,7 @@ async function loadLogs(append = false) {
 }
 
 function handleLoadMore() {
-  if (store.loading) return
+  if (store.loadingMore || store.loading) return
   if (store.meta && currentPage.value < store.meta.last_page) {
     currentPage.value += 1
     loadLogs(true)
@@ -441,13 +441,28 @@ onMounted(loadLogs)
                 </div>
               </td>
             </tr>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <tr
+              v-if="store.loadingMore"
+              v-for="s in 3"
+              :key="'skel-audit-' + s"
+              class="animate-pulse bg-muted/20 border-b border-border/50"
+            >
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-24" /></td>
+              <td class="px-4 py-3"><div class="h-5 bg-muted/60 rounded-full w-20" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-24" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-48" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
+              <td class="px-4 py-3 text-right"><div class="h-5 bg-muted/60 rounded w-24 ml-auto" /></td>
+            </tr>
           </tbody>
         </table>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="store.loading"
+        :loading="store.loadingMore"
         :has-more="Boolean(store.meta && currentPage < store.meta.last_page)"
         :total-loaded="store.logs.length"
         :total="store.meta?.total ?? null"

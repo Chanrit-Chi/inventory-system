@@ -106,7 +106,7 @@ async function loadOrders(append = false) {
 }
 
 function handleLoadMore() {
-  if (orderStore.loading) return
+  if (orderStore.loadingMore || orderStore.loading) return
   if (orderStore.meta && page.value < orderStore.meta.last_page) {
     page.value++
     loadOrders(true)
@@ -497,13 +497,29 @@ defineExpose({
                 </Button>
               </TableCell>
             </TableRow>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <TableRow
+              v-if="orderStore.loadingMore"
+              v-for="s in 3"
+              :key="'skel-order-' + s"
+              class="animate-pulse bg-muted/20"
+            >
+              <TableCell><div class="h-4 bg-muted/60 rounded w-28" /></TableCell>
+              <TableCell><div class="h-5 bg-muted/60 rounded-full w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-32" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
+              <TableCell><div class="h-5 bg-muted/60 rounded-full w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-24" /></TableCell>
+              <TableCell class="text-right"><div class="h-6 bg-muted/60 rounded w-20 ml-auto" /></TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="orderStore.loading"
+        :loading="orderStore.loadingMore"
         :has-more="Boolean(orderStore.meta && page < orderStore.meta.last_page)"
         :total-loaded="orderStore.orders.length"
         :total="orderStore.meta?.total ?? null"

@@ -46,11 +46,16 @@ export const useInvoiceStore = defineStore('invoice', () => {
   const invoices = ref<Invoice[]>([])
   const currentInvoice = ref<Invoice | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
   async function fetchInvoices(filters: InvoiceFilters = {}, append = false) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/invoices', { params: filters })
@@ -67,6 +72,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -137,6 +143,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     invoices,
     currentInvoice,
     loading,
+    loadingMore,
     error,
     meta,
     isLoading,

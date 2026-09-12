@@ -70,7 +70,7 @@ async function load(append = false) {
 }
 
 function handleLoadMore() {
-  if (store.loading) return
+  if (store.loadingMore || store.loading) return
   if (store.meta && filters.value.page < store.meta.last_page) {
     filters.value.page += 1
     load(true)
@@ -291,13 +291,28 @@ onMounted(load)
                 </div>
               </TableCell>
             </TableRow>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <TableRow
+              v-if="store.loadingMore"
+              v-for="i in 3"
+              :key="'skel-sup-' + i"
+              class="animate-pulse bg-muted/20"
+            >
+              <TableCell><div class="h-4 bg-muted/60 rounded w-36 mb-1" /><div class="h-3 bg-muted/40 rounded w-24" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-28" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-32" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-36" /></TableCell>
+              <TableCell><div class="h-5 bg-muted/60 rounded-full w-14" /></TableCell>
+              <TableCell class="text-right"><div class="h-8 bg-muted/60 rounded w-16 ml-auto" /></TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="store.loading"
+        :loading="store.loadingMore"
         :has-more="Boolean(store.meta && filters.page < store.meta.last_page)"
         :total-loaded="store.suppliers.length"
         :total="store.meta?.total ?? null"

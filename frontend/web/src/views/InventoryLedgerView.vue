@@ -71,6 +71,7 @@ const stockFilterOptions = [
 ]
 
 const loading = ref(false)
+const loadingMore = ref(false)
 const error = ref<string | null>(null)
 
 // Track which product groups are expanded (by product id)
@@ -171,7 +172,11 @@ function openAdjustmentModal(v: Variant, prodName: string) {
 }
 
 async function loadInventory(append = false) {
-  loading.value = true
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
   error.value = null
   try {
     const params: Record<string, unknown> = { page: page.value }
@@ -196,11 +201,12 @@ async function loadInventory(append = false) {
     error.value = e instanceof Error ? e.message : 'Failed to load inventory ledger.'
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
 }
 
 function handleLoadMore() {
-  if (loading.value) return
+  if (loadingMore.value || loading.value) return
   if (meta.value && page.value < meta.value.last_page) {
     page.value++
     loadInventory(true)
@@ -588,13 +594,29 @@ onMounted(() => {
                 </tr>
               </template>
             </template>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <tr
+              v-if="loadingMore"
+              v-for="s in 3"
+              :key="'skel-inv-' + s"
+              class="animate-pulse bg-muted/20"
+            >
+              <td colspan="2" class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-48" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-20" /></td>
+              <td class="px-4 py-3"><div class="h-4 bg-muted/60 rounded w-16" /></td>
+              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-16 ml-auto" /></td>
+              <td class="px-4 py-3 text-right"><div class="h-4 bg-muted/60 rounded w-16 ml-auto" /></td>
+              <td class="px-4 py-3 text-right"><div class="h-7 bg-muted/60 rounded w-24 ml-auto" /></td>
+            </tr>
           </tbody>
         </table>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="loading"
+        :loading="loadingMore"
         :has-more="Boolean(meta && page < meta.last_page)"
         :total-loaded="products.length"
         :total="meta?.total ?? null"

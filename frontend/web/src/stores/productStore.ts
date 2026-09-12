@@ -124,6 +124,7 @@ export const useProductStore = defineStore('products', () => {
   const selectedProduct = ref<Product | null>(null)
   const meta = ref<PaginationMeta | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const mutating = ref(false)
   const error = ref<string | null>(null)
   const fieldErrors = ref<Record<string, string[]> | null>(null)
@@ -137,7 +138,11 @@ export const useProductStore = defineStore('products', () => {
     } = {},
     append = false
   ) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/products', { params })
@@ -159,6 +164,7 @@ export const useProductStore = defineStore('products', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -265,6 +271,7 @@ export const useProductStore = defineStore('products', () => {
     selectedProduct,
     meta,
     loading,
+    loadingMore,
     mutating,
     error,
     fieldErrors,

@@ -39,6 +39,7 @@ export const useQuotationStore = defineStore('quotation', () => {
   const quotations = ref<Quotation[]>([])
   const quotation = ref<Quotation | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref<string | null>(null)
   const meta = ref<{
     current_page: number
@@ -49,7 +50,11 @@ export const useQuotationStore = defineStore('quotation', () => {
 
   // Fetch quotations with pagination and filters
   async function fetchQuotations(filters: QuotationFilters = {}, append = false) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/quotations', { params: filters })
@@ -69,6 +74,7 @@ export const useQuotationStore = defineStore('quotation', () => {
       throw new Error('Failed to fetch quotations')
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -240,6 +246,7 @@ export const useQuotationStore = defineStore('quotation', () => {
     quotations,
     quotation,
     loading,
+    loadingMore,
     error,
     meta,
 

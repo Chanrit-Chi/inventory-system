@@ -145,7 +145,7 @@ const fetchQuotations = async (append = false) => {
 }
 
 function handleLoadMore() {
-  if (quotationStore.loading) return
+  if (quotationStore.loadingMore || quotationStore.loading) return
   if (quotationStore.meta && page.value < quotationStore.meta.last_page) {
     page.value++
     fetchQuotations(true)
@@ -473,13 +473,29 @@ onMounted(() => {
                 </div>
               </TableCell>
             </TableRow>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <TableRow
+              v-if="quotationStore.loadingMore"
+              v-for="s in 3"
+              :key="'skel-quote-' + s"
+              class="animate-pulse bg-muted/20"
+            >
+              <TableCell><div class="h-4 bg-muted/60 rounded w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-32 mb-1" /><div class="h-3 bg-muted/40 rounded w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
+              <TableCell><div class="h-5 bg-muted/60 rounded-full w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-24" /></TableCell>
+              <TableCell class="text-right"><div class="h-7 bg-muted/60 rounded w-20 ml-auto" /></TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="quotationStore.loading"
+        :loading="quotationStore.loadingMore"
         :has-more="Boolean(quotationStore.meta && page < quotationStore.meta.last_page)"
         :total-loaded="quotationStore.quotations.length"
         :total="quotationStore.meta?.total ?? null"

@@ -41,11 +41,16 @@ export interface AuditLogFilters {
 export const useAuditLogStore = defineStore('auditLog', () => {
   const logs = ref<AuditLog[]>([])
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
   async function fetchLogs(filters: AuditLogFilters = {}, append = false) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/audit-logs', { params: filters })
@@ -62,6 +67,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -71,6 +77,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
   return {
     logs,
     loading,
+    loadingMore,
     error,
     meta,
     isLoading,

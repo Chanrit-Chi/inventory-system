@@ -87,6 +87,7 @@ export const useOrderStore = defineStore('orders', () => {
   const meta = ref<OrderPaginationMeta | null>(null)
   const channels = ref<SalesChannel[]>([])
   const loading = ref(false)
+  const loadingMore = ref(false)
   const detailLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -112,7 +113,11 @@ export const useOrderStore = defineStore('orders', () => {
     } = {},
     append = false
   ) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/orders', { params })
@@ -134,6 +139,7 @@ export const useOrderStore = defineStore('orders', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -196,6 +202,7 @@ export const useOrderStore = defineStore('orders', () => {
     meta,
     channels,
     loading,
+    loadingMore,
     detailLoading,
     error,
     fetchChannels,

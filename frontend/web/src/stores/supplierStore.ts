@@ -26,11 +26,16 @@ export const useSupplierStore = defineStore('supplier', () => {
   const suppliers = ref<Supplier[]>([])
   const currentSupplier = ref<Supplier | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref<string | null>(null)
   const meta = ref<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null)
 
   async function fetchSuppliers(filters: SupplierFilters = {}, append = false) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/suppliers', { params: filters })
@@ -47,6 +52,7 @@ export const useSupplierStore = defineStore('supplier', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -121,6 +127,7 @@ export const useSupplierStore = defineStore('supplier', () => {
     suppliers,
     currentSupplier,
     loading,
+    loadingMore,
     error,
     meta,
     isLoading,

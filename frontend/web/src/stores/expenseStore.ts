@@ -31,6 +31,7 @@ export const useExpenseStore = defineStore('expenses', () => {
   const expenses = ref<Expense[]>([])
   const meta = ref<ExpensePaginationMeta | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const mutating = ref(false)
   const error = ref<string | null>(null)
   const fieldErrors = ref<Record<string, string[]> | null>(null)
@@ -76,7 +77,11 @@ export const useExpenseStore = defineStore('expenses', () => {
     } = {},
     append = false
   ) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/expenses', { params })
@@ -98,6 +103,7 @@ export const useExpenseStore = defineStore('expenses', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -127,6 +133,7 @@ export const useExpenseStore = defineStore('expenses', () => {
     expenses,
     meta,
     loading,
+    loadingMore,
     mutating,
     error,
     fieldErrors,

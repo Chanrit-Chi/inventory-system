@@ -70,6 +70,7 @@ export const useCustomerStore = defineStore('customers', () => {
   const selectedCustomer = ref<Customer | null>(null)
   const meta = ref<CustomerPaginationMeta | null>(null)
   const loading = ref(false)
+  const loadingMore = ref(false)
   const detailLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -91,7 +92,11 @@ export const useCustomerStore = defineStore('customers', () => {
     } = {},
     append = false
   ) {
-    loading.value = true
+    if (append) {
+      loadingMore.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       const res = await api.get('/customers', { params })
@@ -113,6 +118,7 @@ export const useCustomerStore = defineStore('customers', () => {
       throw e
     } finally {
       loading.value = false
+      loadingMore.value = false
     }
   }
 
@@ -140,6 +146,7 @@ export const useCustomerStore = defineStore('customers', () => {
     selectedCustomer,
     meta,
     loading,
+    loadingMore,
     detailLoading,
     error,
     summaryStats,

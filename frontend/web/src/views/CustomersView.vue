@@ -171,7 +171,7 @@ async function loadCustomers(append = false) {
 }
 
 function handleLoadMore() {
-  if (customerStore.loading) return
+  if (customerStore.loadingMore || customerStore.loading) return
   if (customerStore.meta && page.value < customerStore.meta.last_page) {
     page.value++
     loadCustomers(true)
@@ -568,6 +568,22 @@ onMounted(() => {
                 </div>
               </TableCell>
             </TableRow>
+
+            <!-- Inline loading skeleton rows when appending next page -->
+            <TableRow
+              v-if="customerStore.loadingMore"
+              v-for="s in 3"
+              :key="'skel-cust-' + s"
+              class="animate-pulse bg-muted/20"
+            >
+              <TableCell><div class="h-4 bg-muted/60 rounded w-32 mb-1" /><div class="h-3 bg-muted/40 rounded w-20" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-24" /></TableCell>
+              <TableCell><div class="h-5 bg-muted/60 rounded-full w-16" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-16" /></TableCell>
+              <TableCell><div class="h-4 bg-muted/60 rounded w-20" /></TableCell>
+              <TableCell class="text-right"><div class="h-7 bg-muted/60 rounded w-16 ml-auto" /></TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>
@@ -647,11 +663,32 @@ onMounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- Inline loading skeleton cards when appending next page in grid view -->
+        <template v-if="customerStore.loadingMore">
+          <div
+            v-for="s in 3"
+            :key="'skel-cust-card-' + s"
+            class="rounded-xl border border-border bg-surface p-4 flex flex-col justify-between gap-3 animate-pulse"
+          >
+            <div class="flex items-start justify-between gap-2.5">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-muted/60" />
+                <div class="space-y-2">
+                  <div class="h-4 bg-muted/60 rounded w-28" />
+                  <div class="h-3 bg-muted/40 rounded w-20" />
+                </div>
+              </div>
+              <div class="h-5 bg-muted/50 rounded-full w-14" />
+            </div>
+            <div class="h-10 bg-muted/30 rounded-lg w-full" />
+          </div>
+        </template>
       </div>
 
       <!-- Infinite Scroll & Load More Trigger -->
       <LoadMoreTrigger
-        :loading="customerStore.loading"
+        :loading="customerStore.loadingMore"
         :has-more="Boolean(customerStore.meta && page < customerStore.meta.last_page)"
         :total-loaded="customerStore.customers.length"
         :total="customerStore.meta?.total ?? null"
