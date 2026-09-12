@@ -38,6 +38,8 @@ interface Product {
   id: string
   name: string
   image_url?: string | null
+  cost_price?: number | string
+  purchase_price?: number | string
   category?: { name: string }
   variants: Variant[]
 }
@@ -54,6 +56,7 @@ interface Variant {
   product?: {
     id: string
     name: string
+    cost_price?: number | string
     category?: { name: string }
   }
 }
@@ -91,25 +94,56 @@ const allVariants = computed<Variant[]>(() =>
   products.value.flatMap(p =>
     (p.variants ?? []).map(v => ({
       ...v,
-      product: { id: p.id, name: p.name, category: p.category },
+      product: { id: p.id, name: p.name, cost_price: p.cost_price ?? p.purchase_price, category: p.category },
     }))
   )
 )
 
-// Summary stats across loaded variants
-const totalSkus = computed(() => meta.value?.total ?? allVariants.value.length)
-const lowStockCount = computed(() =>
+interface InventoryReportSummary {
+  total_skus: number
+  total_products: number
+  total_units: number
+  cost_value: number
+  low_stock_count: number
+  out_of_stock_count: number
+}
+
+const summaryStats = ref<InventoryReportSummary | null>(null)
+
+async function loadSummaryStats() {
+  try {
+    const res = await api.get('/reports/inventory')
+    const d = res.data?.data || res.data
+    if (d) {
+      summaryStats.value = {
+        total_skus: Number(d.total_skus) || 0,
+        total_products: Number(d.total_products) || 0,
+        total_units: Number(d.total_units) || 0,
+        cost_value: Number(d.cost_value) || 0,
+        low_stock_count: Number(d.low_stock_count) || 0,
+        out_of_stock_count: Number(d.out_of_stock_count) || 0,
+      }
+    }
+  } catch {
+    // Graceful fallback to client-side loaded data
+  }
+}
+
+// Summary stats: server-wide accurate analytics with loaded data fallback
+const totalSkus = computed(() => summaryStats.value?.total_skus ?? allVariants.value.length)
+const totalProductsCount = computed(() => summaryStats.value?.total_products ?? (meta.value?.total ?? products.value.length))
+const lowStockCount = computed(() => summaryStats.value?.low_stock_count ??
   allVariants.value.filter(v => v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level).length
 )
-const outOfStockCount = computed(() =>
+const outOfStockCount = computed(() => summaryStats.value?.out_of_stock_count ??
   allVariants.value.filter(v => v.quantity_on_hand === 0).length
 )
-const totalInventoryUnits = computed(() =>
+const totalInventoryUnits = computed(() => summaryStats.value?.total_units ??
   allVariants.value.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
 )
-const estimatedStockCost = computed(() =>
+const estimatedStockCost = computed(() => summaryStats.value?.cost_value ??
   allVariants.value.reduce(
-    (sum, v) => sum + (v.quantity_on_hand || 0) * (parseFloat(String(v.cost_price)) || 0),
+    (sum, v) => sum + (v.quantity_on_hand || 0) * (parseFloat(String(v.cost_price)) || parseFloat(String(v.product?.cost_price || 0)) || 0),
     0
   )
 )
@@ -225,6 +259,7 @@ function handleLoadMore() {
 function onRefresh() {
   page.value = 1
   loadInventory(false)
+  loadSummaryStats()
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -271,6 +306,7 @@ function fmtMoney(amount: number): string {
 
 onMounted(() => {
   loadInventory()
+  loadSummaryStats()
 })
 </script>
 
@@ -313,7 +349,7 @@ onMounted(() => {
       <StatCard
         label="Tracked SKUs"
         :value="totalSkus"
-        :sub="`${totalInventoryUnits} total units on hand`"
+        :sub="`${totalInventoryUnits.toLocaleString()} units · ${totalProductsCount} products`"
         :icon="Package"
         icon-variant="primary"
       />
