@@ -13,6 +13,7 @@ import {
   AlertCircle,
   SlidersHorizontal,
   ChevronDown,
+  Info,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -24,6 +25,12 @@ import {
   Skeleton,
   SelectField,
   LoadMoreTrigger,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui'
 import StockAdjustmentModal from '@/components/inventory/StockAdjustmentModal.vue'
 
@@ -73,6 +80,7 @@ const stockFilterOptions = [
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref<string | null>(null)
+const showAuditLegend = ref(false)
 
 // Track which product groups are expanded (by product id)
 const expandedGroups = ref<Set<string>>(new Set())
@@ -282,6 +290,10 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
+        <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" @click="showAuditLegend = true">
+          <Info :size="14" />
+          <span>Audit Reference</span>
+        </Button>
         <Button variant="outline" size="sm" class="h-9 px-3 gap-1.5 text-xs" :disabled="loading" @click="onRefresh">
           <RefreshCw :size="14" :class="{ 'animate-spin': loading }" />
           <span>Refresh</span>
@@ -610,23 +622,51 @@ onMounted(() => {
       />
     </div>
 
-    <!-- Movement Audit Trail Legend -->
-    <div class="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col gap-3">
-      <div class="flex items-center justify-between">
-        <h3 class="font-display font-bold text-sm text-foreground">Stock Movement Types & Audit Reference</h3>
-        <Badge variant="success" class="text-xs">ACID Audit Ledger</Badge>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <Badge variant="success" class="text-xs">RESTOCK (Supplier Intake)</Badge>
-        <Badge variant="destructive" class="text-xs">SALE (POS / Checkout)</Badge>
-        <Badge variant="warning" class="text-xs">ADJUSTMENT (Audit / Count)</Badge>
-        <Badge variant="info" class="text-xs">RETURN (Customer Return)</Badge>
-        <Badge variant="neutral" class="text-xs">DAMAGE (Loss / Defect)</Badge>
-      </div>
-      <p class="text-xs text-muted-foreground">
-        All stock mutations in OmniPOS are atomic and strictly recorded in the stock movements ledger with quantity snapshots.
-      </p>
-    </div>
+    <!-- Movement Audit Trail Reference Dialog -->
+    <Dialog :open="showAuditLegend" @update:open="(val) => showAuditLegend = val">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <div class="flex items-center justify-between">
+            <DialogTitle class="font-display font-bold text-base text-foreground">
+              Stock Movement Audit Reference
+            </DialogTitle>
+            <Badge variant="success" class="text-xs">ACID Ledger</Badge>
+          </div>
+          <DialogDescription>
+            All stock mutations in OmniPOS are atomic and strictly recorded in the stock movements ledger with quantity snapshots.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="flex flex-col gap-2.5 py-2">
+          <div class="flex items-center justify-between p-2.5 rounded-lg border border-border bg-surface-subtle">
+            <Badge variant="success" class="text-xs font-semibold">RESTOCK</Badge>
+            <span class="text-xs text-muted-foreground">Supplier intake replenishment</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg border border-border bg-surface-subtle">
+            <Badge variant="destructive" class="text-xs font-semibold">SALE</Badge>
+            <span class="text-xs text-muted-foreground">POS checkout / sales channels</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg border border-border bg-surface-subtle">
+            <Badge variant="warning" class="text-xs font-semibold">ADJUSTMENT</Badge>
+            <span class="text-xs text-muted-foreground">Manual stock count / audit fix</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg border border-border bg-surface-subtle">
+            <Badge variant="info" class="text-xs font-semibold">RETURN</Badge>
+            <span class="text-xs text-muted-foreground">Customer returns back to stock</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg border border-border bg-surface-subtle">
+            <Badge variant="neutral" class="text-xs font-semibold">DAMAGE</Badge>
+            <span class="text-xs text-muted-foreground">Loss / breakage / defective write-off</span>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" class="w-full text-xs" @click="showAuditLegend = false">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- Quick Stock Adjustment Modal -->
     <StockAdjustmentModal
