@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useRestockStore, type RestockScanResult } from '@/stores/restockStore'
 import api from '@/api/axios'
 import {
@@ -51,6 +51,7 @@ import {
 } from '@/components/ui'
 
 const router = useRouter()
+const route = useRoute()
 const restockStore = useRestockStore()
 
 const barcodeInput = ref('')
@@ -101,6 +102,11 @@ onMounted(() => {
   restockStore.loadDraft()
   fetchSuppliers()
   fetchPendingPOs()
+  const productQuery = route.query.product
+  if (productQuery) {
+    catalogSearch.value = String(productQuery)
+    showCatalogModal.value = true
+  }
 })
 
 async function fetchSuppliers() {

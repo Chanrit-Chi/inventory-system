@@ -552,7 +552,7 @@ onMounted(() => {
                   <div class="flex items-center justify-end gap-1" @click.stop>
                     <RouterLink
                       v-if="productStats(product).low > 0 || productStats(product).out > 0"
-                      to="/restock"
+                      :to="{ path: '/restock', query: { product: product.name } }"
                       class="inline-flex"
                     >
                       <Button
@@ -641,7 +641,7 @@ onMounted(() => {
                       </Button>
                       <RouterLink
                         v-if="variant.quantity_on_hand <= variant.reorder_level"
-                        to="/restock"
+                        :to="{ path: '/restock', query: { product: product.name } }"
                         class="inline-flex"
                       >
                         <Button
