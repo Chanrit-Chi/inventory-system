@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useProductStore, type Product } from '@/stores/productStore'
 import { useToast } from '@/composables/useToast'
@@ -217,8 +217,22 @@ function fmtMoney(amount: number | string | undefined | null): string {
   return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
-  loadProducts()
+  if (productStore.products.length === 0) loadProducts()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (productStore.products.length === 0) {
+    loadProducts()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 </script>
 

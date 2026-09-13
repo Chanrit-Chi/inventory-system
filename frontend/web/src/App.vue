@@ -1,5 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+
+const cachedViews = [
+  'ProductListView',
+  'InventoryLedgerView',
+  'CustomersView',
+  'SuppliersView',
+  'OrdersView',
+  'InvoicesView',
+  'ExpensesView',
+  'QuotationsView',
+  'AuditLogsView',
+]
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
@@ -122,7 +134,11 @@ onUnmounted(() => {
         class="app-main-content"
         :class="{ 'app-main-content--pos': route.path === '/pos' }"
       >
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <keep-alive :include="cachedViews">
+            <component :is="Component" />
+          </keep-alive>
+        </RouterView>
         <Toast />
       </main>
     </div>

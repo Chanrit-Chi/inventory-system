@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, onActivated, onDeactivated, ref, computed, watch, nextTick } from 'vue'
 import { useAuditLogStore } from '@/stores/auditLogStore'
 import { useToast } from '@/composables/useToast'
 import {
@@ -241,7 +241,23 @@ function formatLogDate(dateStr?: string | null): string {
   }
 }
 
-onMounted(loadLogs)
+let savedScrollY = 0
+
+onMounted(() => {
+  if (store.logs.length === 0) loadLogs()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (store.logs.length === 0) {
+    loadLogs()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
+})
 </script>
 
 <template>

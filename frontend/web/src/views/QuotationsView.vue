@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { useToast } from '@/composables/useToast'
 import { useQuotationStore, type Quotation } from '@/stores/quotationStore'
 import { usePrintStore } from '@/stores/printStore'
@@ -305,8 +305,22 @@ const onSearchInput = () => {
   }, 300)
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
-  fetchQuotations()
+  if (quotationStore.quotations.length === 0) fetchQuotations()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (quotationStore.quotations.length === 0) {
+    fetchQuotations()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomerStore } from '@/stores/customerStore'
 import { usePosStore } from '@/stores/posStore'
@@ -307,8 +307,22 @@ function fmtDate(d: string | null | undefined): string {
   })
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
-  loadCustomers()
+  if (customerStore.customers.length === 0) loadCustomers()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (customerStore.customers.length === 0) {
+    loadCustomers()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { useOrderStore } from '@/stores/orderStore'
 import { getOrderStatus } from '@/utils/orderStatus'
 import { usePrintStore } from '@/stores/printStore'
@@ -281,9 +281,23 @@ function fmtMoney(amount: number | string | undefined | null): string {
   return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
   orderStore.fetchChannels()
-  loadOrders()
+  if (orderStore.orders.length === 0) loadOrders()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (orderStore.orders.length === 0) {
+    loadOrders()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 
 defineExpose({

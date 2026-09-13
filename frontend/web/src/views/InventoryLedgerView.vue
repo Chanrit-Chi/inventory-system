@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/api/axios'
 import {
@@ -307,9 +307,26 @@ function fmtMoney(amount: number): string {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
-  loadInventory()
-  loadSummaryStats()
+  if (products.value.length === 0) {
+    loadInventory()
+    loadSummaryStats()
+  }
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (products.value.length === 0) {
+    loadInventory()
+    loadSummaryStats()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onActivated, onDeactivated, ref, computed, nextTick } from 'vue'
 import { useInvoiceStore, type Invoice } from '@/stores/invoiceStore'
 import { usePrintStore } from '@/stores/printStore'
 import { useToast } from '@/composables/useToast'
@@ -196,7 +196,23 @@ function statusBadge(s: string) {
   return { variant: 'neutral' as const, label: s }
 }
 
-onMounted(loadInvoices)
+let savedScrollY = 0
+
+onMounted(() => {
+  if (store.invoices.length === 0) loadInvoices()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (store.invoices.length === 0) {
+    loadInvoices()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
+})
 </script>
 
 <template>
