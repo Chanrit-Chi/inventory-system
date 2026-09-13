@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
 import { useExpenseStore } from '@/stores/expenseStore'
 import {
   TrendingDown,
@@ -32,6 +32,7 @@ import {
   LoadMoreTrigger,
 } from '@/components/ui'
 
+defineOptions({ name: 'ExpensesView' })
 const expenseStore = useExpenseStore()
 
 // Form state
@@ -209,8 +210,22 @@ function fmtDate(d: string | undefined): string {
   })
 }
 
+let savedScrollY = 0
+
 onMounted(() => {
-  loadExpenses()
+  if (expenseStore.expenses.length === 0) loadExpenses()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (expenseStore.expenses.length === 0) {
+    loadExpenses()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
 })
 </script>
 

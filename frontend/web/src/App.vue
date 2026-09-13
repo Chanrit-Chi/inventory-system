@@ -8,6 +8,18 @@ import AppSidebar from '@/components/shell/AppSidebar.vue'
 import AppHeader from '@/components/shell/AppHeader.vue'
 import CommandPalette from '@/components/shell/CommandPalette.vue'
 
+const cachedViews = [
+  'ProductListView',
+  'InventoryLedgerView',
+  'CustomersView',
+  'SuppliersView',
+  'OrdersView',
+  'InvoicesView',
+  'ExpensesView',
+  'QuotationsView',
+  'AuditLogsView',
+]
+
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -122,7 +134,11 @@ onUnmounted(() => {
         class="app-main-content"
         :class="{ 'app-main-content--pos': route.path === '/pos' }"
       >
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <keep-alive :include="cachedViews">
+            <component :is="Component" />
+          </keep-alive>
+        </RouterView>
         <Toast />
       </main>
     </div>

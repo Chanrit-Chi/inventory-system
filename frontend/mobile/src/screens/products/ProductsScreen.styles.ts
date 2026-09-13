@@ -104,6 +104,10 @@ export const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: tokens.colors.onBackground,
+    paddingVertical: 0,
+    height: '100%',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   addProdBtn: {
     width: 36,

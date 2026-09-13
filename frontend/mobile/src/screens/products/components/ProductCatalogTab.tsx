@@ -114,7 +114,7 @@ export function ProductCatalogTab({
               <Ionicons name="search" size={16} color={tokens.colors.secondary} style={{ marginRight: 5 }} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search name, SKU, barcode..."
+                placeholder="Search products..."
                 value={search}
                 onChangeText={setSearch}
                 placeholderTextColor={tokens.colors.secondary}

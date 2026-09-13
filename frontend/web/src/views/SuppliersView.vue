@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onActivated, onDeactivated, ref, computed, nextTick } from 'vue'
 import { useSupplierStore, type Supplier } from '@/stores/supplierStore'
 import { useToast } from '@/composables/useToast'
 import {
@@ -40,6 +40,7 @@ import {
 } from '@/components/ui'
 
 const toast = useToast()
+defineOptions({ name: 'SuppliersView' })
 const store = useSupplierStore()
 
 const showEditModal = ref(false)
@@ -140,7 +141,23 @@ async function executeDelete() {
   }
 }
 
-onMounted(load)
+let savedScrollY = 0
+
+onMounted(() => {
+  if (store.suppliers.length === 0) load()
+})
+
+onDeactivated(() => {
+  savedScrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (store.suppliers.length === 0) {
+    load()
+  } else {
+    nextTick(() => window.scrollTo(0, savedScrollY))
+  }
+})
 </script>
 
 <template>

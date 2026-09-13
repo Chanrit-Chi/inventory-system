@@ -52,6 +52,7 @@ import {
   DialogDescription,
   DialogFooter,
   Input,
+  SelectField,
 } from '@/components/ui'
 
 // ============================================================================
@@ -147,6 +148,23 @@ const productsLoading = ref(false)
 const searchQuery = ref('')
 const selectedCategory = ref('')
 const searchInputRef = ref<HTMLInputElement | null>(null)
+
+// Sorting State (Persisted in localStorage for cashier workflow)
+const sortOrder = ref(localStorage.getItem('pos_sort_order') || 'default')
+
+watch(sortOrder, (val) => {
+  localStorage.setItem('pos_sort_order', val)
+})
+
+const sortOptions = [
+  { label: 'Default', value: 'default' },
+  { label: 'Name (A-Z)', value: 'name:asc' },
+  { label: 'Name (Z-A)', value: 'name:desc' },
+  { label: 'Price (Low - High)', value: 'price:asc' },
+  { label: 'Price (High - Low)', value: 'price:desc' },
+  { label: 'Stock (High - Low)', value: 'stock:desc' },
+  { label: 'In Stock First', value: 'stock:instock' },
+]
 
 // Modals State
 const showVariantModal = ref(false)
@@ -275,7 +293,7 @@ const categoryChips = computed(() => {
   return chips
 })
 
-// Filtered products based on search query & selected category
+// Filtered products based on search query, selected category & sort order
 const filteredProducts = computed(() => {
   let result = products.value
 
@@ -296,7 +314,38 @@ const filteredProducts = computed(() => {
     })
   }
 
-  return result
+  if (sortOrder.value === 'default') {
+    return result
+  }
+
+  const sorted = [...result]
+  switch (sortOrder.value) {
+    case 'name:asc':
+      sorted.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      break
+    case 'name:desc':
+      sorted.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+      break
+    case 'price:asc':
+      sorted.sort((a, b) => getProductPrice(a) - getProductPrice(b))
+      break
+    case 'price:desc':
+      sorted.sort((a, b) => getProductPrice(b) - getProductPrice(a))
+      break
+    case 'stock:desc':
+      sorted.sort((a, b) => getProductStock(b) - getProductStock(a))
+      break
+    case 'stock:instock':
+      sorted.sort((a, b) => {
+        const stockA = getProductStock(a) > 0 ? 1 : 0
+        const stockB = getProductStock(b) > 0 ? 1 : 0
+        if (stockA !== stockB) return stockB - stockA
+        return (a.name || '').localeCompare(b.name || '')
+      })
+      break
+  }
+
+  return sorted
 })
 
 // Active channel display
@@ -330,6 +379,12 @@ function getProductCartCount(productId: string): number {
 function getProductStock(product: Product): number {
   if (!product.variants || product.variants.length === 0) return 0
   return product.variants.reduce((sum, v) => sum + (v.quantity_on_hand || 0), 0)
+}
+
+function getProductPrice(product: Product): number {
+  const p = product.variants?.[0]?.selling_price ?? product.selling_price
+  const num = typeof p === 'string' ? parseFloat(p) : Number(p)
+  return isNaN(num) ? 0 : num
 }
 
 function formatMoney(amount: number | string | undefined | null): string {
@@ -1154,24 +1209,36 @@ defineExpose({
     <section class="pos-catalog-zone flex-1 flex flex-col min-w-0 border-r border-border bg-background overflow-hidden">
       <!-- Catalog Top Bar -->
       <header class="p-4 bg-card border-b border-border flex items-center justify-between gap-3 shrink-0 shadow-2xs">
-        <!-- Fast Search Input -->
-        <div class="relative flex-1 max-w-md">
-          <Search class="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            ref="searchInputRef"
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search items by name, SKU, barcode... (F1)"
-            class="w-full pl-9.5 pr-8 py-2.5 rounded-xl border border-input bg-surface-subtle text-sm text-foreground placeholder:text-muted-foreground/70 focus:bg-card focus:border-cta focus:ring-2 focus:ring-cta/20 outline-hidden transition-all"
-          />
-          <button
-            v-if="searchQuery"
-            type="button"
-            @click="clearSearch"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
-          >
-            <X class="w-4 h-4" />
-          </button>
+        <!-- Fast Search Input & Sort Controls -->
+        <div class="flex items-center gap-2.5 flex-1 max-w-xl">
+          <div class="relative flex-1">
+            <Search class="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search items by name, SKU, barcode... (F1)"
+              class="w-full pl-9.5 pr-8 py-2.5 rounded-xl border border-input bg-surface-subtle text-sm text-foreground placeholder:text-muted-foreground/70 focus:bg-card focus:border-cta focus:ring-2 focus:ring-cta/20 outline-hidden transition-all"
+            />
+            <button
+              v-if="searchQuery"
+              type="button"
+              @click="clearSearch"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="w-36 sm:w-44 shrink-0">
+            <SelectField
+              id="pos-catalog-sort"
+              v-model="sortOrder"
+              :options="sortOptions"
+              placeholder="Sort catalog"
+              class="h-10 bg-surface-subtle border-input rounded-xl text-xs font-semibold"
+            />
+          </div>
         </div>
 
         <!-- Terminal Status Pills (Channel, Staff, Barcode Scanner) -->

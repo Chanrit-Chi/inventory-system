@@ -216,11 +216,7 @@ const GlobalHeader = ({
   return (
     <View style={styles.globalHeader}>
       <View style={styles.headerLeftGroup}>
-        <TouchableOpacity
-          style={styles.headerLeft}
-          onPress={() => setAuthModalOpen(true)}
-          activeOpacity={0.8}
-        >
+        <View style={styles.headerLeft}>
           <View style={styles.brandRow}>
             {branding.logo_url ? (
               <Image
@@ -239,7 +235,7 @@ const GlobalHeader = ({
               {branding.store_name || 'KC Shop'}
             </Text>
           </View>
-        </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.headerRight}>

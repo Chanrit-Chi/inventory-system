@@ -13,6 +13,7 @@ import PosCheckoutModal from '@/components/pos/PosCheckoutModal.vue'
 import PosVariantModal from '@/components/pos/PosVariantModal.vue'
 import DeliveryZonePickerModal from '@/components/pos/DeliveryZonePickerModal.vue'
 import PosReceiptModal from '@/components/pos/PosReceiptModal.vue'
+import { formatChannelShopName } from '@/components/pos/SocialPlatformIcon.vue'
 import AppHeader from '@/components/shell/AppHeader.vue'
 import SellerDailySummaryModal from '@/components/seller/SellerDailySummaryModal.vue'
 import SalesChannelsView from '@/views/SalesChannelsView.vue'
@@ -242,6 +243,41 @@ describe('POS Seller Attribution & Daily Shift Settlement Flow', () => {
       expect(wrapper.text()).toContain('KC Main Stream')
       expect(wrapper.text()).toContain('KC TikTok Stream')
       expect(wrapper.text()).toContain('KC Telegram Chat')
+    })
+
+    it('cleans redundant social platform names from channel chips in checkout modal', () => {
+      // Direct unit tests for formatChannelShopName
+      expect(formatChannelShopName('Facebook-KC Shop (facebook)', 'facebook')).toBe('KC Shop')
+      expect(formatChannelShopName('Facebook - KC Shop', 'facebook')).toBe('KC Shop')
+      expect(formatChannelShopName('FB: KC Shop', 'facebook')).toBe('KC Shop')
+      expect(formatChannelShopName('TikTok-KC Shop', 'tiktok')).toBe('KC Shop')
+      expect(formatChannelShopName('Telegram - KC Shop', 'telegram')).toBe('KC Shop')
+      expect(formatChannelShopName('KC Shop (Facebook)', 'facebook')).toBe('KC Shop')
+      expect(formatChannelShopName('KC Shop - FB', 'facebook')).toBe('KC Shop')
+      expect(formatChannelShopName('TikTok Live Stream', 'tiktok')).toBe('TikTok Live Stream')
+      expect(formatChannelShopName('Facebook', 'facebook')).toBe('Facebook')
+
+      // Component render test in PosCheckoutModal
+      const redundantChannels = [
+        { id: 'c-fb', name: 'Facebook-KC Shop (facebook)', platform: 'facebook', code: 'FB-01', is_active: true, is_default: true },
+        { id: 'c-tt', name: 'TikTok-KC Shop', platform: 'tiktok', code: 'TT-01', is_active: true, is_default: false },
+        { id: 'c-tg', name: 'Telegram - KC Shop', platform: 'telegram', code: 'TG-01', is_active: true, is_default: false },
+      ]
+
+      const wrapper = mount(PosCheckoutModal, {
+        props: {
+          open: true,
+          subtotal: 50,
+          total: 50,
+          channels: redundantChannels,
+          selectedChannelId: 'c-fb',
+        },
+      })
+
+      expect(wrapper.text()).toContain('KC Shop')
+      expect(wrapper.text()).not.toContain('Facebook-KC Shop')
+      expect(wrapper.text()).not.toContain('TikTok-KC Shop')
+      expect(wrapper.text()).not.toContain('(facebook)')
     })
 
     it('verifies top bar AppHeader does not render sales channel dropdown', () => {

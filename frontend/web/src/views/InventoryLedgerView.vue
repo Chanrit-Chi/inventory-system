@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { ref, onMounted, onActivated, onDeactivated, computed, watch } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { useRestockStore } from '@/stores/restockStore'
 import api from '@/api/axios'
+
+defineOptions({ name: 'InventoryLedgerView' })
 import {
   Package,
   Search,
@@ -71,11 +74,94 @@ interface PaginationMeta {
   per_page: number
 }
 
+interface InventoryReportSummary {
+  total_skus: number
+  total_products: number
+  total_units: number
+  cost_value: number
+  low_stock_count: number
+  out_of_stock_count: number
+}
+
+// Module-level cache — survives navigation (JS module singleton)
+const _cache = {
+  products: [] as Product[],
+  meta: null as PaginationMeta | null,
+  summaryStats: null as InventoryReportSummary | null,
+  page: 1,
+  search: '',
+  stockFilter: 'all',
+  sortOrder: 'urgency',
+  scrollY: 0,
+  loaded: false,
+}
+
+const router = useRouter()
+const restockStore = useRestockStore()
+
+function handleRestockProduct(product: Product) {
+  if (restockStore.items.length === 0) {
+    restockStore.loadDraft()
+  }
+
+  const flagged = (product.variants || []).filter(v => (v.quantity_on_hand ?? 0) <= (v.reorder_level ?? 0))
+  const targets = flagged.length > 0 ? flagged : (product.variants || [])
+
+  for (const v of targets) {
+    const cost = parseFloat(String(v.cost_price || product.purchase_price || product.cost_price || 0)) || 0
+    const selling = parseFloat(String(v.selling_price || 0)) || undefined
+    const needed = Math.max(1, (v.reorder_level || 0) - (v.quantity_on_hand || 0) + 5)
+
+    restockStore.addItem({
+      variant_id: v.id,
+      product_id: product.id,
+      parent_name: product.name,
+      sku: v.sku || 'SKU',
+      product_name: targets.length > 1 ? `${product.name} (${v.sku})` : product.name,
+      scanned_barcode: v.barcode || null,
+      quantity: needed,
+      unit_cost: cost,
+      selling_price: selling,
+      current_stock: v.quantity_on_hand ?? 0,
+      thumbnail_url: product.image_url || undefined,
+    })
+  }
+
+  router.push({ path: '/restock', query: { product: product.name } })
+}
+
+function handleRestockVariant(product: Product, v: Variant) {
+  if (restockStore.items.length === 0) {
+    restockStore.loadDraft()
+  }
+
+  const cost = parseFloat(String(v.cost_price || product.purchase_price || product.cost_price || 0)) || 0
+  const selling = parseFloat(String(v.selling_price || 0)) || undefined
+  const needed = Math.max(1, (v.reorder_level || 0) - (v.quantity_on_hand || 0) + 5)
+
+  restockStore.addItem({
+    variant_id: v.id,
+    product_id: product.id,
+    parent_name: product.name,
+    sku: v.sku || 'SKU',
+    product_name: `${product.name} (${v.sku})`,
+    scanned_barcode: v.barcode || null,
+    quantity: needed,
+    unit_cost: cost,
+    selling_price: selling,
+    current_stock: v.quantity_on_hand ?? 0,
+    thumbnail_url: product.image_url || undefined,
+  })
+
+  router.push({ path: '/restock', query: { product: product.name } })
+}
+
 const products = ref<Product[]>([])
 const meta = ref<PaginationMeta | null>(null)
 const page = ref(1)
 const search = ref('')
 const stockFilter = ref<string>('all')
+const sortOrder = ref<string>(_cache.sortOrder || 'urgency')
 
 const stockFilterOptions = [
   { label: 'All Stock Statuses', value: 'all' },
@@ -84,10 +170,26 @@ const stockFilterOptions = [
   { label: 'Out of Stock Only', value: 'out' },
 ]
 
+const sortOptions = [
+  { label: 'Stock Urgency (Low First)', value: 'urgency' },
+  { label: 'Asset Value (High to Low)', value: 'valuation:desc' },
+  { label: 'Asset Value (Low to High)', value: 'valuation:asc' },
+  { label: 'Units on Hand (Low to High)', value: 'units:asc' },
+  { label: 'Units on Hand (High to Low)', value: 'units:desc' },
+  { label: 'Product Name (A - Z)', value: 'name:asc' },
+  { label: 'Product Name (Z - A)', value: 'name:desc' },
+  { label: 'Variant Count (Most First)', value: 'variants:desc' },
+]
+
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref<string | null>(null)
 const showAuditLegend = ref(false)
+
+watch(showAuditLegend, (isOpen) => {
+  if (isOpen) _cache.scrollY = window.scrollY
+  requestAnimationFrame(() => window.scrollTo(0, _cache.scrollY))
+})
 
 // Track which product groups are expanded (by product id)
 const expandedGroups = ref<Set<string>>(new Set())
@@ -102,16 +204,7 @@ const allVariants = computed<Variant[]>(() =>
   )
 )
 
-interface InventoryReportSummary {
-  total_skus: number
-  total_products: number
-  total_units: number
-  cost_value: number
-  low_stock_count: number
-  out_of_stock_count: number
-}
-
-const summaryStats = ref<InventoryReportSummary | null>(null)
+const summaryStats = ref<InventoryReportSummary | null>(_cache.summaryStats ?? null)
 
 async function loadSummaryStats() {
   try {
@@ -126,6 +219,7 @@ async function loadSummaryStats() {
         low_stock_count: Number(d.low_stock_count) || 0,
         out_of_stock_count: Number(d.out_of_stock_count) || 0,
       }
+      _cache.summaryStats = summaryStats.value
     }
   } catch {
     // Graceful fallback to client-side loaded data
@@ -151,24 +245,6 @@ const estimatedStockCost = computed(() => summaryStats.value?.cost_value ??
   )
 )
 
-// Filter products by stock status; group survives even if a child variant is filtered out,
-// as long as at least one child matches the active filter.
-const filteredProducts = computed<Product[]>(() => {
-  if (stockFilter.value === 'all') return products.value
-  return products.value
-    .map(p => {
-      const variants = (p.variants ?? []).filter(v => {
-        if (stockFilter.value === 'low')
-          return v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level
-        if (stockFilter.value === 'out') return v.quantity_on_hand === 0
-        if (stockFilter.value === 'in') return v.quantity_on_hand > v.reorder_level
-        return true
-      })
-      return { ...p, variants }
-    })
-    .filter(p => p.variants.length > 0)
-})
-
 // Per-group rollups for the product header row
 function productStats(p: Product) {
   const variants = p.variants ?? []
@@ -186,6 +262,56 @@ function productStats(p: Product) {
       : 'ok'
   return { units, cost, low, out, worstStatus, variantCount: variants.length }
 }
+
+// Filter and sort products by stock status and selected sort order; group survives even if a child variant is filtered out,
+// as long as at least one child matches the active filter.
+const filteredProducts = computed<Product[]>(() => {
+  let list = products.value
+  if (stockFilter.value !== 'all') {
+    list = list
+      .map(p => {
+        const variants = (p.variants ?? []).filter(v => {
+          if (stockFilter.value === 'low')
+            return v.quantity_on_hand > 0 && v.quantity_on_hand <= v.reorder_level
+          if (stockFilter.value === 'out') return v.quantity_on_hand === 0
+          if (stockFilter.value === 'in') return v.quantity_on_hand > v.reorder_level
+          return true
+        })
+        return { ...p, variants }
+      })
+      .filter(p => p.variants.length > 0)
+  }
+
+  return [...list].sort((a, b) => {
+    const statsA = productStats(a)
+    const statsB = productStats(b)
+
+    switch (sortOrder.value) {
+      case 'urgency': {
+        const score = (s: typeof statsA) => (s.out > 0 ? 2 : s.low > 0 ? 1 : 0)
+        const diff = score(statsB) - score(statsA)
+        if (diff !== 0) return diff
+        return statsA.units - statsB.units
+      }
+      case 'valuation:desc':
+        return statsB.cost - statsA.cost
+      case 'valuation:asc':
+        return statsA.cost - statsB.cost
+      case 'units:asc':
+        return statsA.units - statsB.units
+      case 'units:desc':
+        return statsB.units - statsA.units
+      case 'name:asc':
+        return a.name.localeCompare(b.name)
+      case 'name:desc':
+        return b.name.localeCompare(a.name)
+      case 'variants:desc':
+        return (b.variants?.length || 0) - (a.variants?.length || 0)
+      default:
+        return 0
+    }
+  })
+})
 
 function isExpanded(productId: string) {
   return expandedGroups.value.has(productId)
@@ -212,10 +338,15 @@ const selectedAdjustmentVariant = ref<Variant | null>(null)
 const selectedProductName = ref('')
 
 function openAdjustmentModal(v: Variant, prodName: string) {
+  _cache.scrollY = window.scrollY
   selectedAdjustmentVariant.value = v
   selectedProductName.value = prodName
   showAdjustmentModal.value = true
 }
+
+watch(showAdjustmentModal, () => {
+  requestAnimationFrame(() => window.scrollTo(0, _cache.scrollY))
+})
 
 async function loadInventory(append = false) {
   if (append) {
@@ -228,6 +359,19 @@ async function loadInventory(append = false) {
     const params: Record<string, unknown> = { page: page.value }
     if (search.value.trim()) {
       params.search = search.value.trim()
+    }
+    if (sortOrder.value === 'units:asc') {
+      params.sort_by = 'stock'
+      params.sort_direction = 'asc'
+    } else if (sortOrder.value === 'units:desc') {
+      params.sort_by = 'stock'
+      params.sort_direction = 'desc'
+    } else if (sortOrder.value === 'name:asc') {
+      params.sort_by = 'name'
+      params.sort_direction = 'asc'
+    } else if (sortOrder.value === 'name:desc') {
+      params.sort_by = 'name'
+      params.sort_direction = 'desc'
     }
 
     const res = await api.get('/products', { params })
@@ -279,6 +423,11 @@ function onFilterChange() {
   // Filtering is client-side via filteredProducts computed; no API reload needed
 }
 
+function onSortChange() {
+  page.value = 1
+  loadInventory(false)
+}
+
 function toggleAllExpanded() {
   if (filteredProducts.value.every(p => isExpanded(p.id))) {
     collapseAll()
@@ -307,9 +456,61 @@ function fmtMoney(amount: number): string {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+
+let _initialLoadDone = false
+
 onMounted(() => {
-  loadInventory()
-  loadSummaryStats()
+  if (_initialLoadDone) return
+  _initialLoadDone = true
+  if (_cache.loaded) {
+    products.value = _cache.products
+    meta.value = _cache.meta
+    summaryStats.value = _cache.summaryStats
+    page.value = _cache.page
+    search.value = _cache.search
+    stockFilter.value = _cache.stockFilter
+    sortOrder.value = _cache.sortOrder
+    requestAnimationFrame(() => window.scrollTo(0, _cache.scrollY))
+  } else {
+    loadInventory()
+    loadSummaryStats()
+  }
+})
+
+onDeactivated(() => {
+  _cache.scrollY = window.scrollY
+})
+
+onActivated(() => {
+  if (!_initialLoadDone) {
+    _initialLoadDone = true
+    if (_cache.loaded) {
+      products.value = _cache.products
+      meta.value = _cache.meta
+      summaryStats.value = _cache.summaryStats
+      page.value = _cache.page
+      search.value = _cache.search
+      stockFilter.value = _cache.stockFilter
+      sortOrder.value = _cache.sortOrder
+    } else {
+      loadInventory()
+      loadSummaryStats()
+      return
+    }
+  }
+  requestAnimationFrame(() => window.scrollTo(0, _cache.scrollY))
+})
+
+onBeforeRouteLeave(() => {
+  _cache.products = products.value
+  _cache.meta = meta.value
+  _cache.summaryStats = summaryStats.value
+  _cache.page = page.value
+  _cache.search = search.value
+  _cache.stockFilter = stockFilter.value
+  _cache.sortOrder = sortOrder.value
+  _cache.scrollY = window.scrollY
+  _cache.loaded = true
 })
 </script>
 
@@ -411,8 +612,16 @@ onMounted(() => {
           v-model="stockFilter"
           :options="stockFilterOptions"
           placeholder="All Stock Statuses"
-          class="h-9 w-48 bg-surface text-xs"
+          class="h-9 w-44 bg-surface text-xs"
           @change="onFilterChange"
+        />
+        <SelectField
+          id="inventory-sort-select"
+          v-model="sortOrder"
+          :options="sortOptions"
+          placeholder="Sort By"
+          class="h-9 w-52 bg-surface text-xs"
+          @change="onSortChange"
         />
       </div>
     </div>
@@ -550,19 +759,17 @@ onMounted(() => {
                 <!-- Group Action -->
                 <td class="px-2.5 py-2.5 text-right whitespace-nowrap">
                   <div class="flex items-center justify-end gap-1" @click.stop>
-                    <RouterLink
-                      v-if="productStats(product).low > 0 || productStats(product).out > 0"
-                      :to="{ path: '/restock', query: { product: product.name } }"
-                      class="inline-flex"
+                    <Button
+                      size="sm"
+                      class="h-7 px-2 text-xs font-semibold gap-1 cursor-pointer"
+                      :class="productStats(product).low > 0 || productStats(product).out > 0
+                        ? 'bg-cta text-cta-foreground hover:bg-cta-hover shadow-2xs'
+                        : 'border border-border text-foreground hover:bg-surface-subtle'"
+                      @click.stop="handleRestockProduct(product)"
                     >
-                      <Button
-                        size="sm"
-                        class="h-7 px-2 text-xs font-semibold bg-cta text-cta-foreground hover:bg-cta-hover shadow-2xs gap-1 cursor-pointer"
-                      >
-                        <ArrowDownToLine class="w-3.5 h-3.5" />
-                        <span>Restock</span>
-                      </Button>
-                    </RouterLink>
+                      <ArrowDownToLine class="w-3.5 h-3.5" />
+                      <span>Restock</span>
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -639,19 +846,17 @@ onMounted(() => {
                         <SlidersHorizontal class="w-3 h-3" />
                         <span>Adjust</span>
                       </Button>
-                      <RouterLink
-                        v-if="variant.quantity_on_hand <= variant.reorder_level"
-                        :to="{ path: '/restock', query: { product: product.name } }"
-                        class="inline-flex"
+                      <Button
+                        size="sm"
+                        class="h-7 px-1.5 sm:px-2 text-xs font-semibold gap-1 cursor-pointer"
+                        :class="variant.quantity_on_hand <= variant.reorder_level
+                          ? 'bg-cta text-cta-foreground hover:bg-cta-hover shadow-2xs'
+                          : 'border border-border text-foreground hover:bg-surface-subtle'"
+                        @click.stop="handleRestockVariant(product, variant)"
                       >
-                        <Button
-                          size="sm"
-                          class="h-7 px-1.5 sm:px-2 text-xs font-semibold bg-cta text-cta-foreground hover:bg-cta-hover gap-1 shadow-2xs cursor-pointer"
-                        >
-                          <ArrowDownToLine class="w-3 h-3" />
-                          <span>Restock</span>
-                        </Button>
-                      </RouterLink>
+                        <ArrowDownToLine class="w-3 h-3" />
+                        <span>Restock</span>
+                      </Button>
                     </div>
                   </td>
                 </tr>

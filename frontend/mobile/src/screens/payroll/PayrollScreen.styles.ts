@@ -582,8 +582,6 @@ export const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.colors.borderSubtle,
     backgroundColor: tokens.colors.surfaceCard,
-    borderBottomLeftRadius: tokens.borderRadius.lg,
-    borderBottomRightRadius: tokens.borderRadius.lg,
   },
   modalActions: {
     flexDirection: 'row',
