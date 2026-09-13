@@ -129,12 +129,22 @@ export const useProductStore = defineStore('products', () => {
   const error = ref<string | null>(null)
   const fieldErrors = ref<Record<string, string[]> | null>(null)
 
+  // List-view scroll/filter state — persists across navigation without keep-alive
+  const listScrollY = ref(0)
+  const listPage = ref(1)
+  const listSearch = ref('')
+  const listFilter = ref('all')
+  const listCategoryFilter = ref<string | null>(null)
+  const listSort = ref('created_at:desc')
+
   async function fetchProducts(
     params: {
       page?: number
       search?: string
       is_active?: boolean | string
       category_id?: string
+      sort_by?: string
+      sort_direction?: 'asc' | 'desc'
     } = {},
     append = false
   ) {
@@ -276,6 +286,12 @@ export const useProductStore = defineStore('products', () => {
     mutating,
     error,
     fieldErrors,
+    listScrollY,
+    listPage,
+    listSearch,
+    listFilter,
+    listCategoryFilter,
+    listSort,
     fetchProducts,
     fetchProduct,
     createProduct,

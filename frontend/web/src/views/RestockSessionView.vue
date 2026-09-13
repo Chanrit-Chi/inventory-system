@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { useRestockStore, type RestockScanResult } from '@/stores/restockStore'
 import api from '@/api/axios'
 import {
@@ -51,6 +51,7 @@ import {
 } from '@/components/ui'
 
 const router = useRouter()
+const route = useRoute()
 const restockStore = useRestockStore()
 
 const barcodeInput = ref('')
@@ -97,11 +98,53 @@ const activeStep = computed(() => {
   return 3
 })
 
-onMounted(() => {
+onMounted(async () => {
   restockStore.loadDraft()
   fetchSuppliers()
   fetchPendingPOs()
+  await checkRouteProductQuery()
 })
+
+watch(() => route.query.product, async () => {
+  await checkRouteProductQuery()
+})
+
+async function checkRouteProductQuery() {
+  const productName = route.query.product as string | undefined
+  if (productName) {
+    catalogSearch.value = productName
+    await fetchCatalogProducts(productName)
+    if (restockStore.items.length === 0 && catalogProducts.value.length > 0) {
+      const match = catalogProducts.value.find((p: any) => p.name.toLowerCase() === productName.toLowerCase()) || catalogProducts.value[0]
+      if (match && match.variants?.length) {
+        const flagged = match.variants.filter((v: any) => (v.quantity_on_hand ?? 0) <= (v.reorder_level ?? 0))
+        const targets = flagged.length > 0 ? flagged : match.variants
+        for (const v of targets) {
+          const cost = parseFloat(String(v.cost_price || match.purchase_price || match.cost_price || 0)) || 0
+          const selling = parseFloat(String(v.selling_price || 0)) || undefined
+          const needed = Math.max(1, (v.reorder_level || 0) - (v.quantity_on_hand || 0) + 5)
+          restockStore.addItem({
+            variant_id: v.id,
+            product_id: match.id,
+            parent_name: match.name,
+            sku: v.sku || 'SKU',
+            product_name: targets.length > 1 ? `${match.name} (${v.sku})` : match.name,
+            scanned_barcode: v.barcode || null,
+            quantity: needed,
+            unit_cost: cost,
+            selling_price: selling,
+            current_stock: v.quantity_on_hand ?? 0,
+            thumbnail_url: match.image_url || undefined,
+          })
+        }
+      } else {
+        await openCatalogPicker()
+      }
+    } else if (restockStore.items.length === 0) {
+      await openCatalogPicker()
+    }
+  }
+}
 
 async function fetchSuppliers() {
   try {
@@ -172,10 +215,16 @@ async function openCatalogPicker() {
   }
 }
 
-async function fetchCatalogProducts() {
+async function fetchCatalogProducts(searchQuery?: string) {
   try {
     catalogLoading.value = true
-    const res = await api.get('/products', { params: { per_page: 50 } })
+    const query = searchQuery !== undefined ? searchQuery : catalogSearch.value.trim()
+    const res = await api.get('/products', {
+      params: {
+        search: query || undefined,
+        per_page: 50,
+      },
+    })
     const list = res.data?.data || res.data || []
     catalogProducts.value = Array.isArray(list) ? list : []
   } catch (e: unknown) {

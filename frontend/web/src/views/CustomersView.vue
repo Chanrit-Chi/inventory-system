@@ -48,6 +48,9 @@ import {
 import { getTier as computeTier, type Tier } from '@/utils/loyalty'
 
 const router = useRouter()
+
+defineOptions({ name: 'CustomersView' })
+
 const customerStore = useCustomerStore()
 const posStore = usePosStore()
 const toast = useToast()

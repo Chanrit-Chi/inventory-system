@@ -40,6 +40,7 @@ import {
 } from '@/components/ui'
 
 const toast = useToast()
+defineOptions({ name: 'SuppliersView' })
 const store = useSupplierStore()
 
 const showEditModal = ref(false)

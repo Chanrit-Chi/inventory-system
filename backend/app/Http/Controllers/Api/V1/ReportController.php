@@ -292,6 +292,7 @@ class ReportController extends BaseApiController
 
             if ($variantsList->isNotEmpty()) {
                 foreach ($variantsList as $v) {
+                    $v->setRelation('product', $p);
                     $allVariants[] = $v;
                     $totalSkus++;
                     $qty = (int) $v->quantity_on_hand;

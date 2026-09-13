@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, onActivated, onDeactivated, computed, nextTick } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { ref, onMounted, onActivated, computed } from 'vue'
+import { RouterLink, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useProductStore, type Product } from '@/stores/productStore'
 import { useToast } from '@/composables/useToast'
+
+defineOptions({ name: 'ProductListView' })
 import {
   Plus,
   Search,
@@ -35,6 +37,7 @@ import {
   Skeleton,
   Alert,
   LoadMoreTrigger,
+  SelectField,
 } from '@/components/ui'
 
 const router = useRouter()
@@ -44,7 +47,19 @@ const toast = useToast()
 const search = ref('')
 const activeFilter = ref<string>('all')
 const categoryFilter = ref<string>('all')
+const currentSort = ref(productStore.listSort || 'created_at:desc')
 const page = ref(1)
+
+const sortOptions = [
+  { label: 'Newest First', value: 'created_at:desc' },
+  { label: 'Oldest First', value: 'created_at:asc' },
+  { label: 'Name (A - Z)', value: 'name:asc' },
+  { label: 'Name (Z - A)', value: 'name:desc' },
+  { label: 'Price (High to Low)', value: 'selling_price:desc' },
+  { label: 'Price (Low to High)', value: 'selling_price:asc' },
+  { label: 'Stock (Low to High)', value: 'stock:asc' },
+  { label: 'Stock (High to Low)', value: 'stock:desc' },
+]
 const viewMode = ref<'table' | 'grid'>('table')
 const deletingProduct = ref<Product | null>(null)
 const deleteLoading = ref(false)
@@ -127,10 +142,17 @@ async function loadProducts(append = false) {
     page?: number
     search?: string
     is_active?: boolean | string
+    category_id?: string
+    sort_by?: string
+    sort_direction?: 'asc' | 'desc'
   } = { page: page.value }
 
   if (search.value.trim()) {
     params.search = search.value.trim()
+  }
+
+  if (categoryFilter.value !== 'all') {
+    params.category_id = categoryFilter.value
   }
 
   if (activeFilter.value === 'active') {
@@ -139,11 +161,23 @@ async function loadProducts(append = false) {
     params.is_active = false
   }
 
+  const [sortBy, sortDir] = currentSort.value.split(':')
+  if (sortBy) {
+    params.sort_by = sortBy
+    params.sort_direction = (sortDir as 'asc' | 'desc') || 'desc'
+  }
+
   try {
     await productStore.fetchProducts(params, append)
   } catch {
     // Handled in store
   }
+}
+
+function onSortChange() {
+  productStore.listSort = currentSort.value
+  page.value = 1
+  loadProducts(false)
 }
 
 function handleLoadMore() {
@@ -217,22 +251,56 @@ function fmtMoney(amount: number | string | undefined | null): string {
   return isNaN(val) ? '$0.00' : `$${val.toFixed(2)}`
 }
 
-let savedScrollY = 0
+let _initialLoadDone = false
 
 onMounted(() => {
-  if (productStore.products.length === 0) loadProducts()
-})
-
-onDeactivated(() => {
-  savedScrollY = window.scrollY
+  if (_initialLoadDone) return
+  _initialLoadDone = true
+  if (productStore.products.length > 0) {
+    search.value = productStore.listSearch
+    activeFilter.value = productStore.listFilter
+    page.value = productStore.listPage
+    if (productStore.listSort) {
+      currentSort.value = productStore.listSort
+    }
+    if (productStore.listCategoryFilter) {
+      categoryFilter.value = productStore.listCategoryFilter
+    }
+    requestAnimationFrame(() => window.scrollTo(0, productStore.listScrollY))
+  } else {
+    loadProducts()
+  }
 })
 
 onActivated(() => {
-  if (productStore.products.length === 0) {
-    loadProducts()
-  } else {
-    nextTick(() => window.scrollTo(0, savedScrollY))
+  if (!_initialLoadDone) {
+    _initialLoadDone = true
+    if (productStore.products.length > 0) {
+      search.value = productStore.listSearch
+      activeFilter.value = productStore.listFilter
+      page.value = productStore.listPage
+      if (productStore.listSort) {
+        currentSort.value = productStore.listSort
+      }
+      if (productStore.listCategoryFilter) {
+        categoryFilter.value = productStore.listCategoryFilter
+      }
+    } else {
+      loadProducts()
+      return
+    }
   }
+  requestAnimationFrame(() => window.scrollTo(0, productStore.listScrollY))
+})
+
+// Save scroll + filter state into store before navigating away
+onBeforeRouteLeave(() => {
+  productStore.listScrollY = window.scrollY
+  productStore.listPage = page.value
+  productStore.listSearch = search.value
+  productStore.listFilter = activeFilter.value
+  productStore.listSort = currentSort.value
+  productStore.listCategoryFilter = categoryFilter.value === 'all' ? null : categoryFilter.value
 })
 </script>
 
@@ -363,6 +431,16 @@ onActivated(() => {
             {{ filter.label }}
           </button>
         </div>
+
+        <!-- Sort Dropdown -->
+        <SelectField
+          id="product-sort-select"
+          v-model="currentSort"
+          :options="sortOptions"
+          placeholder="Sort By"
+          class="h-9 w-44 bg-surface text-xs"
+          @change="onSortChange"
+        />
 
         <!-- View Mode Segmented Control -->
         <div class="inline-flex h-9 items-center rounded-lg border border-border bg-surface p-0.5">

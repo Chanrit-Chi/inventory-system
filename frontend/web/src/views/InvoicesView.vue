@@ -38,6 +38,7 @@ import {
 } from '@/components/ui'
 
 const toast = useToast()
+defineOptions({ name: 'InvoicesView' })
 const store = useInvoiceStore()
 
 const showDetailModal = ref(false)

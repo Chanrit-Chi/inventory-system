@@ -54,8 +54,34 @@ class ProductController extends BaseApiController
             $query->where('category_id', $request->input('category_id'));
         }
 
+        $sortBy = (string) $request->input('sort_by', 'created_at');
+        $sortDir = strtolower((string) $request->input('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        switch ($sortBy) {
+            case 'name':
+                $query->orderBy('name', $sortDir);
+                break;
+            case 'price':
+            case 'selling_price':
+                $query->orderBy('selling_price', $sortDir);
+                break;
+            case 'cost':
+            case 'purchase_price':
+                $query->orderBy('purchase_price', $sortDir);
+                break;
+            case 'stock':
+            case 'quantity_on_hand':
+                $query->withSum('variants as total_stock', 'quantity_on_hand')
+                      ->orderBy('total_stock', $sortDir);
+                break;
+            case 'created_at':
+            default:
+                $query->orderBy('created_at', $sortDir);
+                break;
+        }
+
         $perPage = min((int) $request->input('per_page', 15), 2000);
-        $products = $query->latest()->paginate($perPage > 0 ? $perPage : 15);
+        $products = $query->paginate($perPage > 0 ? $perPage : 15);
 
         $stats = [
             'total_active'   => (int) Product::where('is_active', true)->count(),

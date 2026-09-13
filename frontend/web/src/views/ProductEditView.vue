@@ -858,27 +858,7 @@ defineExpose({
             />
           </div>
         </div>
-
-        <div class="flex items-center justify-end gap-3 pt-4 border-t border-border/60">
-          <RouterLink to="/products">
-            <Button variant="outline" size="sm" class="h-9 px-4 text-xs">
-              Cancel
-            </Button>
-          </RouterLink>
-          <Button
-            id="btn-save-product"
-            variant="primary"
-            size="sm"
-            class="h-9 px-5 text-xs gap-1.5"
-            :disabled="productStore.mutating"
-            @click="save"
-          >
-            <span v-if="productStore.mutating" class="animate-spin mr-1">⏳</span>
-            <Save v-else :size="14" />
-            <span>{{ productStore.mutating ? 'Saving Changes…' : 'Save Changes' }}</span>
-          </Button>
-        </div>
-            </Card>
+      </Card>
 
         <!-- Right: Variant Attributes Selector (Visible for all, disabled if SIMPLE) -->
         <Card
@@ -1239,7 +1219,7 @@ defineExpose({
           </Button>
         </RouterLink>
         <Button
-          id="btn-save-product-bottom"
+          id="btn-save-product"
           variant="primary"
           size="sm"
           class="h-9 px-5 text-xs gap-1.5 font-semibold shadow-2xs"

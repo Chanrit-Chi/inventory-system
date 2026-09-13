@@ -24,6 +24,7 @@ import {
 } from '@/components/ui'
 
 const toast = useToast()
+defineOptions({ name: 'AuditLogsView' })
 const store = useAuditLogStore()
 
 const search = ref('')

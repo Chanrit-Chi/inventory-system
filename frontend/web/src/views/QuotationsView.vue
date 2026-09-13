@@ -40,6 +40,7 @@ import {
 } from '@/components/ui'
 
 const toast = useToast()
+defineOptions({ name: 'QuotationsView' })
 const quotationStore = useQuotationStore()
 
 // Local UI state

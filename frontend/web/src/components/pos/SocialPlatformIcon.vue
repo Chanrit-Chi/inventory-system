@@ -146,6 +146,54 @@ export function getPlatformMeta(platform?: string, name?: string): PlatformMeta 
     badgeText: 'var(--color-primary)',
   }
 }
+
+/**
+ * Strips redundant social platform names, prefixes, suffixes, and parenthetical tags
+ * (e.g. "Facebook - KC Shop (facebook)" -> "KC Shop", "TikTok-KC Shop" -> "KC Shop")
+ * leaving only the clean shop name since the platform logo/branding is already displayed.
+ */
+export function formatChannelShopName(name?: string, platform?: string): string {
+  if (!name) return ''
+  let cleaned = name.trim()
+
+  const platformKeywords = [
+    'facebook', 'fb',
+    'telegram', 'tg',
+    'tiktok', 'tt',
+    'instagram', 'ig',
+    'whatsapp', 'wa',
+    'line', 'ln',
+    'shopee', 'sp',
+    'lazada', 'lz',
+    'youtube', 'yt',
+    'twitter',
+    'webstore', 'web', 'online', 'website',
+    'store pos', 'pos'
+  ]
+
+  if (platform) {
+    const p = platform.toLowerCase().trim()
+    if (p && !platformKeywords.includes(p)) {
+      platformKeywords.unshift(p)
+    }
+  }
+
+  const keywordPattern = platformKeywords.join('|')
+
+  // 1. Remove bracketed / parenthetical platform tags: e.g. (facebook), [TikTok], (FB)
+  const bracketRegex = new RegExp(`\\s*[\\(\\[]\\s*(?:${keywordPattern})\\s*[\\)\\]]`, 'gi')
+  cleaned = cleaned.replace(bracketRegex, '').trim()
+
+  // 2. Remove prefix with delimiter: e.g. "Facebook - KC Shop", "Facebook-KC Shop", "FB: KC Shop"
+  const prefixDelimRegex = new RegExp(`^(?:${keywordPattern})\\s*[-–—:|/_]\\s*`, 'gi')
+  cleaned = cleaned.replace(prefixDelimRegex, '').trim()
+
+  // 3. Remove suffix with delimiter: e.g. "KC Shop - Facebook", "KC Shop - FB"
+  const suffixDelimRegex = new RegExp(`\\s*[-–—:|/_]\\s*(?:${keywordPattern})$`, 'gi')
+  cleaned = cleaned.replace(suffixDelimRegex, '').trim()
+
+  return cleaned || name.trim()
+}
 </script>
 
 <script setup lang="ts">

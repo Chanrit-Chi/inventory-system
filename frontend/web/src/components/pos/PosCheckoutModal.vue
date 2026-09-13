@@ -15,7 +15,7 @@ import type { CartItem } from '@/stores/posStore'
 import DeliveryCompanyPickerModal from './DeliveryCompanyPickerModal.vue'
 import DeliveryZonePickerModal from './DeliveryZonePickerModal.vue'
 import CustomerLookupRow from './CustomerLookupRow.vue'
-import SocialPlatformIcon, { getPlatformMeta } from './SocialPlatformIcon.vue'
+import SocialPlatformIcon, { getPlatformMeta, formatChannelShopName } from './SocialPlatformIcon.vue'
 import BankBrandIcon from './BankBrandIcon.vue'
 import { calculateLoyalty } from '@/utils/loyalty'
 
@@ -828,7 +828,7 @@ defineExpose({
 
               <div class="min-w-0 flex-1">
                 <span class="text-xs font-bold text-foreground truncate block leading-tight">
-                  {{ chan.name }}
+                  {{ formatChannelShopName(chan.name, chan.platform) }}
                 </span>
               </div>
 

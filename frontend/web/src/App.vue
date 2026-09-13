@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
+import Toast from '@/components/ui/Toast.vue'
+import AppSidebar from '@/components/shell/AppSidebar.vue'
+import AppHeader from '@/components/shell/AppHeader.vue'
+import CommandPalette from '@/components/shell/CommandPalette.vue'
 
 const cachedViews = [
   'ProductListView',
@@ -12,13 +19,6 @@ const cachedViews = [
   'QuotationsView',
   'AuditLogsView',
 ]
-import { RouterView, useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/authStore'
-import { useThemeStore } from '@/stores/themeStore'
-import Toast from '@/components/ui/Toast.vue'
-import AppSidebar from '@/components/shell/AppSidebar.vue'
-import AppHeader from '@/components/shell/AppHeader.vue'
-import CommandPalette from '@/components/shell/CommandPalette.vue'
 
 const route = useRoute()
 const router = useRouter()

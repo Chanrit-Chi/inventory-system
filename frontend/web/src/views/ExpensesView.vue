@@ -32,6 +32,7 @@ import {
   LoadMoreTrigger,
 } from '@/components/ui'
 
+defineOptions({ name: 'ExpensesView' })
 const expenseStore = useExpenseStore()
 
 // Form state

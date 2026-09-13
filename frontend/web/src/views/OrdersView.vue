@@ -45,6 +45,7 @@ import {
   LoadMoreTrigger,
 } from '@/components/ui'
 
+defineOptions({ name: 'OrdersView' })
 const orderStore = useOrderStore()
 const printStore = usePrintStore()
 const toast = useToast()
