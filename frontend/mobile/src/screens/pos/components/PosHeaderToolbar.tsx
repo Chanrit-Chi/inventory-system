@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../../../theme/tokens'
 import { styles } from '../PosScreen.styles'
+import { PosFilterButton } from './PosFilterButton'
 
 export interface PosHeaderToolbarProps {
   searchQuery: string
@@ -21,6 +22,8 @@ export interface PosHeaderToolbarProps {
   headerTranslateY: Animated.AnimatedInterpolation<string | number>
   headerOpacity: Animated.AnimatedInterpolation<string | number>
   onLayoutHeader: (e: LayoutChangeEvent) => void
+  activeFiltersCount?: number
+  onOpenFilter?: () => void
 }
 
 export const PosHeaderToolbar: React.FC<PosHeaderToolbarProps> = ({
@@ -32,6 +35,8 @@ export const PosHeaderToolbar: React.FC<PosHeaderToolbarProps> = ({
   headerTranslateY,
   headerOpacity,
   onLayoutHeader,
+  activeFiltersCount = 0,
+  onOpenFilter,
 }) => {
   return (
     <Animated.View
@@ -44,7 +49,7 @@ export const PosHeaderToolbar: React.FC<PosHeaderToolbarProps> = ({
       ]}
       onLayout={onLayoutHeader}
     >
-      {/* Sticky Header: Search Bar */}
+      {/* Sticky Header: Search Bar & Filter Button */}
       <View style={styles.header}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color={tokens.colors.secondary} />
@@ -69,6 +74,12 @@ export const PosHeaderToolbar: React.FC<PosHeaderToolbarProps> = ({
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Filter and Sort Trigger Button */}
+        <PosFilterButton
+          activeFiltersCount={activeFiltersCount}
+          onPress={onOpenFilter}
+        />
       </View>
 
       {/* Horizontal Categories Filter */}

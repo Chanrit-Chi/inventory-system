@@ -526,8 +526,6 @@ export const styles = StyleSheet.create({
     backgroundColor: tokens.colors.background,
     borderTopLeftRadius: tokens.borderRadius.card,
     borderTopRightRadius: tokens.borderRadius.card,
-    borderBottomLeftRadius: Platform.OS === 'ios' ? tokens.borderRadius.card : 0,
-    borderBottomRightRadius: Platform.OS === 'ios' ? tokens.borderRadius.card : 0,
     maxHeight: '90%',
     paddingBottom: tokens.spacing.xl,
     overflow: 'hidden',

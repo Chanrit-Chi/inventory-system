@@ -44,6 +44,13 @@ import type {
 import type { ScanResult } from '../../../types'
 import type { CustomerLoyaltyInfo } from '../../../hooks/useCustomerLookup'
 import { useAppActions } from '../../../context/AppContext'
+import { usePosProductFilter } from './usePosProductFilter'
+import type {
+  PosSortOption,
+  PosStockOption,
+  PosStatusOption,
+  PosProductTypeOption,
+} from '../components/PosFilterModal'
 
 interface UsePosScreenProps {
   onNavigate?: (tab: import('../../../types').TabType) => void
@@ -62,6 +69,20 @@ interface UsePosScreenReturn {
   selectedCategory: string
   setSelectedCategory: (c: string) => void
   categories: string[]
+
+  // Filter & Sort
+  stockFilter: PosStockOption
+  setStockFilter: (v: PosStockOption) => void
+  statusFilter: PosStatusOption
+  setStatusFilter: (v: PosStatusOption) => void
+  productTypeFilter: PosProductTypeOption
+  setProductTypeFilter: (v: PosProductTypeOption) => void
+  sortBy: PosSortOption
+  setSortBy: (v: PosSortOption) => void
+  activeFiltersCount: number
+  resetFilters: () => void
+  filterModalOpen: boolean
+  setFilterModalOpen: (v: boolean) => void
 
   // Collapsible Header
   headerTranslateY: Animated.AnimatedInterpolation<number>
@@ -229,6 +250,28 @@ export function usePosScreen({
     return match?.id
   }, [selectedCategory, rawCategories])
 
+  // Modular Product Filter & Sort Hook
+  const {
+    stockFilter,
+    setStockFilter,
+    statusFilter,
+    setStatusFilter,
+    productTypeFilter,
+    setProductTypeFilter,
+    sortBy,
+    setSortBy,
+    filterModalOpen,
+    setFilterModalOpen,
+    resolvedIsActive,
+    includeInactive,
+    filterProducts,
+    activeFiltersCount,
+    resetFilters,
+  } = usePosProductFilter({
+    selectedCategory,
+    debouncedSearchQuery,
+  })
+
   // Collapsible Search & Category Header on Scroll
   const {
     headerTranslateY,
@@ -243,10 +286,11 @@ export function usePosScreen({
     () => ({
       search: debouncedSearchQuery.trim() || undefined,
       category_id: resolvedCategoryId,
-      is_active: true,
+      is_active: resolvedIsActive,
+      include_inactive: includeInactive,
       per_page: 50,
     }),
-    [debouncedSearchQuery, resolvedCategoryId]
+    [debouncedSearchQuery, resolvedCategoryId, resolvedIsActive, includeInactive]
   )
 
   const {
@@ -618,32 +662,11 @@ export function usePosScreen({
     loadData()
   }, [loadData])
 
-  // Filter products by search and category
-  const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      const matchCat =
-        selectedCategory === 'All' ||
-        p.category?.name?.toLowerCase() === selectedCategory.toLowerCase()
-      if (!matchCat) return false
-
-      if (!debouncedSearchQuery.trim()) return true
-      const q = debouncedSearchQuery.toLowerCase().trim()
-      const matchName = p.name?.toLowerCase().includes(q)
-      const matchSku = p.sku?.toLowerCase().includes(q)
-      const matchBarcode = p.barcode?.toLowerCase().includes(q)
-      const matchVariant = p.variants?.some(
-        (v) =>
-          v.sku?.toLowerCase().includes(q) ||
-          v.name?.toLowerCase().includes(q) ||
-          v.barcode?.toLowerCase().includes(q) ||
-          v.attribute_values?.some(
-            (av) =>
-              av.value_name?.toLowerCase().includes(q)
-          )
-      )
-      return matchName || matchSku || matchBarcode || matchVariant
-    })
-  }, [products, selectedCategory, debouncedSearchQuery])
+  // Apply modular product filter & sort
+  const filteredProducts = useMemo(
+    () => filterProducts(products),
+    [products, filterProducts]
+  )
 
   // Map product to variants/detail picker (single & variable both open detail picker)
   const handleSelectProduct = useCallback(
@@ -904,6 +927,20 @@ export function usePosScreen({
     selectedCategory,
     setSelectedCategory,
     categories,
+
+    // Filter & Sort
+    stockFilter,
+    setStockFilter,
+    statusFilter,
+    setStatusFilter,
+    productTypeFilter,
+    setProductTypeFilter,
+    sortBy,
+    setSortBy,
+    activeFiltersCount,
+    resetFilters,
+    filterModalOpen,
+    setFilterModalOpen,
 
     // Collapsible Header
     headerTranslateY,

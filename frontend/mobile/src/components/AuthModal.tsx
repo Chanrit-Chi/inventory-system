@@ -28,6 +28,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onUpdateProfile,
 }) => {
+  const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN'
   const [tab, setTab] = useState<'editProfile' | 'changePassword'>('editProfile')
   const [editName, setEditName] = useState(currentUser.name)
   const [editPhone, setEditPhone] = useState(currentUser.phone || '')
@@ -35,11 +36,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [newPass, setNewPass] = useState('')
 
   const handleSaveProfile = () => {
-    if (!editName.trim()) {
+    if (isAdmin && !editName.trim()) {
       Alert.alert('Validation Error', 'Name cannot be empty')
       return
     }
-    onUpdateProfile({ name: editName, phone: editPhone })
+    onUpdateProfile({
+      name: isAdmin ? editName.trim() : currentUser.name,
+      phone: editPhone,
+    })
     Alert.alert('Success', 'Profile updated successfully')
     onClose()
   }
@@ -110,13 +114,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {tab === 'editProfile' && (
               <View style={styles.formContainer}>
-                <Text style={styles.formLabel}>Full Name</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.formLabel}>Full Name</Text>
+                  {!isAdmin && (
+                    <View style={styles.adminOnlyBadge}>
+                      <Ionicons name="lock-closed" size={11} color={tokens.colors.secondary} />
+                      <Text style={styles.adminOnlyText}>Admin Only</Text>
+                    </View>
+                  )}
+                </View>
                 <TextInput
-                  style={styles.input}
-                  value={editName}
+                  style={[styles.input, !isAdmin && styles.inputDisabled]}
+                  value={isAdmin ? editName : currentUser.name}
                   onChangeText={setEditName}
                   placeholder="Enter full name"
+                  editable={isAdmin}
                 />
+                {!isAdmin && (
+                  <Text style={styles.fieldHelperNotice}>
+                    Full name is linked to salary, payroll, and official records. Only administrators can change it.
+                  </Text>
+                )}
 
                 <Text style={styles.formLabel}>Email Address</Text>
                 <TextInput
@@ -254,8 +272,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: tokens.colors.onBackground,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
     marginTop: tokens.spacing.sm,
+  },
+  adminOnlyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: tokens.colors.surfaceMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: tokens.borderRadius.xs,
+  },
+  adminOnlyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+  },
+  fieldHelperNotice: {
+    fontSize: 11,
+    color: tokens.colors.secondary,
+    marginTop: 4,
+    lineHeight: 15,
   },
   input: {
     backgroundColor: tokens.colors.surfaceCard,

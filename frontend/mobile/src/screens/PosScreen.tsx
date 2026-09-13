@@ -11,6 +11,7 @@ import { PosHeaderToolbar } from './pos/components/PosHeaderToolbar'
 import { PosProductCatalogGrid } from './pos/components/PosProductCatalogGrid'
 import { PosCartBottomBar } from './pos/components/PosCartBottomBar'
 import { PosCheckoutModal } from './pos/components/PosCheckoutModal'
+import { PosFilterModal } from './pos/components/PosFilterModal'
 import { styles } from './pos/PosScreen.styles'
 
 export interface PosScreenProps {
@@ -40,6 +41,19 @@ export default function PosScreen({
     categories,
     selectedCategory,
     setSelectedCategory,
+    // Filter & Sort
+    stockFilter,
+    setStockFilter,
+    statusFilter,
+    setStatusFilter,
+    productTypeFilter,
+    setProductTypeFilter,
+    sortBy,
+    setSortBy,
+    activeFiltersCount,
+    resetFilters,
+    filterModalOpen,
+    setFilterModalOpen,
     // Collapsible Header
     headerTranslateY,
     headerOpacity,
@@ -170,6 +184,8 @@ export default function PosScreen({
             headerTranslateY={headerTranslateY}
             headerOpacity={headerOpacity}
             onLayoutHeader={onLayoutHeader}
+            activeFiltersCount={activeFiltersCount}
+            onOpenFilter={() => setFilterModalOpen(true)}
           />
 
           {/* Product Catalog Grid */}
@@ -420,6 +436,22 @@ export default function PosScreen({
         visible={dailySummaryModalOpen}
         onClose={() => setDailySummaryModalOpen(false)}
         currentUser={currentUser || null}
+      />
+
+      {/* Product Filter & Sort Modal */}
+      <PosFilterModal
+        visible={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        stockFilter={stockFilter}
+        setStockFilter={setStockFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        productTypeFilter={productTypeFilter}
+        setProductTypeFilter={setProductTypeFilter}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        activeFiltersCount={activeFiltersCount}
+        onResetAll={resetFilters}
       />
     </View>
   )
