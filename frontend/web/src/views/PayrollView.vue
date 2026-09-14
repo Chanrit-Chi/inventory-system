@@ -52,6 +52,12 @@ import {
   Alert,
   SelectField,
 } from '@/components/ui'
+import PayslipModal from '@/components/payroll/PayslipModal.vue'
+import PayrollDeleteDialog from '@/components/payroll/PayrollDeleteDialog.vue'
+import PayrollStaffHistoryModal from '@/components/payroll/PayrollStaffHistoryModal.vue'
+import PayrollStandalonePayoutModal from '@/components/payroll/PayrollStandalonePayoutModal.vue'
+import PayrollThirteenthMonthModal from '@/components/payroll/PayrollThirteenthMonthModal.vue'
+import PayrollBaseSalaryModal from '@/components/payroll/PayrollBaseSalaryModal.vue'
 
 const toast = useToast()
 const store = usePayrollStore()
@@ -134,7 +140,7 @@ const isSavingStandalone = ref(false)
 
 // Payslip Print State
 const payslipPayroll = ref<Payroll | null>(null)
-const payslipFormat = ref<'THERMAL' | 'A4'>('A4')
+const payslipFormat = ref<'A4' | 'THERMAL'>('A4')
 
 // Available years (dynamically computed from current date, history, and reserves)
 const availableYears = computed(() => {
@@ -693,10 +699,6 @@ async function handleSaveStandalone() {
 function openPayslip(p: Payroll) {
   payslipPayroll.value = p
   showPayslipModal.value = true
-}
-
-function triggerPrint() {
-  window.print()
 }
 
 watch([reservesYear, reservesMonth], ([newYear, newMonth]) => {
@@ -2075,367 +2077,56 @@ onMounted(async () => {
     <!-- ========================================================================= -->
     <!-- MODAL 3: STAFF BASE SALARY RATES                                          -->
     <!-- ========================================================================= -->
-    <Dialog :open="showSalaryModal" @update:open="(val) => showSalaryModal = val">
-      <DialogContent class="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle class="font-display">Staff Base Salary Rates</DialogTitle>
-          <DialogDescription>
-            Configure monthly base pay in USD across all active staff profiles.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="py-2 space-y-2 text-xs">
-          <div class="rounded-lg border border-border divide-y divide-border bg-surface">
-            <div
-              v-for="u in activeStaffUsers"
-              :key="u.id"
-              class="flex items-center justify-between p-3 gap-3"
-            >
-              <div>
-                <div class="font-semibold text-foreground text-xs">{{ u.name }}</div>
-                <div class="text-3xs text-muted-foreground">{{ u.role }} • {{ u.department || 'Operations' }}</div>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground font-mono">$</span>
-                <Input
-                  v-model.number="salaryDrafts[u.id]"
-                  type="number"
-                  min="0"
-                  step="10"
-                  placeholder="e.g. 500"
-                  class="h-8 w-28 text-xs font-mono font-bold"
-                />
-                <Button
-                  variant="primary"
-                  size="sm"
-                  class="h-8 px-2.5 text-xs"
-                  :disabled="salarySavingUser === u.id"
-                  @click="saveSalaryForUser(u.id)"
-                >
-                  <span v-if="salarySavingUser === u.id">⏳</span>
-                  <span v-else>Save</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter class="mt-4">
-          <Button variant="outline" @click="showSalaryModal = false">Done</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayrollBaseSalaryModal
+      v-model:open="showSalaryModal"
+      :active-staff-users="activeStaffUsers"
+      :salary-drafts="salaryDrafts"
+      :salary-saving-user="salarySavingUser"
+      @save="saveSalaryForUser"
+    />
 
     <!-- ========================================================================= -->
     <!-- MODAL 4: 13th-MONTH SENIORITY RESERVES                                    -->
     <!-- ========================================================================= -->
-    <Dialog :open="showThirteenthModal" @update:open="(val) => showThirteenthModal = val">
-      <DialogContent class="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle class="font-display flex items-center gap-2">
-            <Gift :size="18" class="text-primary" />
-            <span>13th-Month Seniority Reserves</span>
-          </DialogTitle>
-          <DialogDescription>
-            Cumulative monthly seniority accruals (base salary ÷ 12 per month) and standalone bonus disbursements.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="py-2 space-y-2 text-xs">
-          <div class="rounded-lg border border-border divide-y divide-border bg-surface">
-            <div
-              v-for="u in activeStaffUsers"
-              :key="u.id"
-              class="flex items-center justify-between p-3 gap-3"
-            >
-              <div>
-                <div class="font-semibold text-foreground text-xs">{{ u.name }}</div>
-                <div class="text-3xs text-muted-foreground">
-                  Accrued: {{ formatMoney(store.thirteenthMonthSummaries[u.id]?.total_accrued || 0) }} • Paid: {{ formatMoney(store.thirteenthMonthSummaries[u.id]?.total_paid_out || store.thirteenthMonthSummaries[u.id]?.total_disbursed || 0) }}
-                </div>
-              </div>
-
-              <div class="flex items-center gap-3">
-                <div class="text-right">
-                  <span class="text-3xs text-muted-foreground block font-semibold">Available</span>
-                  <span class="font-bold text-xs font-mono text-primary">
-                    {{ formatMoney(store.thirteenthMonthSummaries[u.id]?.available_balance || 0) }}
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-7 px-2 text-xs gap-1"
-                  @click="openStandalonePayout(u.id)"
-                >
-                  <Gift :size="12" />
-                  <span>Disburse</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter class="mt-4">
-          <Button variant="outline" @click="showThirteenthModal = false">Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayrollThirteenthMonthModal
+      v-model:open="showThirteenthModal"
+      :active-staff-users="activeStaffUsers"
+      :thirteenth-month-summaries="store.thirteenthMonthSummaries"
+      @open-payout="openStandalonePayout"
+    />
 
     <!-- Standalone Payout Dialog -->
-    <Dialog :open="showStandaloneModal" @update:open="(val) => showStandaloneModal = val">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle class="font-display">Record Standalone Bonus</DialogTitle>
-          <DialogDescription>
-            Disburse seniority bonus (e.g. Khmer New Year or Year-End bonus).
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-3 py-2 text-xs">
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Payout Amount ($) *</label>
-            <Input v-model.number="standaloneAmount" type="number" min="1" step="10" class="h-9 font-mono" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Purpose / Notes</label>
-            <Input v-model="standaloneNotes" class="h-9" placeholder="e.g. Khmer New Year bonus" />
-          </div>
-        </div>
-
-        <DialogFooter class="gap-2 sm:gap-0 mt-4">
-          <Button variant="outline" :disabled="isSavingStandalone" @click="showStandaloneModal = false">Cancel</Button>
-          <Button variant="primary" :disabled="isSavingStandalone" @click="handleSaveStandalone">
-            <span v-if="isSavingStandalone">⏳</span>
-            <span v-else>Record Payout</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayrollStandalonePayoutModal
+      v-model:open="showStandaloneModal"
+      v-model:amount="standaloneAmount"
+      v-model:notes="standaloneNotes"
+      :is-saving="isSavingStandalone"
+      @save="handleSaveStandalone"
+    />
 
     <!-- ========================================================================= -->
     <!-- MODAL 5: DIGITAL PAYSLIP / PRINT PREVIEW                                  -->
     <!-- ========================================================================= -->
-    <Dialog :open="showPayslipModal" @update:open="(val) => showPayslipModal = val">
-      <DialogContent class="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div class="flex items-center justify-between pr-4">
-            <DialogTitle class="font-display">Staff Payslip Slip</DialogTitle>
-            <div class="flex items-center gap-1 bg-surface border border-border rounded-md p-0.5 text-3xs">
-              <button
-                type="button"
-                :class="['px-2 py-0.5 rounded font-semibold', payslipFormat === 'A4' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground']"
-                @click="payslipFormat = 'A4'"
-              >
-                A4 Slip
-              </button>
-              <button
-                type="button"
-                :class="['px-2 py-0.5 rounded font-semibold', payslipFormat === 'THERMAL' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground']"
-                @click="payslipFormat = 'THERMAL'"
-              >
-                Thermal (80mm)
-              </button>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div v-if="payslipPayroll" id="printable-payslip" class="p-4 rounded-xl border border-border bg-white text-slate-900 font-sans space-y-3">
-          <!-- Header -->
-          <div class="text-center border-b border-slate-200 pb-3">
-            <h2 class="font-bold text-base tracking-tight uppercase">Salary Payslip</h2>
-            <div class="text-xs text-slate-500 font-medium">
-              Period: {{ getPeriodRange(payslipPayroll.period_year, payslipPayroll.period_month).formatted }} ({{ MONTH_NAMES[payslipPayroll.period_month - 1] }} {{ payslipPayroll.period_year }})
-            </div>
-          </div>
-
-          <!-- Staff Details -->
-          <div class="grid grid-cols-2 gap-2 text-xs py-1 border-b border-slate-200">
-            <div>
-              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Employee</span>
-              <span class="font-bold text-slate-800">{{ getStaffName(payslipPayroll) }}</span>
-            </div>
-            <div class="text-right">
-              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Role / Dept</span>
-              <span class="font-semibold text-slate-700">{{ getStaffRole(payslipPayroll) }}</span>
-            </div>
-          </div>
-
-          <!-- Earnings Table -->
-          <div class="space-y-1 text-xs">
-            <div class="font-bold text-[11px] text-slate-700 uppercase tracking-wider">Earnings</div>
-            <div class="flex justify-between py-0.5">
-              <span class="text-slate-600">Base Salary ({{ payslipPayroll.working_days || 26 }} working days):</span>
-              <span class="font-mono font-semibold text-slate-900">{{ formatMoney(payslipPayroll.base_salary) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.overtime_pay || payslipPayroll.overtime_amount || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Overtime Pay ({{ payslipPayroll.overtime_days || 0 }} days):</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.overtime_pay || payslipPayroll.overtime_amount) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.incentive_override ?? payslipPayroll.sales_commission ?? payslipPayroll.incentive_amount ?? 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Sales Commission / Incentive:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.incentive_override ?? payslipPayroll.sales_commission ?? payslipPayroll.incentive_amount) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.performance_benefit || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Performance Benefit:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.performance_benefit) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.delivery_benefit || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Delivery Benefit:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.delivery_benefit) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.collective_benefit || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Collective Benefit:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.collective_benefit) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.other_benefits || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Other Benefits:</span>
-              <span class="font-mono font-semibold text-emerald-600">+ {{ formatMoney(payslipPayroll.other_benefits) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.thirteenth_month_payout || 0) > 0" class="flex justify-between py-1 bg-emerald-50 px-2 rounded border border-emerald-200">
-              <span class="text-emerald-800 font-semibold">🎁 13th Month / Seniority Payout:</span>
-              <span class="font-mono font-bold text-emerald-700">+ {{ formatMoney(payslipPayroll.thirteenth_month_payout) }}</span>
-            </div>
-          </div>
-
-          <!-- Deductions -->
-          <div v-if="(payslipPayroll.unpaid_leave_deduction || 0) + (payslipPayroll.tax_deduction || 0) > 0" class="space-y-1 text-xs border-t border-slate-200 pt-2">
-            <div class="font-bold text-[11px] text-slate-700 uppercase tracking-wider">Deductions</div>
-            <div v-if="(payslipPayroll.unpaid_leave_deduction || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Unpaid Leave ({{ payslipPayroll.unpaid_leave_days || 0 }} days):</span>
-              <span class="font-mono font-semibold text-rose-600">- {{ formatMoney(payslipPayroll.unpaid_leave_deduction) }}</span>
-            </div>
-            <div v-if="(payslipPayroll.tax_deduction || 0) > 0" class="flex justify-between py-0.5">
-              <span class="text-slate-600">Tax Deduction:</span>
-              <span class="font-mono font-semibold text-rose-600">- {{ formatMoney(payslipPayroll.tax_deduction) }}</span>
-            </div>
-          </div>
-
-          <!-- Monthly Accrual Info -->
-          <div class="flex justify-between items-center py-1 border-t border-slate-100 text-[10px] text-slate-500 italic">
-            <span>Monthly Seniority Accrual into Reserve Fund:</span>
-            <span class="font-mono font-medium text-slate-600">+{{ formatMoney(payslipPayroll.thirteenth_month_contribution || payslipPayroll.thirteenth_month_accrual || Math.round((payslipPayroll.base_salary / 12) * 100) / 100) }}/mo</span>
-          </div>
-
-          <!-- Total Net -->
-          <div class="border-t-2 border-slate-900 pt-2 flex justify-between items-center text-sm font-bold">
-            <span class="uppercase tracking-wider">Net Amount Paid:</span>
-            <span class="text-base font-mono text-emerald-700">{{ formatMoney(payslipPayroll.total_net_pay || payslipPayroll.total_net) }}</span>
-          </div>
-
-          <!-- Signature Section for A4 -->
-          <div v-if="payslipFormat === 'A4'" class="grid grid-cols-2 gap-6 pt-6 mt-4 border-t border-slate-200 text-center text-3xs text-slate-500">
-            <div>
-              <div class="h-10 border-b border-slate-300"></div>
-              <span class="mt-1 block">Prepared By (Admin)</span>
-            </div>
-            <div>
-              <div class="h-10 border-b border-slate-300"></div>
-              <span class="mt-1 block">Employee Signature</span>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter class="gap-2 sm:gap-0 mt-4">
-          <Button variant="outline" @click="showPayslipModal = false">Close</Button>
-          <Button variant="primary" class="gap-1.5" @click="triggerPrint">
-            <Printer :size="14" />
-            <span>Print Payslip</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayslipModal
+      v-model:open="showPayslipModal"
+      v-model:format="payslipFormat"
+      :payroll="payslipPayroll"
+    />
 
     <!-- Delete Confirmation Dialog -->
-    <Dialog :open="isDeleteDialogOpen" @update:open="(val) => { isDeleteDialogOpen = val; if (!val) cancelDelete(); }">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle class="text-destructive font-display">Confirm Payroll Deletion</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this payroll record? This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter class="gap-2 sm:gap-0 mt-4">
-          <Button variant="outline" :disabled="isDeleting" @click="cancelDelete">
-            Cancel
-          </Button>
-          <Button variant="destructive" :disabled="isDeleting" @click="executeDelete">
-            <span v-if="isDeleting" class="animate-spin mr-1.5">⏳</span>
-            <span>{{ isDeleting ? 'Deleting…' : 'Delete Payroll' }}</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayrollDeleteDialog
+      :open="isDeleteDialogOpen"
+      :is-deleting="isDeleting"
+      @update:open="(val) => { isDeleteDialogOpen = val; if (!val) cancelDelete(); }"
+      @confirm="executeDelete"
+      @cancel="cancelDelete"
+    />
 
     <!-- 13th-Month Staff Payout History Dialog -->
-    <Dialog :open="showHistoryModal" @update:open="(val) => showHistoryModal = val">
-      <DialogContent class="sm:max-w-md max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle class="font-display flex items-center gap-2">
-            <History :size="18" class="text-primary" />
-            <span>13th-Month Payout History</span>
-          </DialogTitle>
-          <DialogDescription v-if="historyStaff">
-            Past disbursements for <span class="font-semibold text-foreground">{{ historyStaff.name }}</span> ({{ historyStaff.role }} • {{ historyStaff.department || 'General' }})
-          </DialogDescription>
-        </DialogHeader>
-
-        <div v-if="historyStaff" class="py-2 flex-1 overflow-y-auto space-y-3">
-          <!-- Summary Badge Box -->
-          <div class="grid grid-cols-3 gap-2 bg-muted/40 p-3 rounded-lg border border-border text-center">
-            <div>
-              <span class="text-3xs text-muted-foreground block">Total Accrued</span>
-              <span class="text-xs font-bold text-emerald-600 font-mono">+{{ formatMoney(historyStaff.total_accrued) }}</span>
-            </div>
-            <div>
-              <span class="text-3xs text-muted-foreground block">Disbursed</span>
-              <span class="text-xs font-bold text-amber-600 font-mono">-{{ formatMoney(historyStaff.total_disbursed) }}</span>
-            </div>
-            <div>
-              <span class="text-3xs text-muted-foreground block">Available</span>
-              <span class="text-xs font-bold text-primary font-mono">{{ formatMoney(historyStaff.available_balance) }}</span>
-            </div>
-          </div>
-
-          <!-- History List -->
-          <div v-if="historyStaff.payouts && historyStaff.payouts.length > 0" class="divide-y divide-border border border-border rounded-lg bg-surface overflow-hidden">
-            <div
-              v-for="payout in historyStaff.payouts"
-              :key="payout.id"
-              class="p-3 flex items-center justify-between gap-3 text-xs"
-            >
-              <div>
-                <div class="font-semibold text-foreground flex items-center gap-2">
-                  <span>{{ payout.payout_date ? new Date(payout.payout_date).toLocaleDateString() : 'N/A' }}</span>
-                  <Badge variant="outline" class="text-[10px] px-1.5 py-0">{{ payout.payment_method || 'Cash' }}</Badge>
-                </div>
-                <div class="text-muted-foreground text-3xs mt-0.5">{{ payout.notes || '13th Month / Seniority Payout' }}</div>
-              </div>
-              <div class="font-mono font-bold text-amber-600 text-sm text-right">
-                -{{ formatMoney(payout.amount) }}
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="text-center py-6 text-muted-foreground text-xs italic">
-            No past payout disbursements recorded for this employee yet.
-          </div>
-        </div>
-
-        <DialogFooter class="mt-2">
-          <Button variant="outline" @click="showHistoryModal = false">Close</Button>
-          <Button
-            v-if="historyStaff && historyStaff.available_balance > 0"
-            variant="primary"
-            class="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-            @click="() => { const uid = historyStaff?.user_id; const bal = historyStaff?.available_balance; showHistoryModal = false; if (uid) openStandalonePayout(uid, bal); }"
-          >
-            <DollarSign :size="14" />
-            <span>Disburse Payout</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PayrollStaffHistoryModal
+      v-model:open="showHistoryModal"
+      :history-staff="historyStaff"
+      @disburse="(uid, bal) => { showHistoryModal = false; if (uid) openStandalonePayout(uid, bal); }"
+    />
   </div>
 </template>

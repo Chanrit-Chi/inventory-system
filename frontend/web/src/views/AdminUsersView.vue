@@ -24,8 +24,6 @@ import {
   TrendingUp,
   BarChart2,
   Lock,
-  Eye,
-  EyeOff,
 } from 'lucide-vue-next'
 import {
   Button,
@@ -52,6 +50,9 @@ import {
   DatePicker,
   SelectField,
 } from '@/components/ui'
+import SalaryRaiseModal from '@/components/admin/SalaryRaiseModal.vue'
+import UserDeleteModal from '@/components/admin/UserDeleteModal.vue'
+import ResetPasswordModal from '@/components/admin/ResetPasswordModal.vue'
 
 const router = useRouter()
 const toast = useToast()
@@ -2208,223 +2209,49 @@ onMounted(() => {
     </Dialog>
 
     <!-- ============ GIVE SALARY RAISE MODAL ============ -->
-    <Dialog :open="isRaiseModalOpen" @update:open="(val) => { if (!val) isRaiseModalOpen = false; }">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle class="font-display flex items-center gap-2">
-            <TrendingUp class="w-5 h-5 text-emerald-600" />
-            <span>Grant Salary Raise — {{ detailUser?.name }}</span>
-          </DialogTitle>
-          <DialogDescription>
-            Update base monthly compensation package and record merit history.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Alert v-if="raiseError" variant="error" class="mb-2">
-          {{ raiseError }}
-        </Alert>
-
-        <form @submit.prevent="submitRaise" class="space-y-3 py-1">
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">New Monthly Base Salary ($ USD) *</label>
-            <Input
-              v-model="raiseSalaryAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="e.g. 400.00"
-              class="h-9 bg-surface text-xs font-mono"
-            >
-              <template #prefix>
-                <span class="text-xs text-muted-foreground">$</span>
-              </template>
-            </Input>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Raise Reason / Merit Note *</label>
-            <Input
-              v-model="raiseReason"
-              type="text"
-              placeholder="e.g. Annual Merit Promotion / Sales Target Achievement"
-              class="h-9 bg-surface text-xs"
-            />
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-foreground mb-1">Effective Date</label>
-            <DatePicker
-              v-model="raiseEffectiveDate"
-              placeholder="Select effective date"
-              class="h-9 w-full bg-surface text-xs"
-            />
-          </div>
-
-          <DialogFooter class="gap-2 sm:gap-0 mt-3">
-            <Button variant="outline" type="button" :disabled="raiseSaving" @click="isRaiseModalOpen = false">Cancel</Button>
-            <Button variant="primary" type="submit" class="font-bold" :disabled="raiseSaving">
-              <span v-if="raiseSaving" class="animate-spin mr-1">⏳</span>
-              <span>{{ raiseSaving ? 'Saving…' : 'Record Raise' }}</span>
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <SalaryRaiseModal
+      :open="isRaiseModalOpen"
+      :user="detailUser"
+      :salary-amount="raiseSalaryAmount"
+      :reason="raiseReason"
+      :effective-date="raiseEffectiveDate"
+      :saving="raiseSaving"
+      :error="raiseError"
+      @update:open="(val) => isRaiseModalOpen = val"
+      @update:salary-amount="(val) => raiseSalaryAmount = String(val)"
+      @update:reason="(val) => raiseReason = val"
+      @update:effective-date="(val) => raiseEffectiveDate = val"
+      @submit="submitRaise"
+      @cancel="isRaiseModalOpen = false"
+    />
 
     <!-- ============ DELETE CONFIRMATION MODAL ============ -->
-    <Dialog :open="isDeleteModalOpen" @update:open="(val) => { if (!val) closeDeleteModal(); }">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle class="text-destructive font-display">Confirm Staff Deletion</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete staff account <strong>"{{ deletingUser?.name }}"</strong>? This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Alert v-if="deletingUser?.role === 'SUPER_ADMIN'" variant="error" class="my-2">
-          The Super Admin account is protected and cannot be deleted.
-        </Alert>
-
-        <DialogFooter class="gap-2 sm:gap-0 mt-4">
-          <Button
-            id="btn-cancel-delete-user"
-            variant="outline"
-            :disabled="deleteLoading"
-            @click="closeDeleteModal"
-          >
-            Cancel
-          </Button>
-          <Button
-            id="btn-confirm-delete-user"
-            variant="destructive"
-            :disabled="deleteLoading || deletingUser?.role === 'SUPER_ADMIN'"
-            @click="executeDelete"
-          >
-            <span v-if="deleteLoading" class="animate-spin mr-1">⏳</span>
-            <span>{{ deleteLoading ? 'Deleting…' : 'Delete Staff Account' }}</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <UserDeleteModal
+      :open="isDeleteModalOpen"
+      :user="deletingUser"
+      :loading="deleteLoading"
+      @update:open="(val) => { if (!val) closeDeleteModal(); }"
+      @confirm="executeDelete"
+      @cancel="closeDeleteModal"
+    />
 
     <!-- ============ RESET PASSWORD MODAL ============ -->
-    <Dialog :open="isResetPasswordModalOpen" @update:open="(val) => { if (!val) closeResetPasswordModal(); }">
-      <DialogContent class="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle class="font-display flex items-center gap-2">
-            <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400">
-              <Key :size="14" />
-            </span>
-            Reset Password
-          </DialogTitle>
-          <DialogDescription class="mt-1">
-            Set a new temporary password for
-            <strong class="text-foreground font-semibold">{{ resetPasswordUser?.name }}</strong>.
-            The user will be required to change it on their next login.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="flex flex-col gap-4 py-2">
-          <!-- User avatar chip -->
-          <div class="flex items-center gap-2.5 py-2.5 px-3 rounded-lg bg-surface border border-border">
-            <div class="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary font-mono flex-shrink-0">
-              {{ getInitials(resetPasswordUser?.name) }}
-            </div>
-            <div class="min-w-0">
-              <p class="text-xs font-semibold text-foreground truncate">{{ resetPasswordUser?.name }}</p>
-              <p class="text-[11px] text-muted-foreground truncate font-mono">{{ resetPasswordUser?.email }}</p>
-            </div>
-            <Badge :variant="resetPasswordUser?.role === 'SUPER_ADMIN' ? 'destructive' : resetPasswordUser?.role === 'ADMIN' ? 'warning' : 'info'" class="ml-auto text-[10px] font-mono flex-shrink-0">
-              {{ resetPasswordUser?.role }}
-            </Badge>
-          </div>
-
-          <!-- Password field -->
-          <div class="flex flex-col gap-2">
-            <label class="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Temporary Password</label>
-            <div class="flex items-center gap-1.5">
-              <div class="relative flex-1">
-                <Input
-                  id="reset-password-input"
-                  v-model="resetPasswordValue"
-                  :type="showResetPassword ? 'text' : 'password'"
-                  class="h-9 pr-9 font-mono text-sm"
-                  autocomplete="new-password"
-                  placeholder="Enter or generate a password…"
-                />
-                <button
-                  type="button"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  :title="showResetPassword ? 'Hide password' : 'Show password'"
-                  @click="showResetPassword = !showResetPassword"
-                >
-                  <EyeOff v-if="showResetPassword" :size="15" />
-                  <Eye v-else :size="15" />
-                </button>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                class="h-9 px-2.5 flex-shrink-0 text-xs gap-1"
-                title="Generate new secure password"
-                @click="resetPasswordValue = generateSecureTemporaryPassword(12)"
-              >
-                <RefreshCw :size="13" />
-                <span>Regen</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                class="h-9 px-2.5 flex-shrink-0 text-xs gap-1"
-                :class="resetPasswordCopied ? 'text-green-600 border-green-300' : ''"
-                title="Copy password to clipboard"
-                @click="handleCopyResetPassword"
-              >
-                <Check v-if="resetPasswordCopied" :size="13" />
-                <span v-if="resetPasswordCopied">Copied!</span>
-                <span v-else>📋 Copy</span>
-              </Button>
-            </div>
-            <p class="text-[11px] text-muted-foreground">Minimum 8 characters. Click <strong>Regen</strong> to auto-generate a secure password.</p>
-          </div>
-
-          <!-- Warning note -->
-          <Alert variant="warning" class="py-3 text-xs">
-            <Lock :size="13" class="inline mr-1 flex-shrink-0" />
-            <span>The user will be <strong>forced to change their password</strong> on next login. Make sure to share this password securely (e.g. in person or via a secure channel).</span>
-          </Alert>
-
-          <!-- Error -->
-          <Alert v-if="resetPasswordError" variant="error" class="py-2 text-xs">
-            {{ resetPasswordError }}
-          </Alert>
-        </div>
-
-        <DialogFooter class="gap-2 sm:gap-0">
-          <Button
-            id="btn-cancel-reset-password"
-            variant="outline"
-            :disabled="resetPasswordLoading"
-            @click="closeResetPasswordModal"
-          >
-            Cancel
-          </Button>
-          <Button
-            id="btn-confirm-reset-password"
-            variant="primary"
-            :disabled="resetPasswordLoading || !resetPasswordValue || resetPasswordValue.length < 8"
-            class="gap-1.5"
-            @click="executeResetPassword"
-          >
-            <span v-if="resetPasswordLoading" class="animate-spin mr-0.5">⏳</span>
-            <Key v-else :size="14" />
-            <span>{{ resetPasswordLoading ? 'Resetting…' : 'Reset Password' }}</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ResetPasswordModal
+      :open="isResetPasswordModalOpen"
+      :user="resetPasswordUser"
+      :model-value="resetPasswordValue"
+      :show-password="showResetPassword"
+      :copied="resetPasswordCopied"
+      :loading="resetPasswordLoading"
+      :error="resetPasswordError"
+      @update:open="(val) => { if (!val) closeResetPasswordModal(); }"
+      @update:model-value="(val) => resetPasswordValue = val"
+      @toggle-show-password="showResetPassword = !showResetPassword"
+      @regenerate="resetPasswordValue = generateSecureTemporaryPassword(12)"
+      @copy="handleCopyResetPassword"
+      @confirm="executeResetPassword"
+      @cancel="closeResetPasswordModal"
+    />
   </div>
 </template>
 

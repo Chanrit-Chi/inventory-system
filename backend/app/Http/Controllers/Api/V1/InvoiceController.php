@@ -41,7 +41,7 @@ class InvoiceController extends BaseApiController
         $stats = [
             'total_paid'        => (float) Invoice::whereNull('deleted_at')->sum('amount_paid'),
             'total_outstanding' => (float) (Invoice::whereNull('deleted_at')
-                ->selectRaw('SUM(GREATEST(0, total_amount - amount_paid)) as outstanding')
+                ->selectRaw('SUM(CASE WHEN total_amount > amount_paid THEN total_amount - amount_paid ELSE 0 END) as outstanding')
                 ->value('outstanding') ?? 0),
         ];
 

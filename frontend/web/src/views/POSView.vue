@@ -1381,30 +1381,19 @@ defineExpose({
           >
             <!-- Product Image / Thumbnail Area -->
             <div class="relative w-full h-28 rounded-lg bg-surface-subtle border border-border/80 overflow-hidden shrink-0 mb-2">
+              <div
+                class="absolute inset-0 flex items-center justify-center text-muted-foreground/40 group-hover:text-primary/70 transition-colors"
+              >
+                <Package class="w-8 h-8 stroke-[1.25]" />
+              </div>
               <img
                 v-if="product.image_url"
                 :src="product.image_url"
                 :alt="product.name"
                 class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
+                @error="($event.target as HTMLElement).style.display = 'none'"
               />
-              <div
-                v-else
-                class="absolute inset-0 flex items-center justify-center text-muted-foreground/40 group-hover:text-primary/70 transition-colors"
-              >
-                <Package class="w-8 h-8 stroke-[1.25]" />
-              </div>
-
-              <!-- Top Left: Multi-variant Pill Indicator -->
-              <Badge
-                v-if="product.variants && product.variants.length > 1"
-                variant="neutral"
-                class="absolute top-2 left-2 z-20 text-xs font-bold shadow-xs backdrop-blur-md gap-1"
-              >
-                <Layers class="w-3.5 h-3.5 text-primary stroke-[2.2]" />
-                <span class="font-mono font-bold text-primary">{{ product.variants.length }}</span>
-                <span class="text-muted-foreground text-xs font-medium">Options</span>
-              </Badge>
 
               <!-- Top Right: In-Cart Counter Pill (Cleanly inside thumbnail top-right) -->
               <div
@@ -1415,23 +1404,44 @@ defineExpose({
                 <span>{{ getProductCartCount(product.id) }}</span>
               </div>
 
-              <!-- Bottom Left: High Contrast Stock Status Badge (Overlaid on thumbnail with backdrop-blur) -->
-              <Badge
-                :variant="getProductStock(product) <= 0 ? 'destructive' : getProductStock(product) <= 5 ? 'warning' : 'success'"
-                class="absolute bottom-2 left-2 z-20 text-xs font-mono font-semibold shadow-xs backdrop-blur-md"
+              <!-- Out of Stock Overlay -->
+              <div
+                v-if="getProductStock(product) <= 0"
+                class="absolute inset-0 z-20 bg-background/70 backdrop-blur-[2px] flex items-center justify-center p-2"
               >
-                <span>{{ getProductStock(product) <= 0 ? 'Out of Stock' : `${getProductStock(product)} in stock` }}</span>
-              </Badge>
+                <Badge variant="destructive" class="text-xs font-mono font-bold shadow-sm">
+                  Out of Stock
+                </Badge>
+              </div>
             </div>
 
             <!-- Product Metadata -->
             <div class="flex-1 flex flex-col justify-between min-h-0">
               <div class="space-y-1">
-                <!-- Category Badge Row (Dedicated full width, no overlap) -->
-                <div class="flex items-center gap-1.5 min-h-[18px]">
-                  <Badge variant="primary" class="text-xs font-bold uppercase tracking-wider truncate max-w-full">
-                    {{ product.category?.name || 'General' }}
-                  </Badge>
+                <!-- Multi-variant & Stock Status Row -->
+                <div class="flex items-center justify-between gap-1.5 min-h-[18px]">
+                  <span
+                    v-if="product.variants && product.variants.length > 1"
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-secondary text-secondary-foreground border border-border shrink-0"
+                  >
+                    <Layers class="w-3 h-3 text-primary stroke-[2.2]" />
+                    <span class="font-mono font-bold text-primary">{{ product.variants.length }}</span>
+                    <span class="text-muted-foreground text-[9px]">options</span>
+                  </span>
+                  <div v-else />
+
+                  <span
+                    :class="[
+                      'text-[11px] font-mono font-bold shrink-0',
+                      getProductStock(product) <= 0
+                        ? 'text-destructive dark:text-red-400'
+                        : getProductStock(product) <= 5
+                        ? 'text-warning dark:text-amber-400'
+                        : 'text-success dark:text-emerald-400'
+                    ]"
+                  >
+                    {{ getProductStock(product) <= 0 ? '0 in stock' : getProductStock(product) <= 5 ? `${getProductStock(product)} left` : `${getProductStock(product)} in stock` }}
+                  </span>
                 </div>
 
                 <!-- Product Name with 2-line Uniform Box -->

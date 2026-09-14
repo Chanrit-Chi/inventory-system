@@ -7,15 +7,10 @@ import {
   Printer,
   Activity,
   User,
-  Plus,
-  RefreshCw,
-  Edit2,
   Trash2,
   Key,
   LogOut,
   Image as ImageIcon,
-  Database,
-  Server,
   Sun,
   Moon,
   Laptop,
@@ -27,17 +22,8 @@ import {
   Badge,
   Input,
   Switch,
-  StatCard,
   Card,
   Alert,
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  EmptyState,
-  Skeleton,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -45,6 +31,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui'
+import PrintersSettingsTab from '@/components/settings/PrintersSettingsTab.vue'
+import DiagnosticsSettingsTab from '@/components/settings/DiagnosticsSettingsTab.vue'
 
 // ============================================================================
 // Types
@@ -969,230 +957,27 @@ const userInitials = (name: string | undefined): string => {
     </Card>
 
     <!-- ===================== Thermal Printers Tab ===================== -->
-    <div v-if="activeTab === 'printers'" class="flex flex-col gap-6">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 class="font-display font-bold text-base text-foreground">Thermal Printer Stations</h2>
-          <p class="text-xs text-muted-foreground mt-0.5">
-            Configure WiFi and Bluetooth ESC/POS thermal printers for customer receipts and kitchen tickets (80mm / 58mm).
-          </p>
-        </div>
-        <Button id="btn-add-printer" variant="primary" size="sm" class="gap-1.5" @click="openAddPrinter">
-          <Plus :size="15" />
-          <span>Add Printer Station</span>
-        </Button>
-      </div>
-
-      <Alert v-if="printersError" variant="error">
-        {{ printersError }}
-      </Alert>
-
-      <div class="rounded-xl border border-border bg-card shadow-xs overflow-hidden">
-        <div v-if="printersLoading" class="p-6 space-y-3">
-          <Skeleton v-for="i in 3" :key="i" class="h-12 w-full" />
-        </div>
-
-        <EmptyState
-          v-else-if="printers.length === 0"
-          :icon="Printer"
-          title="No Printer Stations Configured"
-          description="Add your first thermal printer station to begin printing sales receipts and kitchen order tickets."
-        >
-          <template #action>
-            <Button variant="primary" size="sm" class="gap-1.5" @click="openAddPrinter">
-              <Plus :size="15" />
-              <span>Add First Printer</span>
-            </Button>
-          </template>
-        </EmptyState>
-
-        <div v-else class="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow class="bg-muted/40">
-                <TableHead>Station Name</TableHead>
-                <TableHead>Connection</TableHead>
-                <TableHead class="font-mono">Target</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Paper Width</TableHead>
-                <TableHead>Cut Mode</TableHead>
-                <TableHead class="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="p in printers" :key="p.id" class="hover:bg-surface-subtle/80 transition-colors">
-                <TableCell>
-                  <div class="font-semibold text-foreground text-sm">{{ p.name }}</div>
-                  <div v-if="p.isDefault" class="mt-0.5">
-                    <Badge variant="success" class="text-[9px] px-1.5 py-0 font-mono">Default</Badge>
-                  </div>
-                </TableCell>
-
-                <TableCell>
-                  <Badge :variant="p.connectionType === 'wifi' ? 'info' : 'purple'" class="text-[10px] px-2 py-0.5">
-                    {{ p.connectionType === 'wifi' ? 'WiFi / LAN' : 'Bluetooth' }}
-                  </Badge>
-                </TableCell>
-
-                <TableCell class="font-mono text-xs text-muted-foreground">
-                  <span v-if="p.connectionType === 'wifi'" class="px-1.5 py-0.5 rounded bg-muted">
-                    {{ p.ipAddress }}:{{ p.port }}
-                  </span>
-                  <span v-else>{{ p.bluetoothName || '—' }}</span>
-                </TableCell>
-
-                <TableCell>
-                  <Badge :variant="p.role === 'receipt' ? 'info' : 'warning'" class="text-[10px] px-2 py-0.5">
-                    {{ p.role === 'receipt' ? 'Receipt' : 'Kitchen' }}
-                  </Badge>
-                </TableCell>
-
-                <TableCell class="font-mono text-xs text-muted-foreground">
-                  {{ p.paperWidth }}
-                </TableCell>
-
-                <TableCell>
-                  <Badge :variant="p.autoCut ? 'success' : 'neutral'" class="text-[10px] px-2 py-0.5">
-                    {{ p.autoCut ? 'Auto-cut' : 'Manual' }}
-                  </Badge>
-                </TableCell>
-
-                <TableCell class="text-right">
-                  <div class="flex items-center justify-end gap-1.5">
-                    <Button
-                      :id="`btn-test-printer-${p.id}`"
-                      variant="ghost"
-                      size="sm"
-                      class="h-8 px-2.5 text-xs gap-1"
-                      :disabled="testingPrinterId === p.id"
-                      @click="testPrinter(p)"
-                    >
-                      <Printer :size="13" />
-                      <span>{{ testingPrinterId === p.id ? 'Testing…' : 'Test' }}</span>
-                    </Button>
-                    <Button
-                      :id="`btn-edit-printer-${p.id}`"
-                      variant="ghost"
-                      size="sm"
-                      class="h-8 px-2.5 text-xs gap-1"
-                      @click="openEditPrinter(p)"
-                    >
-                      <Edit2 :size="13" />
-                      <span>Edit</span>
-                    </Button>
-                    <Button
-                      :id="`btn-delete-printer-${p.id}`"
-                      variant="ghost"
-                      size="sm"
-                      class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10"
-                      @click="deletePrinter(p.id)"
-                    >
-                      <Trash2 :size="14" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </div>
+    <PrintersSettingsTab
+      v-if="activeTab === 'printers'"
+      :printers="printers"
+      :loading="printersLoading"
+      :error="printersError"
+      :testing-printer-id="testingPrinterId"
+      @add="openAddPrinter"
+      @test="testPrinter"
+      @edit="openEditPrinter"
+      @delete="deletePrinter"
+    />
 
     <!-- ===================== Diagnostics Tab ===================== -->
-    <div v-if="activeTab === 'diagnostics'" class="flex flex-col gap-6">
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatCard
-          label="Backend API Service"
-          :value="healthStatus.status || 'Active'"
-          :sub="`Latency: ${healthStatus.latency} • Last checked: ${healthStatus.lastChecked || 'Just now'}`"
-          :icon="Server"
-          :icon-variant="healthStatus.connected ? 'success' : 'warning'"
-        />
-        <StatCard
-          label="Database Engine"
-          :value="healthStatus.database || 'Active'"
-          :sub="`State: ${healthStatus.databaseStatus || 'Online'}${healthStatus.databaseLatency ? ' (' + healthStatus.databaseLatency + ')' : ''} • Queue: ${healthStatus.queueDriver || 'sync'}`"
-          :icon="Database"
-          :icon-variant="healthStatus.connected ? 'success' : 'warning'"
-        />
-      </div>
-
-      <Card class="p-6 flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="font-display font-bold text-base text-foreground">Application Build & Runtime Details</h3>
-            <p class="text-xs text-muted-foreground mt-0.5">Platform runtime identifiers, server environment, and active drivers.</p>
-          </div>
-          <Badge :variant="healthStatus.connected ? 'success' : 'neutral'" class="font-mono text-xs">
-            {{ healthStatus.environment ? healthStatus.environment.toUpperCase() : 'PRODUCTION' }}
-          </Badge>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Application</span>
-            <span class="font-semibold text-foreground">{{ healthStatus.app }}</span>
-          </div>
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Framework Runtime</span>
-            <span class="font-mono font-semibold text-foreground">
-              {{ healthStatus.phpVersion ? `PHP ${healthStatus.phpVersion} (Laravel ${healthStatus.laravelVersion || '12'})` : `Laravel API (${healthStatus.version})` }}
-            </span>
-          </div>
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">API Base Path</span>
-            <code class="font-mono text-primary text-xs">/api/v1</code>
-          </div>
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Queue Driver</span>
-            <span class="font-mono text-foreground font-semibold">{{ healthStatus.queueDriver || 'sync' }}</span>
-          </div>
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Cache Driver</span>
-            <span class="font-mono text-foreground font-semibold">{{ healthStatus.cacheDriver || 'file' }}</span>
-          </div>
-          <div class="p-3 rounded-lg border border-border bg-surface flex items-center justify-between text-xs">
-            <span class="text-muted-foreground font-semibold">Server Clock</span>
-            <span class="font-mono text-foreground text-[11px]">{{ healthStatus.serverTime || new Date().toISOString() }}</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-4 border-t border-border">
-          <div>
-            <span class="font-semibold text-xs text-foreground block">Health Check Trigger</span>
-            <span class="text-[11px] text-muted-foreground">Ping backend microservices and calculate gateway round-trip time.</span>
-          </div>
-          <Button
-            id="btn-check-health"
-            variant="outline"
-            size="sm"
-            class="text-xs gap-1.5"
-            :disabled="healthLoading"
-            @click="checkBackendHealth"
-          >
-            <RefreshCw :size="13" :class="{ 'animate-spin': healthLoading }" />
-            <span>{{ healthLoading ? 'Checking…' : 'Run Health Check' }}</span>
-          </Button>
-        </div>
-      </Card>
-
-      <Card class="p-6 flex items-center justify-between">
-        <div>
-          <h3 class="font-display font-bold text-base text-foreground">Local Cache Management</h3>
-          <p class="text-xs text-muted-foreground mt-0.5">Clear locally cached printer hardware records and session memory.</p>
-        </div>
-        <Button
-          id="btn-clear-cache"
-          variant="destructive"
-          size="sm"
-          :disabled="cacheClearing"
-          @click="clearCache"
-        >
-          <span v-if="cacheClearing" class="animate-spin mr-1">⏳</span>
-          <span>{{ cacheClearing ? 'Clearing…' : 'Clear Local Cache' }}</span>
-        </Button>
-      </Card>
-    </div>
+    <DiagnosticsSettingsTab
+      v-if="activeTab === 'diagnostics'"
+      :health-status="healthStatus"
+      :health-loading="healthLoading"
+      :cache-clearing="cacheClearing"
+      @check-health="checkBackendHealth"
+      @clear-cache="clearCache"
+    />
 
     <!-- ===================== Account Tab ===================== -->
     <div v-if="activeTab === 'account'" class="flex flex-col gap-6">

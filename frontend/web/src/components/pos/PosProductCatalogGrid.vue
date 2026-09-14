@@ -313,9 +313,9 @@ const formatMoney = (amount: number | string | undefined): string => {
 }
 
 .dark .stock-badge.out-of-stock {
-  background: rgba(45, 15, 15, 0.85);
-  color: #FCA5A5;
-  border-color: rgba(248, 113, 113, 0.4);
+  background: #7F1D1D;
+  color: #FECACA;
+  border-color: #DC2626;
 }
 
 .stock-badge.low-stock {
@@ -325,9 +325,9 @@ const formatMoney = (amount: number | string | undefined): string => {
 }
 
 .dark .stock-badge.low-stock {
-  background: rgba(45, 30, 10, 0.85);
-  color: #FCD34D;
-  border-color: rgba(251, 191, 36, 0.4);
+  background: #78350F;
+  color: #FDE68A;
+  border-color: #D97706;
 }
 
 .stock-badge.in-stock {
@@ -337,9 +337,9 @@ const formatMoney = (amount: number | string | undefined): string => {
 }
 
 .dark .stock-badge.in-stock {
-  background: rgba(10, 40, 25, 0.85);
-  color: #6EE7B7;
-  border-color: rgba(52, 211, 153, 0.4);
+  background: #065F46;
+  color: #A7F3D0;
+  border-color: #059669;
 }
 
 .product-info {
