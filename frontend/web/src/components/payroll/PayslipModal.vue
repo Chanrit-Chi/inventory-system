@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { Printer } from 'lucide-vue-next'
 import {
   Button,
@@ -95,8 +95,8 @@ function triggerPrint() {
         ${styles}
         <style>
           body { background: white !important; padding: 20px; font-family: sans-serif; }
-          @page { size: ${localFormat === 'THERMAL' ? '80mm auto' : 'A4'}; margin: ${localFormat === 'THERMAL' ? '2mm' : '15mm'}; }
-          #printable-payslip { border: none !important; box-shadow: none !important; width: 100% !important; max-width: ${localFormat === 'THERMAL' ? '72mm' : '100%'} !important; margin: 0 auto; }
+          @page { size: ${localFormat.value === 'THERMAL' ? '80mm auto' : 'A4'}; margin: ${localFormat.value === 'THERMAL' ? '2mm' : '15mm'}; }
+          #printable-payslip { border: none !important; box-shadow: none !important; width: 100% !important; max-width: ${localFormat.value === 'THERMAL' ? '72mm' : '100%'} !important; margin: 0 auto; }
         </style>
       </head>
       <body>
