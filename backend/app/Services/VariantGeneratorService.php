@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Models\ProductVariant;
 use App\Models\VariantAttributeValue;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class VariantGeneratorService
@@ -331,29 +332,47 @@ class VariantGeneratorService
             }
         }
 
-        // Clean up or deactivate variants that were removed from the product in this update
+        // Clean up or deactivate/soft-delete variants that were removed from the product in this update
         if (count($processedVariantIds) > 0) {
             $removedVariants = ProductVariant::where('product_id', $product->id)
                 ->whereNotIn('id', $processedVariantIds)
                 ->get();
 
             foreach ($removedVariants as $removedVar) {
+                // Detach variant attribute values so removed variants don't pollute attribute relationships
+                $removedVar->variantAttributeValues()->delete();
+
                 if ($removedVar->stockMovements()->count() === 0 && $removedVar->orderItems()->count() === 0) {
-                    $removedVar->variantAttributeValues()->delete();
                     $removedVar->forceDelete();
                 } else {
                     $removedVar->update(['is_active' => false]);
+                    $removedVar->delete();
                 }
             }
         }
+
+        // Clean up product-level attributes that are no longer used by any remaining non-deleted variants
+        $activeAttributeIds = DB::table('variant_attribute_values')
+            ->join('product_variants', 'variant_attribute_values.variant_id', '=', 'product_variants.id')
+            ->join('attribute_values', 'variant_attribute_values.attribute_value_id', '=', 'attribute_values.id')
+            ->where('product_variants.product_id', $product->id)
+            ->whereNull('product_variants.deleted_at')
+            ->distinct()
+            ->pluck('attribute_values.attribute_id');
+
+        ProductAttribute::where('product_id', $product->id)
+            ->whereNotIn('attribute_id', $activeAttributeIds)
+            ->delete();
 
         // If product was upgraded from Simple to Variable, delete or deactivate old placeholder variant
         if ($oldSimpleVariantId && count($processedVariantIds) > 0 && !in_array($oldSimpleVariantId, $processedVariantIds)) {
             $oldVar = ProductVariant::find($oldSimpleVariantId);
             if ($oldVar) {
+                $oldVar->variantAttributeValues()->delete();
                 if ($oldVar->stockMovements()->count() === 0 && $oldVar->orderItems()->count() === 0) {
                     $oldVar->forceDelete();
                 } else {
+                    $oldVar->update(['is_active' => false]);
                     $oldVar->delete();
                 }
             }

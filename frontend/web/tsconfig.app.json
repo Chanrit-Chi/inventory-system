@@ -8,7 +8,6 @@
       "@/*": ["./src/*"],
       "@lib/*": ["./src/lib/*"]
     },
-    "ignoreDeprecations": "6.0",
 
     /* Linting */
     "noUnusedLocals": true,

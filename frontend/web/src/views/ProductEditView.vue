@@ -238,7 +238,7 @@ function rehydrateExistingAttributes(variants: any[]) {
   selectedAttrs.value = {}
   if (!variants || !Array.isArray(variants)) return
 
-  variants.forEach(v => {
+  variants.filter(v => v.is_active !== false).forEach(v => {
     const avs = v.attribute_values || v.attributeValues || []
     avs.forEach((av: any) => {
       const attrId = av.attribute?.id || av.attribute_id
@@ -252,6 +252,22 @@ function rehydrateExistingAttributes(variants: any[]) {
     })
   })
 }
+
+const isMatrixOutOfSync = computed(() => {
+  if (form.value.product_type !== 'VARIABLE') return false
+  const activeAttrEntries = Object.entries(selectedAttrs.value).filter(([, vals]) => vals.size > 0)
+  if (activeAttrEntries.length === 0) return false
+  const currentVariantAttrIds = new Set<string>()
+  variantRows.value.forEach(v => {
+    (v.attributeValues || []).forEach((av: any) => {
+      const aid = av.attribute?.id || av.attribute_id
+      if (aid) currentVariantAttrIds.add(aid)
+    })
+  })
+  const selectedAttrIds = new Set(activeAttrEntries.map(([aid]) => aid))
+  return selectedAttrIds.size !== currentVariantAttrIds.size ||
+    [...selectedAttrIds].some(id => !currentVariantAttrIds.has(id))
+})
 
 function generateVariantsFromAttributes() {
   const activeEntries = Object.entries(selectedAttrs.value).filter(([, vals]) => vals.size > 0)
@@ -359,8 +375,11 @@ function removeVariantRow(index: number) {
 function onSwitchProductType(type: 'SIMPLE' | 'VARIABLE') {
   if (form.value.product_type === type) return
 
-  if (type === 'SIMPLE' && variantRows.value.length > 1) {
-    toast.info('Switching to Simple Product will consolidate variations into a single inventory SKU upon saving.')
+  if (type === 'SIMPLE') {
+    if (variantRows.value.length > 1) {
+      toast.info('Switching to Simple Product will consolidate variations into a single inventory SKU upon saving.')
+    }
+    selectedAttrs.value = {}
   }
 
   form.value.product_type = type
@@ -390,11 +409,18 @@ async function loadProduct() {
   try {
     const prod = await productStore.fetchProduct(productId)
     if (prod) {
-      const isVar = (prod.variants && prod.variants.length > 1) ||
-        Boolean(prod.variants?.[0]?.attribute_values?.length) ||
-        Boolean(prod.variants?.[0]?.attributeValues?.length)
+      const allVariants = prod.variants && Array.isArray(prod.variants) ? prod.variants : []
+      const activeVariants = allVariants.filter(v => v.is_active !== false)
+      const variantsToUse = activeVariants.length > 0 ? activeVariants : allVariants
 
-      const firstVar = prod.variants?.[0]
+      const hasMultipleVariants = variantsToUse.length > 1
+      const hasAttributeValues = variantsToUse.some(v => {
+        const avs = v.attribute_values || v.attributeValues || []
+        return avs.length > 0
+      })
+      const isVar = hasMultipleVariants || hasAttributeValues
+
+      const firstVar = variantsToUse[0] || allVariants[0]
 
       form.value = {
         product_type: isVar ? 'VARIABLE' : 'SIMPLE',
@@ -410,23 +436,23 @@ async function loadProduct() {
         is_active: prod.is_active ?? true,
       }
 
-      if (prod.variants && Array.isArray(prod.variants)) {
-        variantRows.value = prod.variants.map(v => ({
-          id: v.id,
-          sku: v.sku || '',
-          name: (v as any).name || 'Standard',
-          barcode: v.barcode || '',
-          cost_price: v.cost_price,
-          selling_price: v.selling_price,
-          quantity_on_hand: v.quantity_on_hand,
-          reorder_level: v.reorder_level,
-          is_active: v.is_active ?? true,
-          attributeValues: v.attributeValues || v.attribute_values || [],
-        }))
+      variantRows.value = variantsToUse.map(v => ({
+        id: v.id,
+        sku: v.sku || '',
+        name: (v as any).name || 'Standard',
+        barcode: v.barcode || '',
+        cost_price: v.cost_price,
+        selling_price: v.selling_price,
+        quantity_on_hand: v.quantity_on_hand,
+        reorder_level: v.reorder_level,
+        is_active: v.is_active ?? true,
+        attributeValues: v.attributeValues || v.attribute_values || [],
+      }))
 
-        if (isVar) {
-          rehydrateExistingAttributes(prod.variants)
-        }
+      if (isVar) {
+        rehydrateExistingAttributes(variantsToUse)
+      } else {
+        selectedAttrs.value = {}
       }
     }
   } catch {
@@ -471,11 +497,14 @@ async function save() {
     payload.stock = simpleQty
     payload.simple_stock = simpleQty
 
-    const baseVariantId = productStore.selectedProduct?.variants?.[0]?.id
+    const activeVariants = productStore.selectedProduct?.variants?.filter((v: any) => v.is_active !== false) || []
+    const baseVar = activeVariants[0] || productStore.selectedProduct?.variants?.[0]
+    const baseVariantId = baseVar?.id
+
     payload.variants = [{
-      id: baseVariantId,
+      id: baseVariantId && !String(baseVariantId).startsWith('new-') ? baseVariantId : undefined,
       name: 'Standard',
-      sku: form.value.sku.trim() || (productStore.selectedProduct as any)?.sku || `SKU-${Date.now()}`,
+      sku: form.value.sku.trim() || baseVar?.sku || (productStore.selectedProduct as any)?.sku || `SKU-${Date.now()}`,
       barcode: form.value.barcode.trim() || null,
       selling_price: sPrice,
       cost_price: pPrice,
@@ -485,7 +514,26 @@ async function save() {
       attribute_values: [],
     }]
   } else {
-    // Variable Product
+    // Variable Product: auto-generate variant rows if user changed selected attributes
+    const activeAttrEntries = Object.entries(selectedAttrs.value).filter(([, vals]) => vals.size > 0)
+    if (activeAttrEntries.length > 0) {
+      const currentVariantAttrIds = new Set<string>()
+      variantRows.value.forEach(v => {
+        (v.attributeValues || []).forEach((av: any) => {
+          const aid = av.attribute?.id || av.attribute_id
+          if (aid) currentVariantAttrIds.add(aid)
+        })
+      })
+      const selectedAttrIds = new Set(activeAttrEntries.map(([aid]) => aid))
+
+      const attrSetsDiffer = selectedAttrIds.size !== currentVariantAttrIds.size ||
+        [...selectedAttrIds].some(id => !currentVariantAttrIds.has(id))
+
+      if (attrSetsDiffer) {
+        generateVariantsFromAttributes()
+      }
+    }
+
     if (variantRows.value.length === 0) {
       toast.error('Please add or generate at least one variation for this product.')
       return
@@ -559,6 +607,7 @@ defineExpose({
   isAttrActive,
   isValueActive,
   getValName,
+  isMatrixOutOfSync,
 })
 </script>
 
@@ -946,6 +995,27 @@ defineExpose({
                   </button>
                 </div>
               </div>
+            </div>
+
+            <!-- Out-of-sync Notice -->
+            <div
+              v-if="isMatrixOutOfSync"
+              class="p-2.5 rounded-lg border border-warning/40 bg-warning/10 text-xs text-foreground flex items-center justify-between gap-2"
+            >
+              <div class="flex items-center gap-1.5 text-warning font-medium">
+                <Info :size="14" class="shrink-0" />
+                <span>Attribute selection changed. Click below to update matrix:</span>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="primary"
+                class="h-7 px-2.5 text-xs gap-1 font-semibold"
+                @click="generateVariantsFromAttributes"
+              >
+                <Sparkles :size="12" />
+                <span>Sync Matrix Now</span>
+              </Button>
             </div>
 
             <!-- Action Buttons: Generate & Add Manual -->

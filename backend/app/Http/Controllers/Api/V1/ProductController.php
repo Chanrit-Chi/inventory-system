@@ -168,7 +168,7 @@ class ProductController extends BaseApiController
 
             $product->update($productFields);
 
-            if (array_key_exists('is_active', $validated)) {
+            if (array_key_exists('is_active', $validated) && empty($validated['variants'])) {
                 $product->variants()->update(['is_active' => (bool) $validated['is_active']]);
             }
 
@@ -204,7 +204,7 @@ class ProductController extends BaseApiController
                 $this->variantGenerator->syncVariantsForUpdate($product, $validated['variants'], $validated);
             }
 
-            return $product->fresh(['variants.attributeValues.attribute', 'category']);
+            return $product->fresh(['variants.attributeValues.attribute', 'category', 'productAttributes.attribute']);
         });
 
         return $this->successResponse([

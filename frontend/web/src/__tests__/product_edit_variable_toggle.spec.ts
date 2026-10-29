@@ -243,4 +243,150 @@ describe('ProductEditView - Simple to Variable Product Switching', () => {
       })
     )
   })
+
+  it('auto-syncs variant matrix when attribute selection changes without clicking generate', async () => {
+    const mockMultiAttrProduct = {
+      id: 'prod-a9',
+      name: 'Product A9',
+      purchase_price: 10,
+      selling_price: 20,
+      default_reorder_level: 5,
+      is_active: true,
+      variants: [
+        {
+          id: 'var-1',
+          name: 'S / Red',
+          sku: 'A9-S-RED',
+          is_active: true,
+          attribute_values: [
+            { attribute_id: 'attr-size', value_name: 'S', attribute: { id: 'attr-size', name: 'Size' } },
+            { attribute_id: 'attr-color', value_name: 'Red', attribute: { id: 'attr-color', name: 'Color' } },
+          ],
+        },
+        {
+          id: 'var-2',
+          name: 'M / Red',
+          sku: 'A9-M-RED',
+          is_active: true,
+          attribute_values: [
+            { attribute_id: 'attr-size', value_name: 'M', attribute: { id: 'attr-size', name: 'Size' } },
+            { attribute_id: 'attr-color', value_name: 'Red', attribute: { id: 'attr-color', name: 'Color' } },
+          ],
+        },
+      ],
+    }
+
+    const mockAttributes = [
+      {
+        id: 'attr-size',
+        name: 'Size',
+        values: [
+          { id: 'val-s', value_name: 'S' },
+          { id: 'val-m', value_name: 'M' },
+        ],
+      },
+      {
+        id: 'attr-color',
+        name: 'Color',
+        values: [
+          { id: 'val-red', value_name: 'Red' },
+        ],
+      },
+    ]
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/attributes')) {
+        return Promise.resolve({ data: { data: mockAttributes } } as any)
+      }
+      if (url.includes('/products/prod-123')) {
+        return Promise.resolve({ data: { data: mockMultiAttrProduct } } as any)
+      }
+      return Promise.resolve({ data: { data: [] } } as any)
+    })
+
+    vi.mocked(api.put).mockResolvedValue({
+      data: { data: mockMultiAttrProduct, message: 'Updated' },
+    } as any)
+
+    const wrapper = mount(ProductEditView, {
+      global: {
+        plugins: [router],
+      },
+    })
+
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.form.product_type).toBe('VARIABLE')
+    expect(vm.isAttrActive('attr-size')).toBe(true)
+    expect(vm.isAttrActive('attr-color')).toBe(true)
+
+    // User removes Color attribute (keeps Size only)
+    vm.toggleAttr(mockAttributes[1]) // toggle off Color
+    expect(vm.isAttrActive('attr-color')).toBe(false)
+    expect(vm.isMatrixOutOfSync).toBe(true)
+
+    // User saves without manually clicking Generate button
+    await vm.save()
+    await flushPromises()
+
+    expect(api.put).toHaveBeenCalledWith(
+      '/products/prod-123',
+      expect.objectContaining({
+        product_type: 'VARIABLE',
+        variants: expect.arrayContaining([
+          expect.objectContaining({ name: 'S' }),
+          expect.objectContaining({ name: 'M' }),
+        ]),
+      })
+    )
+  })
+
+  it('filters out inactive variants so refreshed simple product stays simple', async () => {
+    const mockRefreshedSimpleProduct = {
+      id: 'prod-a9',
+      name: 'Product A9',
+      purchase_price: 10,
+      selling_price: 20,
+      default_reorder_level: 5,
+      is_active: true,
+      variants: [
+        {
+          id: 'var-active-standard',
+          name: 'Standard',
+          sku: 'A9-STD',
+          is_active: true,
+          attribute_values: [],
+        },
+        {
+          id: 'var-old-inactive-1',
+          name: 'S / Red',
+          sku: 'A9-S-RED',
+          is_active: false,
+          attribute_values: [{ attribute_id: 'attr-color', value_name: 'Red' }],
+        },
+      ],
+    }
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/products/prod-123')) {
+        return Promise.resolve({ data: { data: mockRefreshedSimpleProduct } } as any)
+      }
+      return Promise.resolve({ data: { data: [] } } as any)
+    })
+
+    const wrapper = mount(ProductEditView, {
+      global: {
+        plugins: [router],
+      },
+    })
+
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.form.product_type).toBe('SIMPLE')
+    expect(vm.variantRows.length).toBe(1)
+    expect(vm.variantRows[0].name).toBe('Standard')
+    expect(Object.keys(vm.selectedAttrs).length).toBe(0)
+  })
 })
