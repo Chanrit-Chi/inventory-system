@@ -41,6 +41,39 @@ export interface PrinterConfig {
 
 export const INITIAL_PRINTER_DEVICES: PrinterDevice[] = []
 
+// Helper to format line item product name, variant size, and custom options (Color, Material, etc.)
+export function formatReceiptItemTitle(it: any, idx: number): string {
+  const prodName =
+    it.product?.name ||
+    it.product_name ||
+    it.productName ||
+    it.variant?.product?.name ||
+    it.variant?.name ||
+    it.variant?.sku ||
+    `Item #${idx + 1}`
+
+  const optionsList: string[] = []
+  if (it.options) {
+    if (typeof it.options === 'object' && !Array.isArray(it.options)) {
+      Object.entries(it.options).forEach(([k, v]) => {
+        if (v) optionsList.push(String(v))
+      })
+    } else if (Array.isArray(it.options)) {
+      it.options.forEach((o: any) => {
+        if (o.value) optionsList.push(String(o.value))
+        else if (typeof o === 'string') optionsList.push(o)
+      })
+    }
+  }
+
+  const baseAttrs = it.variant?.attribute_values && it.variant.attribute_values.length > 0
+    ? it.variant.attribute_values.map((a: any) => a.value_name).join(', ')
+    : undefined
+
+  const desc = [baseAttrs, ...optionsList].filter(Boolean).join(' • ')
+  return desc ? `${prodName} (${desc})` : prodName
+}
+
 export const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
   connectionType: 'wifi',
   ipAddress: '192.168.100.86',
@@ -349,7 +382,7 @@ export function buildEscPosCommands(order: Order, config: PrinterConfig): string
 
   const items = order.items || []
   items.forEach((it, idx) => {
-    const name = it.variant?.sku || `Item #${idx + 1}`
+    const name = formatReceiptItemTitle(it, idx)
     const qty = it.quantity || 1
     const price = typeof it.unit_price === 'number' ? it.unit_price : parseFloat(String(it.unit_price || '0')) || 0
     const total = typeof it.line_total === 'number' ? it.line_total : parseFloat(String(it.line_total || '0')) || qty * price
@@ -479,7 +512,7 @@ export function buildKitchenEscPosCommands(order: Order, device: PrinterDevice):
   buffer += ESC_POS.ALIGN_LEFT
   const items = order.items || []
   items.forEach((it, idx) => {
-    const name = it.variant?.sku || `Item #${idx + 1}`
+    const name = formatReceiptItemTitle(it, idx)
     const qty = it.quantity || 1
 
     buffer += ESC_POS.BOLD_ON + ESC_POS.DOUBLE_HEIGHT_ON
@@ -541,7 +574,7 @@ export async function printHtmlThermalReceipt(
 
   const itemRows = items
     .map((it, idx) => {
-      const name = it.variant?.sku || `Item #${idx + 1}`
+      const name = formatReceiptItemTitle(it, idx)
       const qty = it.quantity || 1
       const price = typeof it.unit_price === 'number' ? it.unit_price : parseFloat(String(it.unit_price || '0')) || 0
       const lineTotal = typeof it.line_total === 'number' ? it.line_total : parseFloat(String(it.line_total || '0')) || qty * price

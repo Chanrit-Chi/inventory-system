@@ -748,6 +748,7 @@ function AppShell() {
               primaryActionLabel="Go to Register"
               onPrimaryAction={() => {
                 setScannerOpen(false)
+                cartContext.requestOpenCheckout()
                 setActiveTab('pos')
               }}
               feedback={scanFeedback}
@@ -814,28 +815,51 @@ function AppShell() {
               visible={pickerOpen}
               product={pickerProduct}
               variants={pickerVariants}
+              onAddMultipleVariants={(items) => {
+                if (pickerProduct) {
+                  const itemsToAdd = items.map(({ variant, quantity, selectedColor, selectedOptions }) => {
+                    const rawPrice =
+                      variant.selling_price_override ??
+                      variant.selling_price ??
+                      variant.product?.selling_price ??
+                      pickerProduct.selling_price ??
+                      '0'
+                    const unitPrice = parseFloat(String(rawPrice)) || 0
+                    const availableStock = variant.quantity_on_hand ?? 0
+                    const baseAttrs = variant.attribute_values
+                      ?.map((av) => `${av.attribute?.name ? av.attribute.name + ': ' : ''}${av.value_name}`)
+                      .join(', ')
+                    const optionsSummary = selectedOptions
+                      ? Object.entries(selectedOptions).map(([k, v]) => `${k}: ${v}`).join(', ')
+                      : selectedColor ? `Color: ${selectedColor}` : ''
+                    const attrs = [baseAttrs, optionsSummary].filter(Boolean).join(', ')
+                    const options = selectedOptions || (selectedColor ? { Color: selectedColor } : undefined)
+                    return {
+                      variantId: variant.id,
+                      sku: variant.sku,
+                      productName: pickerProduct.name,
+                      quantity,
+                      unitPrice,
+                      availableStock,
+                      imageUrl: pickerProduct.image_url,
+                      attributesSummary: attrs || undefined,
+                      selectedOptions: options,
+                    }
+                  })
+                  cartContext.addMultipleItemsToCart(itemsToAdd)
+                  closePicker()
+                  setActiveTab('pos')
+                } else {
+                  closePicker()
+                }
+              }}
               onSelectVariant={(variant) => {
                 if (pickerProduct) {
                   cartContext.addVariantToCart(variant, pickerProduct.name)
-                  Alert.alert(
-                    'Variant Selected',
-                    `Added ${pickerProduct.name} (${variant.sku}) to cart.`,
-                    [
-                      {
-                        text: 'Open Register',
-                        onPress: () => {
-                          setPickerOpen(false)
-                          setActiveTab('pos')
-                        },
-                      },
-                      {
-                        text: 'OK',
-                        onPress: () => setPickerOpen(false),
-                      },
-                    ]
-                  )
+                  closePicker()
+                  setActiveTab('pos')
                 } else {
-                  setPickerOpen(false)
+                  closePicker()
                 }
               }}
               onClose={closePicker}

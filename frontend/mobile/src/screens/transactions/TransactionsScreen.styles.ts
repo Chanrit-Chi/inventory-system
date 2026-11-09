@@ -44,6 +44,29 @@ export const styles = StyleSheet.create({
     color: tokens.colors.onBackground,
     paddingVertical: 0,
   },
+  quickFilterBtn: {
+    height: 36,
+    paddingHorizontal: 10,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: tokens.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickFilterBtnActive: {
+    backgroundColor: tokens.colors.actionPrimaryBg,
+    borderColor: tokens.colors.primaryContainer,
+  },
+  quickFilterBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+  },
+  quickFilterBtnTextActive: {
+    color: tokens.colors.primaryContainer,
+    fontWeight: '800',
+  },
   filterTriggerBtn: {
     flexDirection: 'row',
     alignItems: 'center',

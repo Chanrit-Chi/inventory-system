@@ -123,7 +123,7 @@ export const posCheckoutSchema = z.object({
   sellerId: z.string().optional().or(z.literal('')),
   customerName: z.string().optional().default(''),
   customerPhone: z.string().optional().default(''),
-  isDelivery: z.boolean().default(false),
+  isDelivery: z.boolean().default(true),
   discountType: z.enum(['flat', 'percentage']).default('flat'),
   discountInput: z.string().optional().refine(val => !val || !isNaN(Number(val)), { message: 'Must be a valid number' }),
   taxType: z.enum(['flat', 'percentage']).default('flat'),
@@ -144,8 +144,22 @@ export const posCheckoutSchema = z.object({
       })
     }
   }
-  // Address is strictly required when delivery is selected
+  // Customer info and address strictly required when delivery is selected
   if (data.isDelivery) {
+    if (!data.customerName || data.customerName.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Customer name is required for delivery orders',
+        path: ['customerName'],
+      })
+    }
+    if (!data.customerPhone || data.customerPhone.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Customer phone number is required for delivery orders',
+        path: ['customerPhone'],
+      })
+    }
     if (!data.deliveryAddress || data.deliveryAddress.trim().length < 3) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -201,6 +215,7 @@ export const productSchema = z.object({
   default_reorder_level: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined ? String(v) : '10')),
   is_active: z.coerce.boolean().default(true),
   image_url: z.string().optional().nullable().default(''),
+  prompt_variant_on_scan: z.boolean().default(false),
   
   // Simple fields
   simpleSku: z.string().optional().default(''),
@@ -208,7 +223,8 @@ export const productSchema = z.object({
   simpleStock: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined ? String(v) : '0')),
   
   // Variable fields
-  variantInitialStock: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined && v !== '' ? String(v) : '10')),
+  variantInitialStock: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v !== null && v !== undefined && v !== '' ? String(v) : '0')),
+  saleColors: z.string().optional().default(''),
   attributesList: z.array(productAttributeSchema).optional().default([]),
   variantsList: z.array(productVariantSchema).optional().default([]),
 })

@@ -183,7 +183,10 @@ export function ProductCatalogTab({
         numColumns={viewMode === 'grid' ? 2 : 1}
         columnWrapperStyle={viewMode === 'grid' ? styles.gridColumnWrapper : undefined}
         style={styles.list}
-        contentContainerStyle={{ paddingTop: headerHeight + 6, paddingBottom: 60 }}
+        contentContainerStyle={[
+          styles.gridContent,
+          { paddingTop: headerHeight > 0 ? headerHeight + 8 : 120 },
+        ]}
         onScroll={onScroll}
         scrollEventThrottle={16}
         data={filteredProducts}
@@ -200,7 +203,7 @@ export function ProductCatalogTab({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            progressViewOffset={headerHeight}
+            progressViewOffset={headerHeight > 0 ? headerHeight : 60}
             tintColor={tokens.colors.primaryContainer}
             colors={[tokens.colors.primaryContainer]}
           />

@@ -27,6 +27,7 @@ interface CustomerLookupRowProps {
   onReset: () => void
   phoneError?: string
   nameError?: string
+  isRequired?: boolean
 }
 
 export const CustomerLookupRow: React.FC<CustomerLookupRowProps> = React.memo(({
@@ -43,6 +44,7 @@ export const CustomerLookupRow: React.FC<CustomerLookupRowProps> = React.memo(({
   onReset,
   phoneError,
   nameError,
+  isRequired = false,
 }) => {
   const hasContent = phone.length > 0 || name.length > 0
 
@@ -94,7 +96,7 @@ export const CustomerLookupRow: React.FC<CustomerLookupRowProps> = React.memo(({
       <View style={styles.headerRow}>
         <View style={styles.titleContainer}>
           <Ionicons name="person-outline" size={14} color={tokens.colors.primaryContainer} />
-          <Text style={styles.sectionLabel}>Customer & Loyalty</Text>
+          <Text style={styles.sectionLabel}>Customer & Loyalty{isRequired ? ' *' : ''}</Text>
         </View>
 
         <View style={styles.headerActions}>
@@ -148,7 +150,7 @@ export const CustomerLookupRow: React.FC<CustomerLookupRowProps> = React.memo(({
             <TextInput
               testID="input-customer-phone"
               style={styles.input}
-              placeholder="Phone number"
+              placeholder={isRequired ? 'Phone number *' : 'Phone number'}
               placeholderTextColor={tokens.colors.textDisabled}
               value={phone}
               onChangeText={onPhoneChange}
@@ -165,7 +167,7 @@ export const CustomerLookupRow: React.FC<CustomerLookupRowProps> = React.memo(({
             <TextInput
               testID="input-customer-name"
               style={styles.input}
-              placeholder="Customer name"
+              placeholder={isRequired ? 'Customer name *' : 'Customer name'}
               placeholderTextColor={tokens.colors.textDisabled}
               value={name}
               onChangeText={onNameChange}

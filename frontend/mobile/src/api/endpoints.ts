@@ -237,8 +237,12 @@ export async function scanBarcode(code: string): Promise<ScanResult> {
 
   // Fallback: search products endpoint with scoped query
   try {
+    const delimMatch = trimmed.match(/^([a-zA-Z0-9]{3,})[-_\/\s]/)
+    const baseCode = delimMatch ? delimMatch[1] : null
+    const searchQuery = baseCode || trimmed
+
     const prodRes = await apiClient.get<ApiResponse<Product[] | { data: Product[] }>>('/products', {
-      params: { search: trimmed, limit: 10 },
+      params: { search: searchQuery, limit: 15 },
     })
     const rawData = prodRes.data?.data
     const list: Product[] = Array.isArray(rawData)
@@ -248,14 +252,22 @@ export async function scanBarcode(code: string): Promise<ScanResult> {
       : (rawData as { data?: Product[] })?.data || []
 
     const q = trimmed.toLowerCase()
+    const baseQ = baseCode ? baseCode.toLowerCase() : null
+
+    const isCodeMatch = (codeVal?: string | null): boolean => {
+      if (!codeVal) return false
+      const c = codeVal.trim().toLowerCase()
+      if (c === q) return true
+      if (baseQ && c === baseQ) return true
+      if (c.length >= 4 && q.startsWith(c)) return true
+      return false
+    }
+
     // 1. Look for variant match by barcode or sku
     for (const p of list) {
       if (p.variants && p.variants.length > 0) {
         for (const v of p.variants) {
-          if (
-            (v.barcode && v.barcode.toLowerCase() === q) ||
-            (v.sku && v.sku.toLowerCase() === q)
-          ) {
+          if (isCodeMatch(v.barcode) || isCodeMatch(v.sku)) {
             return {
               type: 'variant',
               variant: {
@@ -282,10 +294,7 @@ export async function scanBarcode(code: string): Promise<ScanResult> {
 
     // 2. Look for product match by barcode or sku
     for (const p of list) {
-      if (
-        (p.barcode && p.barcode.toLowerCase() === q) ||
-        (p.sku && p.sku.toLowerCase() === q)
-      ) {
+      if (isCodeMatch(p.barcode) || isCodeMatch(p.sku)) {
         if (p.variants && p.variants.length === 1) {
           const v = p.variants[0]
           return {

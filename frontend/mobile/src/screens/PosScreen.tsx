@@ -287,7 +287,10 @@ export default function PosScreen({
         onUpdateItemQuantity={(id, delta) => updateQuantity(id, delta)}
         onRemoveItem={(id) => removeFromCart(id)}
         primaryActionLabel="Go to Register"
-        onPrimaryAction={() => setScannerOpen(false)}
+        onPrimaryAction={() => {
+          setScannerOpen(false)
+          setCheckoutSheetOpen(true)
+        }}
         feedback={scanFeedback}
       />
 
@@ -298,7 +301,7 @@ export default function PosScreen({
         variants={pickerVariants}
         onAddMultipleVariants={(items) => {
           if (pickerProduct) {
-            const itemsToAdd = items.map(({ variant, quantity }) => {
+            const itemsToAdd = items.map(({ variant, quantity, selectedColor, selectedOptions }) => {
               const rawPrice =
                 variant.selling_price_override ??
                 variant.selling_price ??
@@ -307,9 +310,14 @@ export default function PosScreen({
                 '0'
               const unitPrice = parseFloat(String(rawPrice)) || 0
               const availableStock = variant.quantity_on_hand ?? 0
-              const attrs = variant.attribute_values
+              const baseAttrs = variant.attribute_values
                 ?.map((av) => `${av.attribute?.name ? av.attribute.name + ': ' : ''}${av.value_name}`)
                 .join(', ')
+              const optionsSummary = selectedOptions
+                ? Object.entries(selectedOptions).map(([k, v]) => `${k}: ${v}`).join(', ')
+                : selectedColor ? `Color: ${selectedColor}` : ''
+              const attrs = [baseAttrs, optionsSummary].filter(Boolean).join(', ')
+              const options = selectedOptions || (selectedColor ? { Color: selectedColor } : undefined)
               return {
                 variantId: variant.id,
                 sku: variant.sku,
@@ -319,6 +327,7 @@ export default function PosScreen({
                 availableStock,
                 imageUrl: pickerProduct.image_url,
                 attributesSummary: attrs || undefined,
+                selectedOptions: options,
               }
             })
             addMultipleItemsToCart(itemsToAdd)

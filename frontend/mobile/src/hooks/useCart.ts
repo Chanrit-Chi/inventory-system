@@ -24,6 +24,9 @@ export interface AddVariantResult {
 export function useCart() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [checkoutPreset, setCheckoutPreset] = useState<CartCheckoutPreset | null>(null)
+  const [checkoutModalRequested, setCheckoutModalRequested] = useState(false)
+  const requestOpenCheckout = useCallback(() => setCheckoutModalRequested(true), [])
+  const consumeCheckoutRequest = useCallback(() => setCheckoutModalRequested(false), [])
   const isHydrated = useRef(false)
 
   // 1. Restore persisted cart and preset from storage on mount
@@ -183,6 +186,8 @@ export function useCart() {
     availableStock?: number
     imageUrl?: string | null
     attributesSummary?: string
+    selectedOptions?: Record<string, string>
+    cartItemId?: string
   }>) => {
     setCart(prevCart => {
       const updated = [...prevCart]
@@ -190,7 +195,11 @@ export function useCart() {
         const stockLimit = it.availableStock !== undefined ? it.availableStock : 0
         if (stockLimit <= 0) continue
 
-        const existingIndex = updated.findIndex(item => item.variantId === it.variantId)
+        const itemKey = it.cartItemId || (it.selectedOptions && Object.keys(it.selectedOptions).length > 0
+          ? `${it.variantId}::${Object.entries(it.selectedOptions).sort().map(([k, v]) => `${k}:${v}`).join('|')}`
+          : it.variantId)
+
+        const existingIndex = updated.findIndex(item => (item.cartItemId || item.variantId) === itemKey)
         if (existingIndex >= 0) {
           const current = updated[existingIndex]
           const targetStock = it.availableStock ?? current.availableStock
@@ -204,6 +213,7 @@ export function useCart() {
           const qty = it.quantity || 1
           const initialQty = stockLimit > 0 ? Math.min(qty, stockLimit) : qty
           updated.push({
+            cartItemId: itemKey,
             variantId: it.variantId,
             sku: it.sku || 'SKU-CUSTOM',
             productName: it.productName || 'Product',
@@ -212,6 +222,7 @@ export function useCart() {
             availableStock: stockLimit,
             imageUrl: it.imageUrl || undefined,
             attributesSummary: it.attributesSummary,
+            selectedOptions: it.selectedOptions,
           })
         }
       }
@@ -219,11 +230,12 @@ export function useCart() {
     })
   }, [])
 
-  const updateQuantity = useCallback((variantId: string, delta: number) => {
+  const updateQuantity = useCallback((itemKey: string, delta: number) => {
     setCart(prevCart => {
       return prevCart
         .map(item => {
-          if (item.variantId === variantId) {
+          const key = item.cartItemId || item.variantId
+          if (key === itemKey) {
             if (delta > 0) {
               if (item.availableStock <= 0 || item.quantity >= item.availableStock) {
                 return item
@@ -238,18 +250,19 @@ export function useCart() {
     })
   }, [])
 
-  const removeFromCart = useCallback((variantId: string) => {
-    setCart(prevCart => prevCart.filter(item => item.variantId !== variantId))
+  const removeFromCart = useCallback((itemKey: string) => {
+    setCart(prevCart => prevCart.filter(item => (item.cartItemId || item.variantId) !== itemKey))
   }, [])
 
-  const setItemQuantity = useCallback((variantId: string, quantity: number) => {
+  const setItemQuantity = useCallback((itemKey: string, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(variantId)
+      removeFromCart(itemKey)
       return
     }
     setCart(prevCart =>
       prevCart.map(item => {
-        if (item.variantId === variantId) {
+        const key = item.cartItemId || item.variantId
+        if (key === itemKey) {
           const maxAllowed = item.availableStock > 0 ? Math.min(quantity, item.availableStock) : 0
           return maxAllowed > 0 ? { ...item, quantity: maxAllowed } : item
         }
@@ -340,6 +353,9 @@ export function useCart() {
       totalItemCount,
       stockWarnings,
       hasOutOfStockItems,
+      checkoutModalRequested,
+      requestOpenCheckout,
+      consumeCheckoutRequest,
     }),
     [
       cart,
@@ -355,6 +371,9 @@ export function useCart() {
       totalItemCount,
       stockWarnings,
       hasOutOfStockItems,
+      checkoutModalRequested,
+      requestOpenCheckout,
+      consumeCheckoutRequest,
     ]
   )
 }

@@ -27,6 +27,7 @@ class CheckoutRequest extends FormRequest
             'items.*.unit_price'    => ['nullable', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.discount'      => ['nullable', 'numeric', 'min:0'],
+            'items.*.options'       => ['nullable', 'array'],
             'payment_method'        => ['required', 'string', 'max:50'],
             'payment_amount'        => ['required', 'numeric', 'min:0'],
             'customer'              => ['nullable', 'array'],

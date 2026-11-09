@@ -12,6 +12,7 @@ import { tokens } from '../../theme/tokens'
 import { ControlledInput } from '../ControlledInput'
 import { CustomerLookupRow } from '../CustomerLookupRow'
 import { getChannelPlatformMeta } from '../../screens/SalesChannelsScreen'
+import { useBranding } from '../../context/BrandingContext'
 import type { CustomerLoyaltyInfo } from '../../hooks/useCustomerLookup'
 import type {
   SalesChannel,
@@ -102,6 +103,9 @@ export function CheckoutStep2Form({
   selectedBank,
   onOpenBankPicker,
 }: CheckoutStep2FormProps) {
+  const { branding } = useBranding()
+  const showTax = Boolean(branding?.show_tax)
+
   const currentChannel =
     channels.find((c) => c.id === (channelId || activeChannel?.id)) ||
     activeChannel ||
@@ -409,6 +413,7 @@ export function CheckoutStep2Form({
         suggestions={customerSuggestions}
         status={customerLookupStatus}
         loyaltyInfo={loyaltyInfo || null}
+        isRequired={isDelivery}
         onPhoneChange={(val) => {
           setPhone(val)
           setValue('customerPhone', val, { shouldValidate: true })
@@ -479,58 +484,60 @@ export function CheckoutStep2Form({
         />
       </View>
 
-      {/* Tax Section */}
-      <View style={styles.discountSection}>
-        <View style={styles.discountHeaderRow}>
-          <Ionicons name="calculator-outline" size={14} color={tokens.colors.primaryContainer} />
-          <Text style={styles.deliverySectionTitle}>Tax</Text>
-        </View>
-        <View style={styles.typeToggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.typeToggleBtn,
-              taxType === 'flat' && styles.typeToggleBtnActive,
-            ]}
-            onPress={() => setValue('taxType', 'flat')}
-            activeOpacity={0.8}
-          >
-            <Text
+      {/* Tax Section - Only visible if enabled in Store Settings */}
+      {showTax && (
+        <View style={styles.discountSection}>
+          <View style={styles.discountHeaderRow}>
+            <Ionicons name="calculator-outline" size={14} color={tokens.colors.primaryContainer} />
+            <Text style={styles.deliverySectionTitle}>Tax</Text>
+          </View>
+          <View style={styles.typeToggleContainer}>
+            <TouchableOpacity
               style={[
-                styles.typeToggleText,
-                taxType === 'flat' && styles.typeToggleTextActive,
+                styles.typeToggleBtn,
+                taxType === 'flat' && styles.typeToggleBtnActive,
               ]}
+              onPress={() => setValue('taxType', 'flat')}
+              activeOpacity={0.8}
             >
-              Flat ($)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.typeToggleBtn,
-              taxType === 'percentage' && styles.typeToggleBtnActive,
-            ]}
-            onPress={() => setValue('taxType', 'percentage')}
-            activeOpacity={0.8}
-          >
-            <Text
+              <Text
+                style={[
+                  styles.typeToggleText,
+                  taxType === 'flat' && styles.typeToggleTextActive,
+                ]}
+              >
+                Flat ($)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[
-                styles.typeToggleText,
-                taxType === 'percentage' && styles.typeToggleTextActive,
+                styles.typeToggleBtn,
+                taxType === 'percentage' && styles.typeToggleBtnActive,
               ]}
+              onPress={() => setValue('taxType', 'percentage')}
+              activeOpacity={0.8}
             >
-              Percent (%)
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.typeToggleText,
+                  taxType === 'percentage' && styles.typeToggleTextActive,
+                ]}
+              >
+                Percent (%)
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <ControlledInput
+            name="taxInput"
+            control={control}
+            label={
+              taxType === 'percentage' ? 'Tax Rate (%)' : 'Tax Amount ($)'
+            }
+            placeholder="0.00"
+            inputProps={{ keyboardType: 'decimal-pad', returnKeyType: 'done' }}
+          />
         </View>
-        <ControlledInput
-          name="taxInput"
-          control={control}
-          label={
-            taxType === 'percentage' ? 'Tax Rate (%)' : 'Tax Amount ($)'
-          }
-          placeholder="0.00"
-          inputProps={{ keyboardType: 'decimal-pad', returnKeyType: 'done' }}
-        />
-      </View>
+      )}
 
       {/* Payment Method Section */}
       <View style={styles.paymentMethodSection}>

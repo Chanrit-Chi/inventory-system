@@ -7,6 +7,7 @@ import {
   Modal,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -18,6 +19,14 @@ import type { ScannedVariant, ScannedProduct } from '../types'
 export interface SelectedVariantItem {
   variant: ScannedVariant
   quantity: number
+  selectedColor?: string
+  selectedOptions?: Record<string, string>
+}
+
+interface BasketItem {
+  variant: ScannedVariant
+  quantity: number
+  selectedOptions: Record<string, string>
 }
 
 export interface VariantPickerModalProps {
@@ -37,81 +46,164 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
   onAddMultipleVariants,
   onClose,
 }) => {
-  const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({})
+  // Multi-combination Basket: maps "variantId::Option:Val" -> BasketItem
+  const [basket, setBasket] = useState<Record<string, BasketItem>>({})
+
+  const productCustomOptions = useMemo<Array<{ name: string; values: string[] }>>(() => {
+    if (!product?.custom_options) return []
+    let raw = product.custom_options
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw)
+      } catch {
+        return []
+      }
+    }
+    if (Array.isArray(raw)) {
+      return raw
+        .filter((o: any) => o && o.name && Array.isArray(o.values) && o.values.length > 0)
+        .map((o: any) => ({ name: String(o.name), values: o.values }))
+    }
+    if (typeof raw === 'object' && raw !== null) {
+      return Object.entries(raw)
+        .filter(([_, vals]) => Array.isArray(vals) && (vals as any[]).length > 0)
+        .map(([name, vals]) => ({ name, values: vals as string[] }))
+    }
+    return []
+  }, [product])
+
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
+
+  const getBasketKey = useCallback((variantId: string, options: Record<string, string>) => {
+    const optStr = Object.entries(options)
+      .sort()
+      .map(([k, v]) => `${k}:${v}`)
+      .join('|')
+    return optStr ? `${variantId}::${optStr}` : variantId
+  }, [])
+
+  const getAllocatedQtyForVariant = useCallback((variantId: string) => {
+    return Object.values(basket)
+      .filter((it) => it.variant.id === variantId)
+      .reduce((sum, it) => sum + it.quantity, 0)
+  }, [basket])
 
   useEffect(() => {
     if (visible) {
-      if (variants.length === 1 && (variants[0].quantity_on_hand ?? 0) > 0) {
-        setSelectedQuantities({ [variants[0].id]: 1 })
-      } else {
-        setSelectedQuantities({})
+      setBasket({})
+      const defaults: Record<string, string> = {}
+      for (const opt of productCustomOptions) {
+        if (opt.values.length > 0) {
+          defaults[opt.name] = opt.values[0]
+        }
       }
+      setSelectedOptions(defaults)
     }
-  }, [visible, variants])
+  }, [visible, productCustomOptions])
 
   const allOutOfStock = variants.length > 0 && variants.every(v => (v.quantity_on_hand ?? 0) <= 0)
 
   const handleIncrement = useCallback((variant: ScannedVariant) => {
     const stock = variant.quantity_on_hand ?? 0
     if (stock <= 0) return
-    setSelectedQuantities(prev => {
-      const current = prev[variant.id] || 0
-      if (current >= stock) return prev
-      return { ...prev, [variant.id]: current + 1 }
+    const totalAllocated = getAllocatedQtyForVariant(variant.id)
+    if (totalAllocated >= stock) return
+
+    const key = getBasketKey(variant.id, selectedOptions)
+    setBasket((prev) => {
+      const current = prev[key]?.quantity || 0
+      return {
+        ...prev,
+        [key]: {
+          variant,
+          quantity: current + 1,
+          selectedOptions: { ...selectedOptions },
+        },
+      }
     })
-  }, [])
+  }, [getAllocatedQtyForVariant, getBasketKey, selectedOptions])
 
   const handleDecrement = useCallback((variant: ScannedVariant) => {
-    setSelectedQuantities(prev => {
-      const current = prev[variant.id] || 0
-      if (current <= 1) {
+    const key = getBasketKey(variant.id, selectedOptions)
+    setBasket((prev) => {
+      const entry = prev[key]
+      if (!entry) return prev
+      if (entry.quantity <= 1) {
         const next = { ...prev }
-        delete next[variant.id]
+        delete next[key]
         return next
       }
-      return { ...prev, [variant.id]: current - 1 }
+      return {
+        ...prev,
+        [key]: {
+          ...entry,
+          quantity: entry.quantity - 1,
+        },
+      }
     })
-  }, [])
+  }, [getBasketKey, selectedOptions])
 
   const handleSetExactQuantity = useCallback((variant: ScannedVariant, qty: number) => {
     const stock = variant.quantity_on_hand ?? 0
     if (stock <= 0) return
-    setSelectedQuantities(prev => {
-      if (qty <= 0) {
+    const key = getBasketKey(variant.id, selectedOptions)
+    const currentQty = basket[key]?.quantity || 0
+    const otherAllocated = getAllocatedQtyForVariant(variant.id) - currentQty
+    const maxAllowed = Math.max(0, stock - otherAllocated)
+    const target = Math.min(qty, maxAllowed)
+
+    setBasket((prev) => {
+      if (target <= 0) {
         const next = { ...prev }
-        delete next[variant.id]
+        delete next[key]
         return next
       }
-      const capped = Math.min(qty, stock)
-      return { ...prev, [variant.id]: capped }
+      return {
+        ...prev,
+        [key]: {
+          variant,
+          quantity: target,
+          selectedOptions: { ...selectedOptions },
+        },
+      }
+    })
+  }, [basket, getAllocatedQtyForVariant, getBasketKey, selectedOptions])
+
+  const handleRemoveBasketItem = useCallback((key: string) => {
+    setBasket((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
     })
   }, [])
 
   const totalUnits = useMemo(() => {
-    return Object.values(selectedQuantities).reduce((sum, q) => sum + q, 0)
-  }, [selectedQuantities])
+    return Object.values(basket).reduce((sum, it) => sum + it.quantity, 0)
+  }, [basket])
 
   const totalPrice = useMemo(() => {
-    let sum = 0
-    for (const v of variants) {
-      const q = selectedQuantities[v.id] || 0
-      if (q > 0) {
-        const rawPrice = v.selling_price_override ?? v.selling_price ?? product?.selling_price ?? '0'
-        const price = parseFloat(String(rawPrice)) || 0
-        sum += price * q
-      }
-    }
-    return sum
-  }, [selectedQuantities, variants, product])
+    return Object.values(basket).reduce((sum, it) => {
+      const rawPrice =
+        it.variant.selling_price_override ??
+        it.variant.selling_price ??
+        product?.selling_price ??
+        '0'
+      const price = parseFloat(String(rawPrice)) || 0
+      return sum + price * it.quantity
+    }, 0)
+  }, [basket, product])
 
   const handleConfirmAdd = useCallback(() => {
-    const items: SelectedVariantItem[] = []
-    for (const v of variants) {
-      const q = selectedQuantities[v.id] || 0
-      if (q > 0) {
-        items.push({ variant: v, quantity: q })
+    const items: SelectedVariantItem[] = Object.values(basket).map((it) => {
+      const hasOptions = Object.keys(it.selectedOptions).length > 0
+      return {
+        variant: it.variant,
+        quantity: it.quantity,
+        selectedColor: it.selectedOptions['Color'] || it.selectedOptions['color'] || undefined,
+        selectedOptions: hasOptions ? it.selectedOptions : undefined,
       }
-    }
+    })
+
     if (items.length === 0) return
 
     if (onAddMultipleVariants) {
@@ -124,7 +216,7 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
       })
     }
     onClose()
-  }, [selectedQuantities, variants, onAddMultipleVariants, onSelectVariant, onClose])
+  }, [basket, onAddMultipleVariants, onSelectVariant, onClose])
 
   const renderVariantItem = ({ item }: { item: ScannedVariant }) => {
     const stock = item.quantity_on_hand ?? 0
@@ -132,8 +224,10 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
     const isLowStock = stock > 0 && stock <= 5
     const rawPrice = item.selling_price_override ?? item.selling_price ?? product?.selling_price ?? '0'
     const price = parseFloat(String(rawPrice)) || 0
-    const selectedQty = selectedQuantities[item.id] || 0
-    const isAtMax = selectedQty >= stock
+    const basketKey = getBasketKey(item.id, selectedOptions)
+    const selectedQty = basket[basketKey]?.quantity || 0
+    const totalAllocated = getAllocatedQtyForVariant(item.id)
+    const isAtMax = totalAllocated >= stock
 
     const attributeValues = item.attribute_values && item.attribute_values.length > 0
       ? item.attribute_values
@@ -365,6 +459,42 @@ export const VariantPickerModal: React.FC<VariantPickerModalProps> = ({
             </TouchableOpacity>
           </View>
 
+          {/* Dynamic Product Options (Color, Material, Flavor, Size, etc.) */}
+          {productCustomOptions.length > 0 && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4, gap: 8 }}>
+              {productCustomOptions.map((opt) => {
+                const currentSelected = selectedOptions[opt.name] || opt.values[0] || ''
+                return (
+                  <View key={opt.name} style={styles.colorSelectSection}>
+                    <View style={styles.colorHeaderRow}>
+                      <Ionicons name="options-outline" size={13} color={tokens.colors.primaryContainer} />
+                      <Text style={styles.colorHeaderTitle}>{opt.name}:</Text>
+                      {Boolean(currentSelected) && (
+                        <Text style={styles.colorSelectedName}>{currentSelected}</Text>
+                      )}
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorChipsRow}>
+                      {opt.values.map((val: string) => {
+                        const active = currentSelected === val
+                        return (
+                          <TouchableOpacity
+                            key={val}
+                            style={[styles.colorChip, active && styles.colorChipActive]}
+                            onPress={() => setSelectedOptions((prev) => ({ ...prev, [opt.name]: val }))}
+                            activeOpacity={0.75}
+                          >
+                            {active && <Ionicons name="checkmark-circle" size={12} color="#FFFFFF" style={{ marginRight: 3 }} />}
+                            <Text style={[styles.colorChipText, active && styles.colorChipTextActive]}>{val}</Text>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </ScrollView>
+                  </View>
+                )
+              })}
+            </View>
+          )}
+
           {/* Variants List or Empty State */}
           {allOutOfStock ? (
             <View style={styles.emptyContainer}>
@@ -505,6 +635,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: tokens.borderRadius.pill,
     backgroundColor: tokens.colors.surfaceAlt,
+  },
+  colorSelectSection: {
+    paddingHorizontal: tokens.spacing.lg,
+    paddingVertical: tokens.spacing.sm,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderSubtle,
+  },
+  colorHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  colorHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.onBackground,
+  },
+  colorSelectedName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: tokens.colors.primaryContainer,
+  },
+  colorChipsRow: {
+    flexDirection: 'row',
+    paddingVertical: 2,
+  },
+  colorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginRight: 6,
+  },
+  colorChipActive: {
+    backgroundColor: tokens.colors.primaryContainer,
+    borderColor: tokens.colors.primaryContainer,
+  },
+  colorChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  colorChipTextActive: {
+    color: tokens.colors.onPrimary,
+    fontWeight: '700',
   },
   listContent: {
     padding: tokens.spacing.md,

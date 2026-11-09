@@ -64,10 +64,12 @@ export function useProductForm({
       default_reorder_level: '10',
       is_active: true,
       image_url: '',
+      prompt_variant_on_scan: false,
       simpleSku: '',
       simpleBarcode: '',
       simpleStock: '0',
-      variantInitialStock: '10',
+      variantInitialStock: '0',
+      saleColors: '',
       attributesList: [
         { id: 'attr-1', name: 'Color', valuesText: 'Black, White' },
         { id: 'attr-2', name: 'Size', valuesText: 'M, L, XL' },
@@ -86,6 +88,52 @@ export function useProductForm({
 
   // Interactive Product Attributes Selection State (Selected from DB)
   const [selectedProductAttributes, setSelectedProductAttributes] = useState<SelectedProductAttribute[]>([])
+  // Dynamic Product Options (e.g. Color, Material, Fit, Sugar)
+  const [productOptions, setProductOptions] = useState<Array<{ name: string; values: string[] }>>([])
+
+  const handleToggleProductOptionValue = (attrName: string, val: string) => {
+    setProductOptions((prev) => {
+      const existing = prev.find((o) => o.name.toLowerCase() === attrName.toLowerCase())
+      if (!existing) {
+        return [...prev, { name: attrName, values: [val] }]
+      }
+      const isSelected = existing.values.includes(val)
+      const nextValues = isSelected
+        ? existing.values.filter((v) => v !== val)
+        : [...existing.values, val]
+
+      return prev.map((o) =>
+        o.name.toLowerCase() === attrName.toLowerCase() ? { ...o, values: nextValues } : o
+      )
+    })
+  }
+
+  const handleAddProductOption = (attrName: string, initialValues: string[] = []) => {
+    setProductOptions((prev) => {
+      if (prev.some((o) => o.name.toLowerCase() === attrName.toLowerCase())) return prev
+      return [...prev, { name: attrName, values: initialValues }]
+    })
+  }
+
+  const handleRemoveProductOption = (attrName: string) => {
+    setProductOptions((prev) => prev.filter((o) => o.name.toLowerCase() !== attrName.toLowerCase()))
+  }
+
+  const handleSelectAllOptionValues = (attrName: string, allValues: string[]) => {
+    setProductOptions((prev) =>
+      prev.map((o) =>
+        o.name.toLowerCase() === attrName.toLowerCase() ? { ...o, values: [...allValues] } : o
+      )
+    )
+  }
+
+  const handleClearOptionValues = (attrName: string) => {
+    setProductOptions((prev) =>
+      prev.map((o) =>
+        o.name.toLowerCase() === attrName.toLowerCase() ? { ...o, values: [] } : o
+      )
+    )
+  }
 
   // Barcode Camera Scanner State for Product & Variants
   const [variantScannerOpen, setVariantScannerOpen] = useState(false)
@@ -193,7 +241,9 @@ export function useProductForm({
           const nextSelected = isSelected
             ? attr.selectedValues.filter((v) => v !== value)
             : [...attr.selectedValues, value]
-          return { ...attr, selectedValues: nextSelected }
+          // Preserve canonical database order defined in attr.allValues
+          const orderedSelected = attr.allValues.filter((v) => nextSelected.includes(v))
+          return { ...attr, selectedValues: orderedSelected }
         }
         return attr
       })
@@ -363,22 +413,95 @@ export function useProductForm({
         [[]] as ScannedAttributeValue[][]
       )
 
-      const baseSkuPrefix = formName
-        ? formName
-            .split(' ')
-            .map((w) => w.substring(0, 3).toUpperCase())
-            .join('-')
-        : 'PROD'
+      // Clean string into safe alphanumeric segment
+      const sanitizeSkuSegment = (str: string) =>
+        str
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+
+      // Smart SKU Prefix Generator:
+      // 1. If name contains a model code (e.g. VT112, NK-50, A10), extract and use it directly.
+      // 2. If short clean name (<= 10 chars), keep it intact.
+      // 3. If long name (> 10 chars), generate clean acronym + category + deterministic hash (10-12 chars max).
+      const generateSmartSkuPrefix = (name: string, categoryName?: string): string => {
+        const trimmed = (name || '').trim().toUpperCase()
+        if (!trimmed) return 'PROD'
+
+        const words = trimmed.split(/[\s\-_\/]+/).filter(Boolean)
+
+        // Pattern 1: Alphanumeric model code token (e.g. VT112, TS01, NK90)
+        const modelToken = words.find((w) => /[A-Z]/.test(w) && /[0-9]/.test(w) && w.length >= 2 && w.length <= 10)
+        if (modelToken) {
+          return sanitizeSkuSegment(modelToken)
+        }
+
+        const simpleClean = sanitizeSkuSegment(trimmed)
+        // Pattern 2: Short name (e.g. JEANS, POLO-SHIRT)
+        if (simpleClean.length <= 10) {
+          return simpleClean
+        }
+
+        // Pattern 3: Long name (e.g. "Vintage Heavyweight Oversized Cotton T-Shirt")
+        const stopWords = new Set(['THE', 'A', 'AN', 'AND', 'OR', 'FOR', 'WITH', 'OF', 'IN', 'BY'])
+        const contentWords = words.filter((w) => !stopWords.has(w))
+
+        const acronym = (contentWords.length >= 2
+          ? contentWords.map((w) => w[0]).join('')
+          : words[0].substring(0, 4)
+        ).substring(0, 4)
+
+        // Deterministic 3-character hash from name string
+        let hash = 0
+        for (let i = 0; i < trimmed.length; i++) {
+          hash = (hash * 31 + trimmed.charCodeAt(i)) & 0xffffffff
+        }
+        const hashStr = Math.abs(hash).toString(36).substring(0, 3).toUpperCase()
+
+        const catCode = categoryName
+          ? sanitizeSkuSegment(categoryName).substring(0, 3)
+          : ''
+
+        return catCode ? `${catCode}-${acronym}${hashStr}` : `${acronym}${hashStr}`
+      }
+
+      const baseSkuPrefix = generateSmartSkuPrefix(formName || '', formCategory)
+
+      // Collect all known SKUs across products to prevent duplicate collisions
+      const existingSkuSet = new Set<string>()
+      for (const p of products) {
+        if (p.sku) existingSkuSet.add(p.sku.toUpperCase())
+        if (p.variants) {
+          for (const v of p.variants) {
+            if (v.sku) existingSkuSet.add(v.sku.toUpperCase())
+          }
+        }
+      }
+
+      // Helper to guarantee unique SKU without collisions
+      const makeUniqueSku = (candidate: string) => {
+        let unique = candidate
+        let counter = 2
+        while (existingSkuSet.has(unique.toUpperCase())) {
+          unique = `${candidate}-${counter}`
+          counter++
+        }
+        existingSkuSet.add(unique.toUpperCase())
+        return unique
+      }
 
       const currentFormVariants = (getValues('variantsList') || []) as VariantDraft[]
       const dbVariants = (editingProduct?.variants || []) as ProductVariant[]
-      const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+      const customInitialStock = parseInt(getValues('variantInitialStock') || '0', 10)
       const initialStockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
 
       const generated: VariantDraft[] = combinations.map((comb, idx) => {
         const name = comb.map((c) => c.value_name).join(' / ')
-        const skuSuffix = comb.map((c) => c.value_name.substring(0, 3).toUpperCase()).join('-')
-        const sku = `${baseSkuPrefix}-${skuSuffix}`
+        const skuSuffix = comb.map((c) => sanitizeSkuSegment(c.value_name)).filter(Boolean).join('-')
+        const rawSku = skuSuffix ? `${baseSkuPrefix}-${skuSuffix}` : `${baseSkuPrefix}-${idx + 1}`
+        const sku = makeUniqueSku(rawSku)
 
         const matchResult = findMatchingVariant(comb, currentFormVariants, dbVariants)
 
@@ -433,7 +556,7 @@ export function useProductForm({
     }
 
     if (variantsFields.length > 0) {
-      const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+      const customInitialStock = parseInt(getValues('variantInitialStock') || '0', 10)
       const initialStockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
       Alert.alert(
         'Update Variant Matrix?',
@@ -454,7 +577,7 @@ export function useProductForm({
       Alert.alert('No Variants', 'Please generate or add variants first.')
       return
     }
-    const customInitialStock = parseInt(getValues('variantInitialStock') || '10', 10)
+    const customInitialStock = parseInt(getValues('variantInitialStock') || '0', 10)
     const stockVal = isNaN(customInitialStock) || customInitialStock < 0 ? 0 : customInitialStock
 
     Alert.alert(
@@ -591,7 +714,7 @@ export function useProductForm({
     }
 
     const mainSku = data.productType === 'SIMPLE' ? (data.simpleSku || '') : finalVariants[0]?.sku || `SKU-VAR-${Date.now()}`
-    const mainBarcode = data.productType === 'SIMPLE' ? (data.simpleBarcode || '') : finalVariants[0]?.barcode || null
+    const mainBarcode = data.simpleBarcode?.trim() ? data.simpleBarcode.trim() : (finalVariants[0]?.barcode || null)
 
     const matchedCategory = managedCategories.find(
       (c) => c.name.toLowerCase() === data.category?.toLowerCase() || c.id === data.category
@@ -616,6 +739,8 @@ export function useProductForm({
 
     const simpleStock = data.productType === 'SIMPLE' ? (parseInt(data.simpleStock || '0') || 0) : undefined
 
+    const customOptionsPayload = productOptions.filter((o) => o.values.length > 0)
+
     setIsSavingProduct(true)
     try {
       if (editingProduct) {
@@ -623,6 +748,8 @@ export function useProductForm({
           name: data.name,
           sku: mainSku,
           barcode: mainBarcode,
+          prompt_variant_on_scan: Boolean(data.prompt_variant_on_scan || data.productType === 'VARIABLE'),
+          custom_options: customOptionsPayload as any,
           purchase_price: buyP,
           selling_price: sellP,
           default_reorder_level: reorder,
@@ -639,6 +766,7 @@ export function useProductForm({
           name: data.name,
           sku: mainSku,
           barcode: mainBarcode,
+          custom_options: customOptionsPayload as any,
           purchase_price: buyP,
           selling_price: sellP,
           default_reorder_level: reorder,
@@ -660,6 +788,8 @@ export function useProductForm({
           name: data.name,
           sku: mainSku,
           barcode: mainBarcode,
+          prompt_variant_on_scan: Boolean(data.prompt_variant_on_scan || data.productType === 'VARIABLE'),
+          custom_options: customOptionsPayload as any,
           purchase_price: buyP,
           selling_price: sellP,
           default_reorder_level: reorder,
@@ -697,6 +827,7 @@ export function useProductForm({
     setUploadProgress(0)
     setUploadingPhoto(false)
     setSelectedProductAttributes([])
+    setProductOptions([])
     reset({
       productType: 'VARIABLE',
       name: '',
@@ -706,10 +837,12 @@ export function useProductForm({
       default_reorder_level: '10',
       is_active: true,
       image_url: '',
+      prompt_variant_on_scan: false,
       simpleSku: '',
       simpleBarcode: '',
       simpleStock: '0',
-      variantInitialStock: '10',
+      variantInitialStock: '0',
+      saleColors: '',
       attributesList: [],
       variantsList: [],
     })
@@ -800,6 +933,19 @@ export function useProductForm({
     const sellPriceStr = prod.selling_price !== null && prod.selling_price !== undefined ? String(prod.selling_price) : ''
     const reorderStr = prod.default_reorder_level !== null && prod.default_reorder_level !== undefined ? String(prod.default_reorder_level) : '10'
 
+    const rawOptions = prod.custom_options
+    const parsedOptions: Array<{ name: string; values: string[] }> = Array.isArray(rawOptions)
+      ? rawOptions.map((o: any) => ({
+          name: String(o.name || ''),
+          values: Array.isArray(o.values) ? o.values : [],
+        }))
+      : typeof rawOptions === 'object' && rawOptions !== null
+      ? Object.entries(rawOptions).map(([name, values]) => ({
+          name,
+          values: Array.isArray(values) ? values : [],
+        }))
+      : []
+
     reset({
       productType: isVar ? 'VARIABLE' : 'SIMPLE',
       name: prod.name,
@@ -809,14 +955,17 @@ export function useProductForm({
       default_reorder_level: reorderStr,
       is_active: prod.is_active !== false,
       image_url: prod.image_url || '',
+      prompt_variant_on_scan: Boolean(prod.prompt_variant_on_scan),
       simpleSku: !isVar ? prod.sku || firstVar?.sku || '' : '',
-      simpleBarcode: !isVar ? prod.barcode || firstVar?.barcode || '' : '',
+      simpleBarcode: prod.barcode || (!isVar ? firstVar?.barcode || '' : ''),
       simpleStock: !isVar ? String(firstVar?.quantity_on_hand ?? 0) : '0',
-      variantInitialStock: '10',
+      variantInitialStock: '0',
+      saleColors: '',
       attributesList: [],
       variantsList: draftVariants,
     })
 
+    setProductOptions(parsedOptions)
     setProductModalOpen(true)
   }, [reset, managedAttributes])
 
@@ -843,6 +992,16 @@ export function useProductForm({
     formIsActive,
     selectedProductAttributes,
     setSelectedProductAttributes,
+    productOptions,
+    setProductOptions,
+    handleAddProductOption,
+    handleRemoveProductOption,
+    handleToggleProductOptionValue,
+    handleSelectAllOptionValues,
+    handleClearOptionValues,
+    selectedSaleColors: productOptions.find(o => o.name.toLowerCase() === 'color')?.values || [],
+    setSelectedSaleColors: () => {},
+    handleToggleSaleColor: (c: string) => handleToggleProductOptionValue('Color', c),
     handleToggleAttributeValue,
     handleAddCustomValueToAttribute,
     handleRemoveAttribute,

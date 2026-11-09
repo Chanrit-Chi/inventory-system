@@ -16,6 +16,7 @@ import {
   updateOrder,
 } from '../../../api/endpoints'
 import { useAuth } from '../../../context/AuthContext'
+import { useBranding } from '../../../context/BrandingContext'
 import { useProducts, useInfiniteProducts, useCategories } from '../../../hooks/queries/useProductsQuery'
 import { useCart } from '../../../hooks/useCart'
 import { useBarcodeScan } from '../../../hooks/useBarcodeScan'
@@ -229,6 +230,7 @@ export function usePosScreen({
 }: UsePosScreenProps): UsePosScreenReturn {
   const queryClient = useQueryClient()
   const appActions = useAppActions()
+  const { branding } = useBranding()
 
   // Search & Category filter
   const [searchQuery, setSearchQuery] = useState('')
@@ -465,7 +467,7 @@ export function usePosScreen({
       taxRate: '0',
       orderStatus: 'paid',
       customDeliveryFee: '',
-      isDelivery: false,
+      isDelivery: true,
       customerName: '',
       customerPhone: '',
     },
@@ -512,6 +514,14 @@ export function usePosScreen({
     stockWarnings,
     hasOutOfStockItems,
   } = cartHook
+
+  // Automatically open checkout drawer when requested across the app (e.g. from Scanner "Open Register")
+  useEffect(() => {
+    if (cartHook?.checkoutModalRequested) {
+      setCheckoutSheetOpen(true)
+      cartHook.consumeCheckoutRequest()
+    }
+  }, [cartHook?.checkoutModalRequested])
 
   const {
     phone,
@@ -688,6 +698,7 @@ export function usePosScreen({
         selling_price: String(product.selling_price || '0'),
         image_url: product.image_url,
         barcode: product.barcode ?? null,
+        custom_options: product.custom_options,
       }
 
       if (activeVariants.length === 0) {
@@ -748,10 +759,11 @@ export function usePosScreen({
     }
     const mutationId = Crypto.randomUUID()
 
+    const isTaxEnabled = Boolean(branding?.show_tax)
     const parsedDiscount = parseFloat(data.discountInput || '0') || 0
     const discountType = data.discountType || 'flat'
-    const parsedTax = parseFloat(data.taxInput || data.taxRate || '0') || 0
-    const taxType = data.taxType || 'flat'
+    const parsedTax = isTaxEnabled ? parseFloat(data.taxInput || data.taxRate || '0') || 0 : 0
+    const taxType = isTaxEnabled ? (data.taxType || 'flat') : 'flat'
     const deliveryCost = (() => {
       if (!isDelivery || !selectedDeliveryZone) return 0
       if (selectedDeliveryZone.id === 'custom') {
@@ -786,6 +798,7 @@ export function usePosScreen({
         variant_id: item.variantId,
         quantity: item.quantity,
         unit_price: item.unitPrice,
+        options: item.selectedOptions,
       })),
       payment_method:
         activePaymentMethod === 'Bank'
@@ -877,6 +890,7 @@ export function usePosScreen({
     setValue('taxInput', '')
     setValue('taxType', 'flat')
     setValue('orderStatus', 'paid')
+    setValue('isDelivery', true)
     setValue('deliveryAddress', '')
   }
 

@@ -103,6 +103,8 @@ class ProductController extends BaseApiController
             $product = Product::create([
                 'name'                 => $validated['name'],
                 'barcode'              => $validated['barcode'] ?? null,
+                'prompt_variant_on_scan'=> $validated['prompt_variant_on_scan'] ?? false,
+                'custom_options'       => $validated['custom_options'] ?? null,
                 'purchase_price'       => $validated['purchase_price'],
                 'selling_price'        => $validated['selling_price'],
                 'default_reorder_level'=> $validated['default_reorder_level'] ?? 5,
@@ -157,6 +159,8 @@ class ProductController extends BaseApiController
                 'name',
                 'sku',
                 'barcode',
+                'prompt_variant_on_scan',
+                'custom_options',
                 'purchase_price',
                 'selling_price',
                 'default_reorder_level',

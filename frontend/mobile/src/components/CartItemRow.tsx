@@ -32,6 +32,7 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
   const lineTotal = item.quantity * item.unitPrice
   const hasWarning = Boolean(warning)
   const isAtMaxStock = item.availableStock <= 0 || item.quantity >= item.availableStock
+  const itemKey = item.cartItemId || item.variantId
 
   return (
     <View style={[styles.card, hasWarning && styles.cardWarning]}>
@@ -43,7 +44,7 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
               source={{ uri: item.imageUrl }}
               style={styles.productImage}
               contentFit="cover"
-              recyclingKey={item.variantId}
+              recyclingKey={itemKey}
               transition={150}
             />
           ) : (
@@ -67,13 +68,24 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
               />
             </View>
           )}
-          {item.attributesSummary ? (
-            <View style={styles.attrTag}>
-              <Text style={styles.attrText} numberOfLines={1}>
-                {item.attributesSummary}
-              </Text>
-            </View>
-          ) : null}
+          {Boolean(item.attributesSummary || item.selectedOptions) && (() => {
+            const optionsText = item.selectedOptions
+              ? Object.entries(item.selectedOptions).map(([k, v]) => `${k}: ${v}`).join(' • ')
+              : ''
+            const fullDesc = item.attributesSummary && optionsText
+              ? item.attributesSummary.includes(optionsText)
+                ? item.attributesSummary
+                : `${item.attributesSummary} • ${optionsText}`
+              : item.attributesSummary || optionsText
+            if (!fullDesc) return null
+            return (
+              <View style={styles.attrTag}>
+                <Text style={styles.attrText} numberOfLines={2}>
+                  {fullDesc}
+                </Text>
+              </View>
+            )
+          })()}
           <Text style={styles.unitPriceText}>
             ${item.unitPrice.toFixed(2)} / ea
           </Text>
@@ -83,7 +95,7 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
         <View style={styles.rightCol}>
           <TouchableOpacity
             style={styles.removeBtnTop}
-            onPress={() => onRemove(item.variantId)}
+            onPress={() => onRemove(itemKey)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${item.productName} from cart`}
@@ -95,12 +107,12 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
             <Text style={styles.lineTotalText}>
               ${lineTotal.toFixed(2)}
             </Text>
-            
+
             <View style={styles.stepperContainerCompact}>
               <TouchableOpacity
-                testID={`btn-dec-${item.variantId}`}
+                testID={`btn-dec-${itemKey}`}
                 style={styles.stepperBtnCompact}
-                onPress={() => onDecrease(item.variantId)}
+                onPress={() => onDecrease(itemKey)}
                 accessibilityRole="button"
                 accessibilityLabel={`Decrease quantity for ${item.productName}`}
               >
@@ -116,7 +128,7 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
                     const clean = txt.replace(/[^0-9]/g, '')
                     const num = parseInt(clean, 10)
                     if (onSetQuantity) {
-                      onSetQuantity(item.variantId, isNaN(num) ? 0 : num)
+                      onSetQuantity(itemKey, isNaN(num) ? 0 : num)
                     }
                   }}
                   selectTextOnFocus
@@ -124,9 +136,9 @@ export const CartItemRow: React.FC<CartItemRowProps> = React.memo(({
               </View>
 
               <TouchableOpacity
-                testID={`btn-inc-${item.variantId}`}
+                testID={`btn-inc-${itemKey}`}
                 style={[styles.stepperBtnCompact, isAtMaxStock && styles.stepperBtnDisabledCompact]}
-                onPress={() => onIncrease(item.variantId)}
+                onPress={() => onIncrease(itemKey)}
                 disabled={isAtMaxStock}
                 accessibilityRole="button"
                 accessibilityLabel={`Increase quantity for ${item.productName}`}
@@ -237,17 +249,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   attrTag: {
+    alignSelf: 'flex-start',
     backgroundColor: tokens.colors.actionPrimaryBg,
-    paddingHorizontal: tokens.spacing.xs + 2,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: tokens.borderRadius.xs,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: tokens.colors.primaryFixedDim,
+    marginVertical: 2,
+    maxWidth: '100%',
   },
   attrText: {
     color: tokens.colors.primaryContainer,
-    fontSize: tokens.typography.captionSmall.fontSize,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   priceCol: {
     alignItems: 'flex-end',

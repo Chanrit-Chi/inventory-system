@@ -30,7 +30,9 @@ class Attribute extends Model
 
     public function values(): HasMany
     {
-        return $this->hasMany(AttributeValue::class, 'attribute_id');
+        return $this->hasMany(AttributeValue::class, 'attribute_id')
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('created_at', 'asc');
     }
 
     public function productAttributes(): HasMany

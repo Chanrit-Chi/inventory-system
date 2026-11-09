@@ -23,6 +23,7 @@ class OrderItem extends Model
         'subtotal',
         'discount_amount',
         'final_amount',
+        'options',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class OrderItem extends Model
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'final_amount' => 'decimal:2',
+            'options' => 'array',
         ];
     }
 

@@ -130,22 +130,25 @@ export const CartList: React.FC<CartListProps> = ({
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
         data={cart}
-        keyExtractor={(item) => String(item.variantId)}
+        keyExtractor={(item) => String(item.cartItemId || item.variantId)}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <CartItemRow
-            item={item}
-            warning={stockWarnings[item.variantId]}
-            onIncrease={onIncrease}
-            onDecrease={() => handleDecreaseItem(item.variantId, item.productName, item.quantity)}
-            onRemove={() => handleRemoveItem(item.variantId, item.productName)}
-            onSetQuantity={(id, qty) => handleSetQuantity(id, item.productName, qty)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const itemKey = item.cartItemId || item.variantId
+          return (
+            <CartItemRow
+              item={item}
+              warning={stockWarnings[item.variantId]}
+              onIncrease={() => onIncrease(itemKey)}
+              onDecrease={() => handleDecreaseItem(itemKey, item.productName, item.quantity)}
+              onRemove={() => handleRemoveItem(itemKey, item.productName)}
+              onSetQuantity={(id, qty) => handleSetQuantity(id, item.productName, qty)}
+            />
+          )
+        }}
       />
     </View>
   )

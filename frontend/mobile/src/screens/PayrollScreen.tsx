@@ -43,6 +43,7 @@ import {
   getStaffName,
   calculatePayrollSummary,
   MONTH_NAMES,
+  getPeriodDateRange,
 } from './payroll/payrollUtils'
 import { SalaryManagementModal } from './payroll/components/SalaryManagementModal'
 import { StandalonePayoutModal } from './payroll/components/StandalonePayoutModal'
@@ -101,11 +102,14 @@ export default function PayrollScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkPaying, setBulkPaying] = useState(false)
 
-  // Filters (default to all months for full year visibility)
-  const [filterMonth, setFilterMonth] = useState<number | 'ALL'>('ALL')
-  const [filterYear, setFilterYear] = useState<number | 'ALL'>(new Date().getFullYear())
+  // Filters (default to current month, auto-fallback to ALL if current month not created yet)
+  const currentMonthNum = new Date().getMonth() + 1
+  const currentYearNum = new Date().getFullYear()
+  const [filterMonth, setFilterMonth] = useState<number | 'ALL'>(currentMonthNum)
+  const [filterYear, setFilterYear] = useState<number | 'ALL'>(currentYearNum)
   const [filterStatus, setFilterStatus] = useState<string>('ALL')
   const [searchMonthly, setSearchMonthly] = useState('')
+  const initialMonthCheckedRef = useRef(false)
 
   // Sub-tab Navigation
   const [activePayrollTab, setActivePayrollTab] = useState<'monthly' | 'thirteenthMonth'>('monthly')
@@ -252,6 +256,31 @@ export default function PayrollScreen() {
           if (!meta && (res as any).meta) {
             meta = (res as any).meta
           }
+        }
+
+        // If on initial mount with default current month, and no payroll created yet -> clear filter to ALL months
+        if (!initialMonthCheckedRef.current && !isLoadMore && filterMonth !== 'ALL' && list.length === 0) {
+          initialMonthCheckedRef.current = true
+          setFilterMonth('ALL')
+          const fallbackParams: { year?: number; page?: number; per_page?: number } = {
+            page: 1,
+            per_page: 20,
+          }
+          if (filterYear !== 'ALL') fallbackParams.year = filterYear
+          const fallbackRes = await fetchPayrolls(fallbackParams)
+          if (fallbackRes) {
+            const fbData = (fallbackRes as any).data
+            if (Array.isArray(fbData)) {
+              list = fbData
+            } else if (fbData && typeof fbData === 'object' && 'data' in fbData && Array.isArray(fbData.data)) {
+              list = fbData.data
+              meta = fbData
+            } else if (Array.isArray(fallbackRes)) {
+              list = fallbackRes
+            }
+          }
+        } else if (!initialMonthCheckedRef.current) {
+          initialMonthCheckedRef.current = true
         }
 
         if (isLoadMore) {
@@ -508,66 +537,102 @@ export default function PayrollScreen() {
       return
     }
 
-    setSavingDetail(true)
-    try {
-      const res = await updatePayroll(editingPayroll.id, {
-        working_days: parseInt(workingDays) || 26,
-        performance_benefit: parseFloat(perfBenefit) || 0,
-        delivery_benefit: parseFloat(delivBenefit) || 0,
-        overtime_days: parseFloat(otDays) || 0,
-        unpaid_leave_days: parseFloat(unpaidDays) || 0,
-        collective_benefit: parseFloat(collecBenefit) || 0,
-        other_benefits: parseFloat(otherBenefit) || 0,
-        thirteenth_month_payout: payoutVal,
-        incentive_override:
-          incentiveMode === 'MANUAL' ? parseFloat(manualIncentive) || 0 : null,
-        status: mode === 'finalize' ? 'FINALIZED' : 'DRAFT',
-      })
-      if (res && (res.success || res.data) && res.data) {
-        const updated: Payroll = res.data
-        setEditingPayroll(updated)
-        setPayrolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
-        setDetailVisible(false)
-        Alert.alert(
-          mode === 'finalize' ? 'Finalized' : 'Saved',
-          mode === 'finalize'
-            ? 'Payroll saved and marked as FINALIZED.'
-            : 'Payroll draft saved successfully.'
-        )
-      } else {
-        Alert.alert('Error', res?.message || 'Failed to update payroll.')
+    const executeSave = async () => {
+      setSavingDetail(true)
+      try {
+        const res = await updatePayroll(editingPayroll.id, {
+          working_days: parseInt(workingDays) || 26,
+          performance_benefit: parseFloat(perfBenefit) || 0,
+          delivery_benefit: parseFloat(delivBenefit) || 0,
+          overtime_days: parseFloat(otDays) || 0,
+          unpaid_leave_days: parseFloat(unpaidDays) || 0,
+          collective_benefit: parseFloat(collecBenefit) || 0,
+          other_benefits: parseFloat(otherBenefit) || 0,
+          thirteenth_month_payout: payoutVal,
+          incentive_override:
+            incentiveMode === 'MANUAL' ? parseFloat(manualIncentive) || 0 : null,
+          status: mode === 'finalize' ? 'FINALIZED' : 'DRAFT',
+        })
+        if (res && (res.success || res.data) && res.data) {
+          const updated: Payroll = res.data
+          setEditingPayroll(updated)
+          setPayrolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+          setDetailVisible(false)
+          Alert.alert(
+            mode === 'finalize' ? 'Finalized' : 'Saved',
+            mode === 'finalize'
+              ? 'Payroll saved and marked as FINALIZED.'
+              : 'Payroll draft saved successfully.'
+          )
+        } else {
+          Alert.alert('Error', res?.message || 'Failed to update payroll.')
+        }
+      } catch (err: unknown) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save changes.')
+      } finally {
+        setSavingDetail(false)
       }
-    } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save changes.')
-    } finally {
-      setSavingDetail(false)
     }
+
+    if (mode === 'finalize') {
+      const staffName = getStaffName(editingPayroll, users)
+      Alert.alert(
+        'Finalize Payroll',
+        `Finalize payroll for ${staffName}? Net Pay: ${formatCurrency(summary.net)}. Status will lock.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Finalize', onPress: executeSave },
+        ]
+      )
+      return
+    }
+
+    await executeSave()
   }
 
   const handleTransition = async (nextStatus: 'DRAFT' | 'PAID') => {
     if (!editingPayroll) return
-    setSavingDetail(true)
-    try {
-      const res = await updatePayroll(editingPayroll.id, { status: nextStatus })
-      if (res && (res.success || res.data) && res.data) {
-        const updated: Payroll = res.data
-        setEditingPayroll(updated)
-        setPayrolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
-        setDetailVisible(false)
-        Alert.alert(
-          nextStatus === 'PAID' ? 'Marked as Paid' : 'Reopened',
-          nextStatus === 'PAID'
-            ? 'This payroll is now marked as PAID.'
-            : 'Payroll reopened as DRAFT and can be edited again.'
-        )
-      } else {
-        Alert.alert('Error', res?.message || 'Failed to update status.')
+
+    const executeTransition = async () => {
+      setSavingDetail(true)
+      try {
+        const res = await updatePayroll(editingPayroll.id, { status: nextStatus })
+        if (res && (res.success || res.data) && res.data) {
+          const updated: Payroll = res.data
+          setEditingPayroll(updated)
+          setPayrolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+          setDetailVisible(false)
+          Alert.alert(
+            nextStatus === 'PAID' ? 'Marked as Paid' : 'Reopened',
+            nextStatus === 'PAID'
+              ? 'This payroll is now marked as PAID.'
+              : 'Payroll reopened as DRAFT and can be edited again.'
+          )
+        } else {
+          Alert.alert('Error', res?.message || 'Failed to update status.')
+        }
+      } catch (err: unknown) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update status.')
+      } finally {
+        setSavingDetail(false)
       }
-    } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update status.')
-    } finally {
-      setSavingDetail(false)
     }
+
+    if (nextStatus === 'PAID') {
+      const staffName = getStaffName(editingPayroll, users)
+      const netPay = formatCurrency(editingPayroll.total_net_pay || (editingPayroll as any).total_net)
+      Alert.alert(
+        'Confirm Payment',
+        `Mark payroll for ${staffName} as PAID (Net Pay: ${netPay})? This confirms payment has been disbursed.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Confirm Paid', onPress: executeTransition },
+        ]
+      )
+      return
+    }
+
+    await executeTransition()
   }
 
   // Delete draft helper by ID (used for list and modal)
@@ -607,6 +672,68 @@ export default function PayrollScreen() {
     const staffName = getStaffName(editingPayroll, users)
     const periodStr = `${MONTH_NAMES[editingPayroll.period_month - 1] || editingPayroll.period_month} ${editingPayroll.period_year}`
     handleDeleteDraftById(editingPayroll.id, staffName, periodStr)
+  }
+
+  const handleQuickFinalize = async (item: Payroll) => {
+    const staffName = getStaffName(item, users)
+    const periodRange = getPeriodDateRange(item.period_year, item.period_month)
+    const net = formatCurrency(item.total_net_pay || (item as any).total_net)
+
+    Alert.alert(
+      'Finalize Payroll',
+      `Finalize payroll for ${staffName} (${periodRange.label}) with Net Pay ${net}? Status will lock.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Finalize',
+          onPress: async () => {
+            try {
+              const res = await updatePayroll(item.id, { status: 'FINALIZED' })
+              if (res && (res.success || res.data)) {
+                setPayrolls((prev) =>
+                  prev.map((p) => (p.id === item.id ? { ...p, status: 'FINALIZED' } : p))
+                )
+              } else {
+                Alert.alert('Error', res?.message || 'Failed to finalize.')
+              }
+            } catch (err: unknown) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to finalize.')
+            }
+          },
+        },
+      ]
+    )
+  }
+
+  const handleQuickPay = async (item: Payroll) => {
+    const staffName = getStaffName(item, users)
+    const periodRange = getPeriodDateRange(item.period_year, item.period_month)
+    const net = formatCurrency(item.total_net_pay || (item as any).total_net)
+
+    Alert.alert(
+      'Confirm Payment',
+      `Mark payroll for ${staffName} (${periodRange.label}) as PAID with Net Pay ${net}? This confirms payment has been disbursed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Paid',
+          onPress: async () => {
+            try {
+              const res = await updatePayroll(item.id, { status: 'PAID' })
+              if (res && (res.success || res.data)) {
+                setPayrolls((prev) =>
+                  prev.map((p) => (p.id === item.id ? { ...p, status: 'PAID' } : p))
+                )
+              } else {
+                Alert.alert('Error', res?.message || 'Failed to mark as paid.')
+              }
+            } catch (err: unknown) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark as paid.')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const toggleSelected = (id: string) => {
@@ -780,6 +907,8 @@ export default function PayrollScreen() {
           }
         }}
         onDeleteDraft={handleDeleteDraftById}
+        onQuickFinalize={handleQuickFinalize}
+        onQuickPay={handleQuickPay}
       />
     )
   }
@@ -846,6 +975,7 @@ export default function PayrollScreen() {
               data={filteredPayrolls}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
+              contentContainerStyle={styles.listContent}
               initialNumToRender={10}
               maxToRenderPerBatch={10}
               windowSize={5}

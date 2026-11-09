@@ -9,6 +9,7 @@ import type {
 
 export interface UsePosProductFilterProps {
   selectedCategory: string
+  setSelectedCategory?: (c: string) => void
   debouncedSearchQuery: string
 }
 

@@ -909,6 +909,24 @@ async function processBarcode(code: string): Promise<boolean> {
         category: result.product.category,
         image_url: result.product.image_url,
       }
+
+      if (result.variants.length > 1 || result.product?.prompt_variant_on_scan) {
+        selectedVariantProduct.value = targetProduct
+        showVariantModal.value = true
+        playScanBeep(true)
+        sessionScans.value.unshift({
+          id: String(Date.now()),
+          code: cleanCode,
+          name: `${targetProduct.name} (Select Size/Variant)`,
+          sku: cleanCode,
+          price: parseFloat(String(result.variants[0]?.selling_price || 0)),
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          success: true,
+        })
+        toast.info(`Please select size/variant for ${targetProduct.name}`)
+        return true
+      }
+
       targetVariant = result.variants[0]
     }
 

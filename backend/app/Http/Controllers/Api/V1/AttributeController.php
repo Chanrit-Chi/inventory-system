@@ -48,10 +48,11 @@ class AttributeController extends BaseApiController
         ]);
 
         if (!empty($validated['values'])) {
-            foreach ($validated['values'] as $valueName) {
+            foreach ($validated['values'] as $idx => $valueName) {
                 AttributeValue::create([
                     'attribute_id' => $attribute->id,
                     'value_name'   => $valueName,
+                    'sort_order'   => $idx,
                     'is_active'    => true,
                 ]);
             }
@@ -98,17 +99,19 @@ class AttributeController extends BaseApiController
             $currentMap = $currentValues->keyBy('value_name');
 
             $keptIds = [];
-            foreach ($submittedValues as $valName) {
+            foreach ($submittedValues as $idx => $valName) {
                 if ($currentMap->has($valName)) {
                     $valModel = $currentMap->get($valName);
-                    if (!$valModel->is_active) {
-                        $valModel->update(['is_active' => true]);
-                    }
+                    $valModel->update([
+                        'sort_order' => $idx,
+                        'is_active'  => true,
+                    ]);
                     $keptIds[] = $valModel->id;
                 } else {
                     $newVal = AttributeValue::create([
                         'attribute_id' => $attribute->id,
                         'value_name'   => $valName,
+                        'sort_order'   => $idx,
                         'is_active'    => true,
                     ]);
                     $keptIds[] = $newVal->id;

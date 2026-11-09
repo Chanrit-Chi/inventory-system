@@ -136,12 +136,13 @@ export const ProductGridCard = React.memo(({ product, onPress, onQuickScanBarcod
 const gridStyles = StyleSheet.create({
   card: {
     flex: 1,
+    maxWidth: '48.5%',
+    marginBottom: tokens.spacing.md,
     backgroundColor: tokens.colors.surfaceCard,
     borderRadius: tokens.borderRadius.card,
     borderWidth: 1,
     borderColor: tokens.colors.borderSubtle,
     overflow: 'hidden',
-    margin: 4,
     ...tokens.shadows.card,
   },
   imageBox: {

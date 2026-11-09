@@ -81,6 +81,7 @@ export function ProductFormModal({
     control,
     handleSubmit,
     setValue,
+    watch,
     onSubmit,
     isSavingProduct,
     selectedPhotoUri,
@@ -95,6 +96,12 @@ export function ProductFormModal({
     setSimpleBarcodeScannerOpen,
     selectedProductAttributes,
     setSelectedProductAttributes,
+    productOptions = [],
+    handleAddProductOption,
+    handleRemoveProductOption,
+    handleToggleProductOptionValue,
+    handleSelectAllOptionValues,
+    handleClearOptionValues,
     handleToggleAttributeValue,
     handleRemoveAttribute,
     handleRemoveValueFromAttribute,
@@ -107,6 +114,9 @@ export function ProductFormModal({
   } = form
   const { height: windowHeight } = useWindowDimensions()
   const sheetHeight = Math.round(windowHeight * 0.90)
+  const [activeDropdownAttrId, setActiveDropdownAttrId] = React.useState<string | null>(null)
+  const [activeOptionName, setActiveOptionName] = React.useState<string | null>(null)
+  const [addOptionPickerOpen, setAddOptionPickerOpen] = React.useState(false)
 
   const onFormError = (errors: Record<string, { message?: string }>) => {
     const firstKey = Object.keys(errors)[0]
@@ -321,6 +331,107 @@ export function ProductFormModal({
               ))}
             </ScrollView>
 
+            {/* Product / Master Barcode with 1-Tap Camera Scanner (Shared for Simple & Variable) */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={[styles.alignedFormLabel, { marginBottom: 4 }]}>Barcode</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ flex: 1 }}>
+                  <ControlledInput
+                    name="simpleBarcode"
+                    control={control}
+                    containerStyle={styles.compactFieldContainer}
+                    placeholder="Barcode"
+                    inputProps={{ style: styles.alignedTextInput }}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.scanBarcodeRowBtn}
+                  onPress={() => setSimpleBarcodeScannerOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="barcode-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.scanBarcodeRowBtnText}>Scan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Product Options (Dynamic for any merchandise: Color, Material, Size, Flavor) */}
+            <View style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={styles.alignedFormLabel}>Product Options</Text>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#EFF6FF', borderRadius: 6 }}
+                  onPress={() => setAddOptionPickerOpen(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add-circle" size={14} color="#2563EB" />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB' }}>+ Add Option</Text>
+                </TouchableOpacity>
+              </View>
+
+              {productOptions.length === 0 ? (
+                <TouchableOpacity
+                  style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', alignItems: 'center', backgroundColor: '#F8FAFC' }}
+                  onPress={() => setAddOptionPickerOpen(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 12, color: tokens.colors.secondary }}>+ Add options (e.g. Color, Material, Flavor, Fit)</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  {productOptions.map((opt) => (
+                    <View key={opt.name} style={styles.attrCard}>
+                      <View style={styles.attrCardHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="options-outline" size={14} color={tokens.colors.primaryContainer} />
+                          <Text style={styles.attrCardTitle}>{opt.name}</Text>
+                          <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
+                            ({opt.values.length} selected)
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleRemoveProductOption(opt.name)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close-circle" size={18} color={tokens.colors.statusError} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.attrDropdownTrigger}
+                        onPress={() => setActiveOptionName(opt.name)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 6 }}>
+                          <Ionicons name="options" size={16} color={tokens.colors.primaryContainer} />
+                          <Text
+                            style={opt.values.length > 0 ? styles.attrDropdownTriggerText : styles.attrDropdownTriggerPlaceholder}
+                            numberOfLines={1}
+                          >
+                            {opt.values.length > 0
+                              ? `${opt.name}: ${opt.values.join(', ')}`
+                              : `Select ${opt.name} values...`}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-down" size={18} color={tokens.colors.secondary} />
+                      </TouchableOpacity>
+
+                      {opt.values.length > 0 && (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                          {opt.values.map((val) => (
+                            <View key={val} style={styles.selectedBadge}>
+                              <Ionicons name="checkmark-circle" size={13} color={tokens.colors.primaryContainer} />
+                              <Text style={styles.selectedBadgeText}>{val}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
             {/* Base Pricing & Reorder Row */}
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 12 }}>
               <View style={{ flex: 1 }}>
@@ -361,31 +472,7 @@ export function ProductFormModal({
             {/* SECTION A: SIMPLE PRODUCT FIELDS */}
             {productType === 'SIMPLE' && (
               <View style={styles.simpleFieldsContainer}>
-                <Text style={styles.sectionHeaderInner}>Simple Inventory Details</Text>
-                
-                {/* Supplier Barcode with 1-Tap Camera Scanner */}
-                <View style={{ marginBottom: 10 }}>
-                  <Text style={styles.alignedFormLabel}>Supplier Barcode (Physical)</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ flex: 1 }}>
-                      <ControlledInput
-                        name="simpleBarcode"
-                        control={control}
-                        containerStyle={styles.compactFieldContainer}
-                        placeholder="Scan or enter manufacturer barcode"
-                        inputProps={{ style: styles.alignedTextInput }}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.scanBarcodeRowBtn}
-                      onPress={() => setSimpleBarcodeScannerOpen(true)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="barcode-outline" size={16} color="#FFFFFF" />
-                      <Text style={styles.scanBarcodeRowBtnText}>Scan</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                <Text style={styles.sectionHeaderInner}>Inventory</Text>
 
                 {/* SKU and Initial Quantity */}
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -407,7 +494,7 @@ export function ProductFormModal({
                       label="Initial Stock"
                       labelStyle={styles.alignedFormLabel}
                       containerStyle={styles.compactFieldContainer}
-                      placeholder="10"
+                      placeholder="0"
                       inputProps={{ keyboardType: 'numeric', style: styles.alignedTextInput }}
                     />
                   </View>
@@ -418,8 +505,8 @@ export function ProductFormModal({
             {/* SECTION B: VARIABLE PRODUCT BUILDER */}
             {productType === 'VARIABLE' && (
               <View style={styles.variableBuilderContainer}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <Text style={styles.sectionHeaderInner}>Variant Attribute Matrix</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <Text style={styles.sectionHeaderInner}>Attributes & Options</Text>
                   <TouchableOpacity
                     style={styles.addCategoryChipBtn}
                     onPress={() => setNewAttrModalOpen(true)}
@@ -428,12 +515,8 @@ export function ProductFormModal({
                     <Text style={styles.addCategoryChipBtnText}>+ New Attribute</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={{ fontSize: 11, color: tokens.colors.secondary, marginBottom: 10 }}>
-                  Choose attributes from the database, then tap values to generate combinations.
-                </Text>
 
                 {/* Available DB Attributes Quick Picker */}
-                <Text style={styles.formLabel}>Available Database Attributes:</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPickerRow}>
                   {managedAttributes.map((attr) => {
                     const isAdded = selectedProductAttributes.some((a) => a.id === attr.id)
@@ -497,57 +580,37 @@ export function ProductFormModal({
                           </TouchableOpacity>
                         </View>
 
-                        {/* Value Selection Chips */}
-                        <View style={styles.valChipsWrapper}>
-                          {attr.allValues.map((val) => {
-                            const isSelected = attr.selectedValues.includes(val)
-                            return (
-                              <View
-                                key={val}
-                                style={[
-                                  styles.valChip,
-                                  isSelected && styles.valChipSelected,
-                                  { flexDirection: 'row', alignItems: 'center', paddingRight: 6 },
-                                ]}
-                              >
-                                <TouchableOpacity
-                                  style={{ flexDirection: 'row', alignItems: 'center' }}
-                                  onPress={() => handleToggleAttributeValue(attr.id, val)}
-                                >
-                                  {Boolean(isSelected) && (
-                                    <Ionicons
-                                      name="checkmark"
-                                      size={11}
-                                      color="#FFFFFF"
-                                      style={{ marginRight: 3 }}
-                                    />
-                                  )}
-                                  <Text style={[styles.valChipText, isSelected && styles.valChipTextSelected]}>
-                                    {val}
-                                  </Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  onPress={() => handleRemoveValueFromAttribute(attr.id, val)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                                  style={{ marginLeft: 5, padding: 1 }}
-                                >
-                                  <Ionicons
-                                    name="close-circle"
-                                    size={13}
-                                    color={isSelected ? 'rgba(255,255,255,0.8)' : tokens.colors.secondary}
-                                  />
-                                </TouchableOpacity>
+                        {/* Value Selection Dropdown Trigger */}
+                        <TouchableOpacity
+                          style={styles.attrDropdownTrigger}
+                          onPress={() => setActiveDropdownAttrId(attr.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 6 }}>
+                            <Ionicons name="options" size={16} color={tokens.colors.primaryContainer} />
+                            <Text
+                              style={attr.selectedValues.length > 0 ? styles.attrDropdownTriggerText : styles.attrDropdownTriggerPlaceholder}
+                              numberOfLines={1}
+                            >
+                              {attr.selectedValues.length > 0
+                                ? `${attr.name}: ${attr.selectedValues.join(', ')} (${attr.selectedValues.length} selected)`
+                                : `Select ${attr.name} options...`}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-down" size={18} color={tokens.colors.secondary} />
+                        </TouchableOpacity>
+
+                        {/* Read-only selected value badges - no accidental delete buttons */}
+                        {attr.selectedValues.length > 0 && (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                            {attr.selectedValues.map((val) => (
+                              <View key={val} style={styles.selectedBadge}>
+                                <Ionicons name="checkmark-circle" size={13} color={tokens.colors.primaryContainer} />
+                                <Text style={styles.selectedBadgeText}>{val}</Text>
                               </View>
-                            )
-                          })}
-                          <TouchableOpacity
-                            style={styles.valChipAdd}
-                            onPress={() => handleOpenAddCustomValueModal(attr.id, attr.name)}
-                          >
-                            <Ionicons name="add" size={12} color={tokens.colors.primaryContainer} />
-                            <Text style={styles.valChipAddText}>Add Value</Text>
-                          </TouchableOpacity>
-                        </View>
+                            ))}
+                          </View>
+                        )}
                       </View>
                     ))
                   )}
@@ -558,19 +621,16 @@ export function ProductFormModal({
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                         <Ionicons name="cube-outline" size={14} color={tokens.colors.primaryContainer} />
                         <Text style={{ fontSize: 12, fontWeight: '700', color: tokens.colors.onBackground }}>
-                          Initial Stock per Variant
+                          Default Stock per Variant
                         </Text>
                       </View>
-                      <Text style={{ fontSize: 10.5, color: tokens.colors.secondary, marginTop: 2 }}>
-                        Default quantity assigned to new variant combinations
-                      </Text>
                     </View>
                     <View style={{ width: 75 }}>
                       <ControlledInput
                         name="variantInitialStock"
                         control={control}
                         containerStyle={styles.compactFieldContainer}
-                        placeholder="10"
+                        placeholder="0"
                         inputProps={{ keyboardType: 'numeric', style: [styles.variantTextInput, { textAlign: 'center', fontWeight: '700' }] }}
                       />
                     </View>
@@ -584,27 +644,16 @@ export function ProductFormModal({
                   >
                     <Ionicons name="flash-outline" size={16} color={tokens.colors.onPrimary} />
                     <Text style={styles.generateBtnText}>
-                      {variantsFields.length > 0 ? 'Update Variant Combinations' : 'Generate Variant Combinations'}
+                      {variantsFields.length > 0 ? 'Update Variants' : 'Generate Variants'}
                     </Text>
                   </TouchableOpacity>
-                  {Boolean(variantsFields.length > 0) && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, paddingHorizontal: 2 }}>
-                      <Ionicons name="shield-checkmark" size={13} color="#16A34A" />
-                      <Text style={{ fontSize: 11, color: '#16A34A', fontWeight: '600' }}>
-                        Existing stock, barcodes & IDs are preserved on update
-                      </Text>
-                    </View>
-                  )}
 
                   {/* Variant Matrix Table */}
                   {Boolean(variantsFields.length > 0) && (
                     <View style={styles.matrixContainer}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.matrixTitle}>Variant Combinations ({variantsFields.length})</Text>
-                          <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
-                            Scan supplier barcodes or edit inventory
-                          </Text>
+                          <Text style={styles.matrixTitle}>Variants ({variantsFields.length})</Text>
                         </View>
                         <TouchableOpacity
                           style={{
@@ -645,14 +694,14 @@ export function ProductFormModal({
 
                           {/* Row 1: Barcode Front & Center with 1-Tap Camera Scan Button */}
                           <View style={{ marginBottom: 8 }}>
-                            <Text style={styles.variantFieldLabel}>SUPPLIER BARCODE</Text>
+                            <Text style={styles.variantFieldLabel}>BARCODE (OPTIONAL)</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                               <View style={{ flex: 1 }}>
                                 <ControlledInput
                                   name={`variantsList.${vIdx}.barcode`}
                                   control={control}
                                   containerStyle={styles.compactFieldContainer}
-                                  placeholder="Scan or type supplier barcode"
+                                  placeholder="Barcode"
                                   inputProps={{ style: styles.variantTextInput }}
                                 />
                               </View>
@@ -752,6 +801,310 @@ export function ProductFormModal({
               )}
             </TouchableOpacity>
           </View>
+
+          {/* In-Modal Attribute Value Dropdown Selector */}
+          {Boolean(activeDropdownAttrId) && (() => {
+            const currentAttr = selectedProductAttributes.find((a) => a.id === activeDropdownAttrId)
+            if (!currentAttr) return null
+            const allSelected =
+              currentAttr.allValues.length > 0 &&
+              currentAttr.allValues.every((v) => currentAttr.selectedValues.includes(v))
+
+            return (
+              <View style={styles.dialogOverlay}>
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                  activeOpacity={1}
+                  onPress={() => setActiveDropdownAttrId(null)}
+                />
+                <View style={[styles.dialogCard, { maxHeight: '80%' }]}>
+                  {/* Dialog Header */}
+                  <View style={styles.dialogHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="shirt-outline" size={18} color={tokens.colors.primaryContainer} />
+                      <Text style={styles.dialogTitle}>Select {currentAttr.name} Options</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setActiveDropdownAttrId(null)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close" size={22} color={tokens.colors.secondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Bulk Select Actions */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginVertical: 8,
+                      paddingBottom: 6,
+                      borderBottomWidth: 1,
+                      borderBottomColor: '#F1F5F9',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, color: tokens.colors.secondary }}>
+                      {currentAttr.selectedValues.length} of {currentAttr.allValues.length} selected
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={styles.dropdownQuickBtn}
+                        onPress={() => {
+                          if (allSelected) {
+                            setSelectedProductAttributes((prev) =>
+                              prev.map((a) => (a.id === currentAttr.id ? { ...a, selectedValues: [] } : a))
+                            )
+                          } else {
+                            setSelectedProductAttributes((prev) =>
+                              prev.map((a) =>
+                                a.id === currentAttr.id ? { ...a, selectedValues: [...a.allValues] } : a
+                              )
+                            )
+                          }
+                        }}
+                      >
+                        <Text style={styles.dropdownQuickBtnText}>{allSelected ? 'Clear All' : 'Select All'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.dropdownQuickBtn, { backgroundColor: tokens.colors.actionPrimaryBg }]}
+                        onPress={() => {
+                          const targetId = currentAttr.id
+                          const targetName = currentAttr.name
+                          setActiveDropdownAttrId(null)
+                          handleOpenAddCustomValueModal(targetId, targetName)
+                        }}
+                      >
+                        <Text style={[styles.dropdownQuickBtnText, { color: tokens.colors.primaryContainer }]}>
+                          + New Value
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Spacious, Easy-to-Tap Option Rows */}
+                  <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={true}>
+                    {currentAttr.allValues.map((val) => {
+                      const isSelected = currentAttr.selectedValues.includes(val)
+                      return (
+                        <TouchableOpacity
+                          key={val}
+                          style={[styles.dropdownOptionRow, isSelected && styles.dropdownOptionRowSelected]}
+                          onPress={() => handleToggleAttributeValue(currentAttr.id, val)}
+                          activeOpacity={0.6}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                            <Ionicons
+                              name={isSelected ? 'checkbox' : 'square-outline'}
+                              size={22}
+                              color={isSelected ? tokens.colors.primaryContainer : '#94A3B8'}
+                            />
+                            <Text
+                              style={[styles.dropdownOptionText, isSelected && styles.dropdownOptionTextSelected]}
+                            >
+                              {val}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </ScrollView>
+
+                  {/* Footer Done Button */}
+                  <TouchableOpacity
+                    style={[styles.dialogBtn, { marginTop: 12 }]}
+                    onPress={() => setActiveDropdownAttrId(null)}
+                  >
+                    <Text style={styles.dialogBtnText}>
+                      Done ({currentAttr.selectedValues.length} Selected)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )
+          })()}
+
+          {/* Add Option Picker Modal */}
+          {Boolean(addOptionPickerOpen) && (
+            <View style={styles.dialogOverlay}>
+              <TouchableOpacity
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                activeOpacity={1}
+                onPress={() => setAddOptionPickerOpen(false)}
+              />
+              <View style={[styles.dialogCard, { maxHeight: '70%' }]}>
+                <View style={styles.dialogHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="add-circle" size={18} color={tokens.colors.primaryContainer} />
+                    <Text style={styles.dialogTitle}>Add Product Option</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAddOptionPickerOpen(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={22} color={tokens.colors.secondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 300, marginVertical: 8 }} showsVerticalScrollIndicator={true}>
+                  {managedAttributes
+                    .filter((a) => !productOptions.some((po) => po.name.toLowerCase() === a.name.toLowerCase()))
+                    .map((attr) => (
+                      <TouchableOpacity
+                        key={attr.id}
+                        style={styles.dropdownOptionRow}
+                        onPress={() => {
+                          handleAddProductOption(attr.name)
+                          setAddOptionPickerOpen(false)
+                          setActiveOptionName(attr.name)
+                        }}
+                        activeOpacity={0.6}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                          <Ionicons name="options-outline" size={18} color={tokens.colors.primaryContainer} />
+                          <View>
+                            <Text style={styles.dropdownOptionText}>{attr.name}</Text>
+                            <Text style={{ fontSize: 11, color: tokens.colors.secondary }}>
+                              {attr.values?.length || 0} values in database
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={tokens.colors.secondary} />
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[styles.dialogBtn, { backgroundColor: '#F1F5F9' }]}
+                  onPress={() => setAddOptionPickerOpen(false)}
+                >
+                  <Text style={[styles.dialogBtnText, { color: tokens.colors.secondary }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Option Values Dropdown Selector */}
+          {Boolean(activeOptionName) && (() => {
+            const currentOption = productOptions.find((o) => o.name.toLowerCase() === activeOptionName!.toLowerCase())
+            const matchingAttr = managedAttributes.find((a) => a.name.toLowerCase() === activeOptionName!.toLowerCase())
+            const availableValues = matchingAttr?.values && matchingAttr.values.length > 0
+              ? matchingAttr.values
+              : currentOption?.values || []
+            const selectedVals = currentOption?.values || []
+            const allSelected = availableValues.length > 0 && availableValues.every((v) => selectedVals.includes(v))
+
+            return (
+              <View style={styles.dialogOverlay}>
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                  activeOpacity={1}
+                  onPress={() => setActiveOptionName(null)}
+                />
+                <View style={[styles.dialogCard, { maxHeight: '80%' }]}>
+                  {/* Dialog Header */}
+                  <View style={styles.dialogHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="options" size={18} color={tokens.colors.primaryContainer} />
+                      <Text style={styles.dialogTitle}>Select {activeOptionName} Options</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setActiveOptionName(null)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close" size={22} color={tokens.colors.secondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Bulk Select Actions */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginVertical: 8,
+                      paddingBottom: 6,
+                      borderBottomWidth: 1,
+                      borderBottomColor: '#F1F5F9',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, color: tokens.colors.secondary }}>
+                      {selectedVals.length} of {availableValues.length} selected
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={styles.dropdownQuickBtn}
+                        onPress={() => {
+                          if (allSelected) {
+                            handleClearOptionValues(activeOptionName!)
+                          } else {
+                            handleSelectAllOptionValues(activeOptionName!, availableValues)
+                          }
+                        }}
+                      >
+                        <Text style={styles.dropdownQuickBtnText}>
+                          {allSelected ? 'Clear All' : 'Select All'}
+                        </Text>
+                      </TouchableOpacity>
+                      {Boolean(matchingAttr) && (
+                        <TouchableOpacity
+                          style={[styles.dropdownQuickBtn, { backgroundColor: tokens.colors.actionPrimaryBg }]}
+                          onPress={() => {
+                            const targetId = matchingAttr!.id
+                            const targetName = matchingAttr!.name
+                            setActiveOptionName(null)
+                            handleOpenAddCustomValueModal(targetId, targetName)
+                          }}
+                        >
+                          <Text style={[styles.dropdownQuickBtnText, { color: tokens.colors.primaryContainer }]}>
+                            + New Value
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Value Rows with Checkboxes */}
+                  <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={true}>
+                    {availableValues.map((v) => {
+                      const isSelected = selectedVals.includes(v)
+                      return (
+                        <TouchableOpacity
+                          key={v}
+                          style={[styles.dropdownOptionRow, isSelected && styles.dropdownOptionRowSelected]}
+                          onPress={() => handleToggleProductOptionValue(activeOptionName!, v)}
+                          activeOpacity={0.6}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                            <Ionicons
+                              name={isSelected ? 'checkbox' : 'square-outline'}
+                              size={22}
+                              color={isSelected ? tokens.colors.primaryContainer : '#94A3B8'}
+                            />
+                            <Text
+                              style={[styles.dropdownOptionText, isSelected && styles.dropdownOptionTextSelected]}
+                            >
+                              {v}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </ScrollView>
+
+                  {/* Footer Done Button */}
+                  <TouchableOpacity
+                    style={[styles.dialogBtn, { marginTop: 12 }]}
+                    onPress={() => setActiveOptionName(null)}
+                  >
+                    <Text style={styles.dialogBtnText}>
+                      Done ({selectedVals.length} Selected)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )
+          })()}
 
           {/* In-Modal Inline Creator Overlays */}
           <InlineCreatorModals

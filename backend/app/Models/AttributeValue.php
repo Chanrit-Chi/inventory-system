@@ -20,12 +20,14 @@ class AttributeValue extends Model
         'value_name',
         'value',
         'code',
+        'sort_order',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
+            'sort_order' => 'integer',
             'is_active' => 'boolean',
         ];
     }

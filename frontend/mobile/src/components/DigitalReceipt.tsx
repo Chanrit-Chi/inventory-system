@@ -311,7 +311,12 @@ export const DigitalReceipt = forwardRef<ViewShot, DigitalReceiptProps>((props, 
             <View key={item.id ? `${item.id}-${idx}` : `ii-${idx}`} style={styles.itemRow}>
               <View style={styles.itemLeft}>
                 <Text style={styles.itemSku} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.itemSub}>{item.sku ? item.sku + ' • ' : ''}{item.quantity} × ${item.unitPrice.toFixed(2)}</Text>
+                {Boolean(item.sku) && (
+                  <Text style={styles.itemOptionDetail} numberOfLines={2}>
+                    {item.sku}
+                  </Text>
+                )}
+                <Text style={styles.itemSub}>{item.quantity} × ${item.unitPrice.toFixed(2)}</Text>
               </View>
               <Text style={styles.itemLineTotal}>${item.totalPrice.toFixed(2)}</Text>
             </View>
@@ -627,6 +632,12 @@ const styles = StyleSheet.create({
     color: tokens.colors.onBackground,
     fontSize: tokens.typography.bodySemibold.fontSize,
     fontWeight: '700',
+  },
+  itemOptionDetail: {
+    color: tokens.colors.primaryContainer,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
   itemSub: {
     color: tokens.colors.secondary,

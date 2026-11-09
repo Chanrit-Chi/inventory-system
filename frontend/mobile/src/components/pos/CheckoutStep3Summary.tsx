@@ -107,8 +107,17 @@ export function CheckoutStep3Summary({
           {cart.map((item) => {
             const unitPrice = parseFloat(String(item.unitPrice || '0')) || 0
             const lineTotal = unitPrice * item.quantity
+            const optionsText = item.selectedOptions
+              ? Object.entries(item.selectedOptions).map(([k, v]) => `${k}: ${v}`).join(' • ')
+              : ''
+            const fullVariantDesc = item.attributesSummary && optionsText
+              ? item.attributesSummary.includes(optionsText)
+                ? item.attributesSummary
+                : `${item.attributesSummary} • ${optionsText}`
+              : item.attributesSummary || optionsText
+
             return (
-              <View key={item.variantId} style={styles.summaryItemRow}>
+              <View key={item.cartItemId || item.variantId} style={styles.summaryItemRow}>
                 <View style={styles.summaryItemLeft}>
                   <View style={styles.summaryItemQtyBadge}>
                     <Text style={styles.summaryItemQtyText}>{item.quantity}x</Text>
@@ -118,9 +127,9 @@ export function CheckoutStep3Summary({
                       {item.productName}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                      {Boolean(item.attributesSummary) && (
-                        <Text style={styles.summaryItemVariant} numberOfLines={1}>
-                          {item.attributesSummary}
+                      {Boolean(fullVariantDesc) && (
+                        <Text style={styles.summaryItemVariant} numberOfLines={2}>
+                          {fullVariantDesc}
                         </Text>
                       )}
                       {Boolean(item.sku) && (

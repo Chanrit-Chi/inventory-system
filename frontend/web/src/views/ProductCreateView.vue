@@ -39,6 +39,7 @@ const form = ref({
   product_type: 'SIMPLE' as 'SIMPLE' | 'VARIABLE',
   name: '',
   barcode: '',
+  prompt_variant_on_scan: false,
   purchase_price: '',
   selling_price: '',
   initial_stock: 0,
@@ -336,6 +337,7 @@ async function submit() {
     if (form.value.barcode.trim()) {
       formData.append('barcode', form.value.barcode.trim())
     }
+    formData.append('prompt_variant_on_scan', form.value.prompt_variant_on_scan ? '1' : '0')
     formData.append('purchase_price', pPrice.toString())
     formData.append('selling_price', sPrice.toString())
     formData.append('default_reorder_level', (parseInt(form.value.default_reorder_level) || 5).toString())
@@ -366,6 +368,7 @@ async function submit() {
     const payload: any = {
       name: form.value.name.trim(),
       barcode: form.value.barcode.trim() || undefined,
+      prompt_variant_on_scan: Boolean(form.value.prompt_variant_on_scan),
       purchase_price: pPrice,
       selling_price: sPrice,
       default_reorder_level: parseInt(form.value.default_reorder_level) || 5,
@@ -525,6 +528,18 @@ defineExpose({
                 placeholder="e.g. 8859123456789"
                 class="h-9 bg-surface text-sm font-mono"
               />
+              <div class="mt-2 flex items-start gap-2">
+                <input
+                  id="product-prompt-variant-on-scan"
+                  v-model="form.prompt_variant_on_scan"
+                  type="checkbox"
+                  class="mt-0.5 rounded border-input"
+                />
+                <label for="product-prompt-variant-on-scan" class="text-xs text-muted-foreground cursor-pointer select-none">
+                  <span class="font-medium text-foreground block">Prompt variant/size on scan</span>
+                  Scanning base barcode at POS opens size picker.
+                </label>
+              </div>
             </div>
 
             <div>

@@ -43,6 +43,11 @@ interface CartContextValue {
   totalItemCount: number
   stockWarnings: Record<string, string>
   hasOutOfStockItems: boolean
+
+  // Register / Checkout drawer trigger
+  checkoutModalRequested: boolean
+  requestOpenCheckout: () => void
+  consumeCheckoutRequest: () => void
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined)

@@ -220,6 +220,49 @@ export const PayrollFilterBar: React.FC<PayrollFilterBarProps> = ({
         </TouchableOpacity>
       </View>
 
+      {/* ── ROW 3: PIPELINE STATUS TABS (Direct Triage) ────────────────────── */}
+      <View style={filterStyles.statusTabsRow}>
+        <TouchableOpacity
+          style={[filterStyles.statusTab, filterStatus === 'ALL' && filterStyles.statusTabActive]}
+          onPress={() => setFilterStatus('ALL')}
+          activeOpacity={0.7}
+        >
+          <Text style={[filterStyles.statusTabText, filterStatus === 'ALL' && filterStyles.statusTabTextActive]}>
+            All ({payrolls.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[filterStyles.statusTab, filterStatus === 'DRAFT' && filterStyles.statusTabActive]}
+          onPress={() => setFilterStatus('DRAFT')}
+          activeOpacity={0.7}
+        >
+          <Text style={[filterStyles.statusTabText, filterStatus === 'DRAFT' && filterStyles.statusTabTextActive]}>
+            Drafts ({payrolls.filter((p) => p.status === 'DRAFT').length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[filterStyles.statusTab, filterStatus === 'FINALIZED' && filterStyles.statusTabActive]}
+          onPress={() => setFilterStatus('FINALIZED')}
+          activeOpacity={0.7}
+        >
+          <Text style={[filterStyles.statusTabText, filterStatus === 'FINALIZED' && filterStyles.statusTabTextActive]}>
+            To Pay ({payrolls.filter((p) => p.status === 'FINALIZED').length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[filterStyles.statusTab, filterStatus === 'PAID' && filterStyles.statusTabActive]}
+          onPress={() => setFilterStatus('PAID')}
+          activeOpacity={0.7}
+        >
+          <Text style={[filterStyles.statusTabText, filterStatus === 'PAID' && filterStyles.statusTabTextActive]}>
+            Paid ({payrolls.filter((p) => p.status === 'PAID').length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Period Filter Modal */}
       <PeriodFilterModal
         visible={modalVisible}
@@ -429,5 +472,33 @@ const filterStyles = StyleSheet.create({
   filterBtnTextActive: {
     color: tokens.colors.primaryContainer,
     fontWeight: '800',
+  },
+  statusTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  statusTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: tokens.colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+  },
+  statusTabActive: {
+    backgroundColor: tokens.colors.primaryContainer,
+    borderColor: tokens.colors.primaryContainer,
+  },
+  statusTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: tokens.colors.secondary,
+  },
+  statusTabTextActive: {
+    color: tokens.colors.onPrimary,
   },
 })

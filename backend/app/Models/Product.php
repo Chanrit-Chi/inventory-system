@@ -21,6 +21,8 @@ class Product extends Model
         'name',
         'sku',
         'barcode',
+        'prompt_variant_on_scan',
+        'custom_options',
         'description',
         'purchase_price',
         'cost_price',
@@ -40,6 +42,8 @@ class Product extends Model
             'default_reorder_level' => 'integer',
             'is_active' => 'boolean',
             'is_composite' => 'boolean',
+            'prompt_variant_on_scan' => 'boolean',
+            'custom_options' => 'array',
         ];
     }
 

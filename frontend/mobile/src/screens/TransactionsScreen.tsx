@@ -318,6 +318,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
       })}`
     }
     if (dateRange === 'today') return 'Today'
+    if (dateRange === 'yesterday') return 'Yesterday'
     if (dateRange === '7d') return '7 Days'
     if (dateRange === '30d') return '30 Days'
     if (dateRange === 'year') return 'Year'
@@ -375,6 +376,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({
         onResetChannel={() => setChannelFilter('ALL')}
         paymentMethodFilter={paymentMethodFilter}
         onResetPaymentMethod={() => setPaymentMethodFilter('ALL')}
+        onSelectDateRange={(mode) => setDateRange(mode)}
       />
 
       {/* Main Content Area */}

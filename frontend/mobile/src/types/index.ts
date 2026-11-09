@@ -54,6 +54,7 @@ export interface ScannedProduct {
   purchase_price?: string | null
   reorder_level?: number | null
   is_active?: boolean
+  custom_options?: Array<{ name: string; values: string[] }> | Record<string, string[]> | null
 }
 
 export interface ScannedVariant {
@@ -114,6 +115,8 @@ export interface Product {
   name: string
   sku: string
   barcode?: string | null
+  prompt_variant_on_scan?: boolean
+  custom_options?: Array<{ name: string; values: string[] }> | Record<string, string[]> | null
   description?: string | null
   purchase_price: string | number
   cost_price?: string | number
@@ -138,6 +141,7 @@ export interface PoGroup {
 }
 
 export interface CartItem {
+  cartItemId?: string
   variantId: string
   sku: string
   productName: string
@@ -145,6 +149,7 @@ export interface CartItem {
   unitPrice: number
   availableStock: number
   attributesSummary?: string
+  selectedOptions?: Record<string, string>
   imageUrl?: string
 }
 
@@ -182,6 +187,7 @@ export interface CheckoutItem {
   variant_id: string
   quantity: number
   unit_price: number
+  options?: Record<string, string>
 }
 
 export interface CheckoutPayload {
@@ -220,6 +226,7 @@ export interface OrderItem {
   product_name?: string
   productName?: string
   sku?: string
+  options?: Record<string, string> | Array<{ name: string; value: string }> | null
   product?: {
     id?: string
     name?: string

@@ -52,8 +52,8 @@ class AttributeSeeder extends Seeder
                 ]
             );
 
-            foreach ($attrData['values'] as $valData) {
-                AttributeValue::firstOrCreate(
+            foreach ($attrData['values'] as $idx => $valData) {
+                AttributeValue::updateOrCreate(
                     [
                         'attribute_id' => $attribute->id,
                         'value_name' => $valData['value'],
@@ -61,6 +61,7 @@ class AttributeSeeder extends Seeder
                     [
                         'value' => $valData['value'],
                         'code' => $valData['code'],
+                        'sort_order' => $idx,
                         'is_active' => true,
                     ]
                 );

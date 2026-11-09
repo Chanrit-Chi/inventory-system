@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useIsFocused } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { tokens } from '../theme/tokens'
-import { getOrders, getDashboardSummary, fetchMyPerformance } from '../api/endpoints'
+import { getDashboardSummary, fetchMyPerformance } from '../api/endpoints'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../context/AuthContext'
 import { StaffDetailModal } from '../components/StaffDetailModal'
@@ -22,7 +22,6 @@ import { LowStockBanner } from './home/components/LowStockBanner'
 import { MetricGlanceRow } from './home/components/MetricGlanceRow'
 import { QuickOperationsGrid } from './home/components/QuickOperationsGrid'
 import { ManagementModulesGrid, ModuleItem } from './home/components/ManagementModulesGrid'
-import { RecentTransactionsFeed } from './home/components/RecentTransactionsFeed'
 import { DailyTargetModal } from './home/components/DailyTargetModal'
 
 export interface HomeScreenProps {
@@ -38,12 +37,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigate,
   onOpenStockIn,
   onOpenStockAdjustment,
-  onSelectOrder,
 }) => {
   const { can, canAccessTab } = usePermissions()
   const { currentUser } = useAuth()
-  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all')
-  const [orders, setOrders] = useState<Order[]>([])
   const isFocused = useIsFocused()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
@@ -51,7 +47,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [myPerfPeriod, setMyPerfPeriod] = useState<'today' | '7d' | 'month'>('today')
   const [myPerfModalOpen, setMyPerfModalOpen] = useState(false)
   const [dailySettlementModalOpen, setDailySettlementModalOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   const canViewFinancials = useMemo(() => {
@@ -185,31 +180,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   }, [])
 
-  // Fetch recent orders from backend
-  const fetchRecentOrders = useCallback(async () => {
-    try {
-      setLoading(true)
-      const res = await getOrders({ page: 1 })
-      if (res && res.data && res.data.length > 0) {
-        setOrders(res.data)
-      } else {
-        setOrders([])
-      }
-    } catch {
-      setOrders([])
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
-
   useEffect(() => {
     if (isFocused) {
       fetchDashboardData()
       fetchMyPerformanceData(myPerfPeriod)
-      fetchRecentOrders()
     }
-  }, [isFocused, myPerfPeriod, fetchDashboardData, fetchMyPerformanceData, fetchRecentOrders])
+  }, [isFocused, myPerfPeriod, fetchDashboardData, fetchMyPerformanceData])
 
   const handleLowStockPress = useCallback(() => {
     if (can('products:read')) {
@@ -228,13 +204,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([fetchDashboardData(), fetchMyPerformanceData(myPerfPeriod), fetchRecentOrders()])
-  }, [myPerfPeriod, fetchDashboardData, fetchMyPerformanceData, fetchRecentOrders])
-
-  const filteredOrders = useMemo(() => {
-    if (statusFilter === 'all') return orders
-    return orders.filter((o) => (o.status || '').toLowerCase() === statusFilter)
-  }, [orders, statusFilter])
+    await Promise.all([fetchDashboardData(), fetchMyPerformanceData(myPerfPeriod)])
+  }, [myPerfPeriod, fetchDashboardData, fetchMyPerformanceData])
 
   return (
     <ScrollView
@@ -314,18 +285,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <ManagementModulesGrid
         visibleModules={visibleModules}
         onNavigate={onNavigate}
-      />
-
-      {/* Recent Transactions Feed */}
-      <RecentTransactionsFeed
-        orders={orders}
-        filteredOrders={filteredOrders}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        loading={loading}
-        refreshing={refreshing}
-        onNavigate={onNavigate}
-        onSelectOrder={onSelectOrder}
       />
 
       {/* Daily Target Customizer Modal */}

@@ -157,6 +157,7 @@ class CheckoutService
                         'discount_amount' => $lineDiscount,
                         'total_price'     => $lineFinal,
                         'final_amount'    => $lineFinal,
+                        'options'         => $item['options'] ?? null,
                     ];
                 }
 
@@ -247,6 +248,7 @@ class CheckoutService
                         'discount_amount' => $pItem['discount_amount'],
                         'total_price'     => $pItem['total_price'],
                         'final_amount'    => $pItem['final_amount'],
+                        'options'         => $pItem['options'] ?? null,
                     ]);
 
                     StockMovement::create([
@@ -282,14 +284,14 @@ class CheckoutService
                     Customer::where('id', $customerId)->update($customerUpdateData);
                 }
 
-                $loadedOrder = $order->load(['items.variant', 'payments', 'customer', 'channel']);
+                $loadedOrder = $order->load(['items.product', 'items.variant.attributeValues.attribute', 'payments', 'customer', 'channel']);
                 \App\Events\OrderPlaced::dispatch($loadedOrder);
 
                 return $loadedOrder;
             });
         } catch (\Illuminate\Database\QueryException $e) {
             $existing = Order::where('client_mutation_id', $data['client_mutation_id'])
-                ->with(['items.variant', 'payments', 'customer', 'channel'])
+                ->with(['items.product', 'items.variant.attributeValues.attribute', 'payments', 'customer', 'channel'])
                 ->first();
             if ($existing !== null) {
                 return $existing;

@@ -40,6 +40,12 @@ class StoreProductRequest extends FormRequest
                 $merge['attributes'] = $decoded;
             }
         }
+        if (is_string($this->input('custom_options'))) {
+            $decoded = json_decode($this->input('custom_options'), true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $merge['custom_options'] = $decoded;
+            }
+        }
         if ($merge) {
             $this->merge($merge);
         }
@@ -50,6 +56,8 @@ class StoreProductRequest extends FormRequest
         return [
             'name'                              => ['required', 'string', 'max:255'],
             'barcode'                           => ['nullable', 'string', 'max:100'],
+            'prompt_variant_on_scan'            => ['nullable', 'boolean'],
+            'custom_options'                    => ['nullable', 'array'],
             'sku'                               => ['nullable', 'string', 'max:100'],
             'purchase_price'                    => ['required', 'numeric', 'min:0'],
             'selling_price'                     => ['required', 'numeric', 'min:0'],

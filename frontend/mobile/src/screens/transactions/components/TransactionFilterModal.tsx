@@ -69,6 +69,7 @@ const DATE_OPTIONS: Array<{
 }> = [
   { key: 'all', label: 'All Time', icon: 'infinite-outline' },
   { key: 'today', label: 'Today', icon: 'today-outline' },
+  { key: 'yesterday', label: 'Yesterday', icon: 'time-outline' },
   { key: '7d', label: '7 Days', icon: 'calendar-outline' },
   { key: '30d', label: '30 Days', icon: 'calendar-outline' },
   { key: 'year', label: 'This Year', icon: 'calendar-number-outline' },

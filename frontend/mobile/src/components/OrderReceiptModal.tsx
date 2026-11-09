@@ -38,12 +38,21 @@ export interface OrderReceiptModalProps {
   onNewSale?: () => void
   onClose?: () => void
   onNavigateSettings?: () => void
-  onUpdateStatus?: (orderId: string, status: string, paymentMethod?: string) => Promise<void>
+  onUpdateStatus?: (orderId: string, status: string, paymentMethod?: string, notes?: string) => Promise<void>
   onUpdateOrder?: (
     orderId: string,
     updates: { notes?: string; delivery_address?: string; seller_id?: string | null }
   ) => Promise<void>
 }
+
+const CANCELLATION_REASONS = [
+  'Customer changed mind',
+  'Wrong item / order mistake',
+  'Defective / damaged item',
+  'Payment issue / failed transaction',
+  'Duplicate order',
+  'Other reason',
+]
 
 const PAYMENT_METHODS = [
   { id: 'ABA QR', label: 'ABA / KHQR', icon: 'qr-code' as const, color: '#005F83', bg: '#E0F2FE' },
@@ -69,6 +78,9 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
   const [isUpdating, setIsUpdating] = useState(false)
   const [showSettleModal, setShowSettleModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [selectedCancelReason, setSelectedCancelReason] = useState(CANCELLATION_REASONS[0])
+  const [customCancelNotes, setCustomCancelNotes] = useState('')
   const [selectedMethod, setSelectedMethod] = useState('ABA QR')
   const [editNotes, setEditNotes] = useState('')
   const [editAddress, setEditAddress] = useState('')
@@ -87,16 +99,67 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
   const items = activeOrder?.items ?? []
 
   const receiptItems = useMemo(() => {
-    return items.map((item, index) => ({
-      id: item.id || `item-${index}`,
-      name: item.variant?.sku || `Item #${index + 1}`,
-      sku: item.variant?.attribute_values && item.variant.attribute_values.length > 0
-        ? item.variant.attribute_values.map(a => a.value_name).join(' • ')
-        : undefined,
-      quantity: item.quantity,
-      unitPrice: typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0,
-      totalPrice: typeof item.line_total === 'number' ? item.line_total : parseFloat(String(item.line_total || '0')) || item.quantity * (typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price || '0')) || 0)
-    }))
+    return items.map((item, index) => {
+      // Format options string (Color, Material, etc.)
+      const optionsList: string[] = []
+      const rawOpts = item.options || (item as any).selectedOptions
+      let parsedOptions: any = rawOpts
+      if (typeof parsedOptions === 'string') {
+        try {
+          parsedOptions = JSON.parse(parsedOptions)
+        } catch {
+          parsedOptions = null
+        }
+      }
+
+      if (parsedOptions) {
+        if (typeof parsedOptions === 'object' && !Array.isArray(parsedOptions)) {
+          Object.entries(parsedOptions).forEach(([k, v]) => {
+            if (v) optionsList.push(`${k}: ${v}`)
+          })
+        } else if (Array.isArray(parsedOptions)) {
+          parsedOptions.forEach((o: any) => {
+            if (o.name && o.value) optionsList.push(`${o.name}: ${o.value}`)
+            else if (o.name && Array.isArray(o.values)) optionsList.push(`${o.name}: ${o.values.join(', ')}`)
+          })
+        }
+      }
+
+      const baseAttrs = item.variant?.attribute_values && item.variant.attribute_values.length > 0
+        ? item.variant.attribute_values.map((a) => a.value_name).join(' • ')
+        : (item.variant?.name && item.variant.name !== 'Standard' && item.variant.name !== 'Default Variant')
+        ? item.variant.name
+        : undefined
+
+      const fullDescription = [baseAttrs, ...optionsList].filter(Boolean).join(' • ')
+
+      const prodName =
+        item.product?.name ||
+        item.product_name ||
+        item.productName ||
+        item.variant?.name ||
+        item.variant?.sku ||
+        `Item #${index + 1}`
+
+      const unitPriceNum =
+        typeof item.unit_price === 'number'
+          ? item.unit_price
+          : parseFloat(String(item.unit_price || '0')) || 0
+
+      const totalPriceNum =
+        typeof item.line_total === 'number'
+          ? item.line_total
+          : parseFloat(String(item.line_total || '0')) || item.quantity * unitPriceNum
+
+      return {
+        id: item.id || `item-${index}`,
+        name: prodName,
+        sku: fullDescription || item.sku || undefined,
+        quantity: item.quantity,
+        unitPrice: unitPriceNum,
+        totalPrice: totalPriceNum,
+      }
+    })
   }, [items])
 
   const orderDate = useMemo(() => {
@@ -325,37 +388,40 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
     }
   }
 
-  const handleCancelOrder = () => {
+  const handleOpenCancelModal = () => {
     if (isCancelled) {
       showToast('This order is already cancelled.', 'info')
       return
     }
-    Alert.alert(
-      'Cancel / Void Order',
-      `Are you sure you want to cancel Order #${activeOrder.order_number}? This will restore all items back to stock.`,
-      [
-        { text: 'No, Keep Order', style: 'cancel' },
-        {
-          text: 'Yes, Cancel Order',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsUpdating(true)
-              if (onUpdateStatus) {
-                 await onUpdateStatus(activeOrder.id, 'cancelled')
-              }
-              setLocalOrder((prev) => (prev ? { ...prev, status: 'cancelled' } : null))
-              showToast(`Order #${activeOrder.order_number} has been voided and stock restored.`, 'info')
-            } catch (err: unknown) {
-              const error = err as { message?: string }
-              showToast(error?.message || 'Failed to cancel order.', 'error')
-            } finally {
-              setIsUpdating(false)
-            }
-          },
-        },
-      ]
-    )
+    setSelectedCancelReason(CANCELLATION_REASONS[0])
+    setCustomCancelNotes('')
+    setShowCancelModal(true)
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!activeOrder) return
+
+    let finalReason = selectedCancelReason
+    if (selectedCancelReason === 'Other reason') {
+      finalReason = customCancelNotes.trim() ? customCancelNotes.trim() : 'Other reason'
+    } else if (customCancelNotes.trim()) {
+      finalReason = `${selectedCancelReason} - ${customCancelNotes.trim()}`
+    }
+
+    try {
+      setIsUpdating(true)
+      if (onUpdateStatus) {
+        await onUpdateStatus(activeOrder.id, 'cancelled', undefined, finalReason)
+      }
+      setLocalOrder((prev) => (prev ? { ...prev, status: 'cancelled', notes: finalReason } : null))
+      setShowCancelModal(false)
+      showToast(`Order #${activeOrder.order_number} has been cancelled and stock restored.`, 'info')
+    } catch (err: unknown) {
+      const error = err as { message?: string }
+      showToast(error?.message || 'Failed to cancel order.', 'error')
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const handleSaveDetails = async () => {
@@ -433,7 +499,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
               {isPending
                 ? 'Order Pending Payment'
                 : isCancelled
-                ? 'Order Cancelled / Void'
+                ? 'Order Cancelled'
                 : 'Transaction Complete!'}
             </Text>
             <View style={styles.orderNumberPill}>
@@ -491,7 +557,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                       {isPending
                         ? `Pending • $${totalPaid.toFixed(2)}`
                         : isCancelled
-                        ? 'Cancelled / Void'
+                        ? 'Cancelled'
                         : 'Paid in Full'}
                     </Text>
                   </View>
@@ -515,7 +581,7 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                   </View>
                 </View>
 
-                {/* Right: Actions (Edit, Settle, Void) */}
+                {/* Right: Actions (Edit, Settle, Cancel) */}
                 <View style={styles.statusCardRight}>
                   {!isCancelled && (
                     <TouchableOpacity
@@ -548,14 +614,16 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
                     </TouchableOpacity>
                   ) : !isCancelled ? (
                     <TouchableOpacity
-                      style={styles.voidOrderOutlineBtn}
-                      onPress={handleCancelOrder}
+                      style={styles.cancelOrderOutlineBtn}
+                      onPress={handleOpenCancelModal}
                       disabled={isUpdating}
                       activeOpacity={0.7}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel Order"
                     >
                       <Ionicons name="close-circle-outline" size={13} color={tokens.colors.statusError} />
-                      <Text style={styles.voidOrderText}>Void</Text>
+                      <Text style={styles.cancelOrderText}>Cancel</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -860,7 +928,132 @@ export const OrderReceiptModal: React.FC<OrderReceiptModalProps> = ({
           </View>
         </Modal>
 
-        {/* 3. Multi-Station Printer Picker Modal */}
+        {/* 3. Cancel Order Sub-Modal */}
+        <Modal
+          visible={showCancelModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCancelModal(false)}
+        >
+          <View style={styles.subModalOverlay}>
+            <View style={styles.subModalContent}>
+              <View style={styles.subModalHeader}>
+                <View style={styles.subModalTitleRow}>
+                  <View style={[styles.subModalIconBox, { backgroundColor: '#FEE2E2' }]}>
+                    <Ionicons name="alert-circle" size={18} color={tokens.colors.statusError} />
+                  </View>
+                  <View>
+                    <Text style={styles.subModalTitle}>Cancel Order</Text>
+                    <Text style={styles.subModalSub}>Order #{activeOrder.order_number}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowCancelModal(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close-circle" size={24} color={tokens.colors.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.cancelWarningBanner}>
+                  <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginTop: 1 }} />
+                  <Text style={styles.cancelWarningText}>
+                    Cancelling will restore all items back to stock and record an audited ledger reversal.
+                  </Text>
+                </View>
+
+                <Text style={styles.inputLabel}>Reason for Cancellation *</Text>
+                <View style={styles.cancelReasonOptions}>
+                  {CANCELLATION_REASONS.map((reason) => {
+                    const isSelected = selectedCancelReason === reason
+                    return (
+                      <TouchableOpacity
+                        key={reason}
+                        style={[
+                          styles.cancelReasonOption,
+                          isSelected && styles.cancelReasonOptionSelected,
+                        ]}
+                        onPress={() => setSelectedCancelReason(reason)}
+                        activeOpacity={0.7}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                      >
+                        <Ionicons
+                          name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                          size={16}
+                          color={isSelected ? tokens.colors.statusError : tokens.colors.secondary}
+                        />
+                        <Text
+                          style={[
+                            styles.cancelReasonOptionText,
+                            isSelected && styles.cancelReasonOptionTextSelected,
+                          ]}
+                        >
+                          {reason}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    {selectedCancelReason === 'Other reason'
+                      ? 'Specify Reason *'
+                      : 'Additional Notes (Optional)'}
+                  </Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder={
+                      selectedCancelReason === 'Other reason'
+                        ? 'Please enter cancellation reason...'
+                        : 'Add optional explanation or details...'
+                    }
+                    placeholderTextColor={tokens.colors.secondary}
+                    value={customCancelNotes}
+                    onChangeText={setCustomCancelNotes}
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.subModalActions}>
+                <TouchableOpacity
+                  style={styles.subModalCancelBtn}
+                  onPress={() => setShowCancelModal(false)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Keep Order"
+                >
+                  <Text style={styles.subModalCancelText}>Keep Order</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.subModalConfirmBtn, { backgroundColor: tokens.colors.statusError }]}
+                  onPress={handleConfirmCancel}
+                  disabled={isUpdating || (selectedCancelReason === 'Other reason' && !customCancelNotes.trim())}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm Cancel Order"
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle" size={18} color="#FFFFFF" />
+                      <Text style={styles.subModalConfirmText}>Confirm Cancel</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 4. Multi-Station Printer Picker Modal */}
         <PrinterPickerModal
           visible={showPrinterPicker}
           devices={devices}
@@ -1098,6 +1291,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  cancelOrderOutlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: tokens.borderRadius.pill,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  cancelOrderText: {
+    color: tokens.colors.statusError,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   voidOrderOutlineBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1112,6 +1321,52 @@ const styles = StyleSheet.create({
   voidOrderText: {
     color: tokens.colors.statusError,
     fontSize: 11,
+    fontWeight: '700',
+  },
+  cancelWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: tokens.borderRadius.md,
+    padding: 10,
+    marginBottom: tokens.spacing.md,
+  },
+  cancelWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#991B1B',
+    fontWeight: '500',
+  },
+  cancelReasonOptions: {
+    gap: 6,
+    marginBottom: tokens.spacing.md,
+  },
+  cancelReasonOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: tokens.borderRadius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSubtle,
+    backgroundColor: tokens.colors.surfaceContainerLowest,
+  },
+  cancelReasonOptionSelected: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  cancelReasonOptionText: {
+    fontSize: 13,
+    color: tokens.colors.onBackground,
+    fontWeight: '500',
+  },
+  cancelReasonOptionTextSelected: {
+    color: '#991B1B',
     fontWeight: '700',
   },
   receiptScroll: {

@@ -32,6 +32,7 @@ export interface Product {
   id: string
   name: string
   barcode: string | null
+  prompt_variant_on_scan?: boolean
   purchase_price: number | string
   selling_price: number | string
   default_reorder_level: number

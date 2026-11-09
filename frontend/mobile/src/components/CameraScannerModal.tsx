@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   Modal,
   TouchableOpacity,
@@ -82,7 +83,15 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const [isTorchOn, setIsTorchOn] = useState(false)
   const [isReviewOpen, setIsReviewOpen] = useState(false)
   const [isContinuousMode, setIsContinuousMode] = useState(true)
+  const [manualCode, setManualCode] = useState('')
   const isScanLocked = useRef(false)
+
+  const handleManualSubmit = async () => {
+    const trimmed = manualCode.trim()
+    if (!trimmed || isLoading) return
+    setManualCode('')
+    await onScanCode(trimmed)
+  }
 
   // Animated laser line translation
   const laserAnim = useRef(new Animated.Value(0)).current
@@ -337,6 +346,40 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 
         {/* Viewfinder Camera Area */}
         <View style={styles.cameraWrapper}>
+          {/* Floating Manual Barcode / SKU Input Bar (Top position prevents keyboard occlusion) */}
+          <View style={styles.floatingManualBar}>
+            <Ionicons name="keypad" size={17} color={tokens.colors.primaryContainer} style={{ marginLeft: 4 }} />
+            <TextInput
+              style={styles.floatingManualInput}
+              placeholder="Type barcode or SKU..."
+              placeholderTextColor="#64748B"
+              value={manualCode}
+              onChangeText={setManualCode}
+              onSubmitEditing={handleManualSubmit}
+              returnKeyType="search"
+              autoCapitalize="characters"
+            />
+            {Boolean(manualCode.length > 0) && (
+              <TouchableOpacity
+                onPress={() => setManualCode('')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ marginRight: 4 }}
+              >
+                <Ionicons name="close-circle" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.floatingSubmitBtn, !manualCode.trim() && { opacity: 0.5 }]}
+              onPress={handleManualSubmit}
+              disabled={!manualCode.trim() || isLoading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Look up typed barcode"
+            >
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
           {!permission?.granted ? (
             <View style={styles.permissionContainer}>
               <View style={styles.permissionIconCircle}>
@@ -876,7 +919,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(29, 27, 22, 0.7)',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: tokens.spacing.md,
+    paddingTop: Platform.OS === 'ios' ? 70 : 64,
     paddingHorizontal: tokens.spacing.md,
   },
   feedbackBanner: {
@@ -1058,6 +1101,38 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.caption.fontSize,
     marginTop: 4,
     textAlign: 'center',
+  },
+  floatingManualBar: {
+    position: 'absolute',
+    top: 10,
+    left: tokens.spacing.md,
+    right: tokens.spacing.md,
+    zIndex: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: tokens.borderRadius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...tokens.shadows.card,
+    gap: 8,
+  },
+  floatingManualInput: {
+    flex: 1,
+    color: '#0F172A',
+    fontSize: 13.5,
+    fontWeight: '600',
+    paddingVertical: 4,
+  },
+  floatingSubmitBtn: {
+    backgroundColor: tokens.colors.primaryContainer,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomControlBar: {
     backgroundColor: tokens.colors.surfaceContainerLowest,

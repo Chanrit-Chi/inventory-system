@@ -20,7 +20,7 @@ Your user account operates under strict permission boundaries. The table below o
 | **Customer Lookup (`customers:view`)** | **View & Create at POS** | Search profiles, view loyalty tier/spend, and auto-create new members during POS checkout. Creating or editing profiles in the standalone Customers screen requires `customers:manage`. |
 | **Delivery Setup (`delivery:view`)** | **Read Only** | Select delivery couriers and calculate zone pricing during checkout. Managing couriers or rate tables is restricted. |
 | **Shift Sign-Off & Daily Settlement** | **Self-Service Only** | Reconcile and sign off on your own personal sales and earned commissions. Viewing team-wide settlements requires Manager/Admin. |
-| **Order Void / Cancellation** | **Restricted** | The backend strictly restricts order cancellation to Manager/Admin (`orders:cancel`). Standard sellers cannot cancel completed orders. |
+| **Order Cancellation** | **Restricted** | The backend strictly restricts order cancellation to Manager/Admin (`orders:cancel`). Standard sellers cannot cancel completed orders. |
 | **Product Catalog Management** | **Hidden** | The `Products` navigation tab is hidden. Creating, editing, or deleting items requires `products:read` and `products:*`. |
 | **Inventory Adjustments / Stock-In** | **Hidden** | Stock receiving, damage write-offs, and cycle audits require `inventory:adjust` or `inventory:restock`. |
 | **Financial KPIs & Reports** | **Hidden** | Overall store revenue, store-wide profit, daily targets, and accounting analytics require `reports:view`. |
@@ -490,7 +490,7 @@ Past sales, pending orders, and transaction audits are managed through the **Tra
 The transaction feed supports real-time filtering:
 1. **Search Input**: Type the customer name, phone number, order number (`#ORD-...`), or item SKU.
 2. **Date Presets**: Tap the filter chips: `All`, `Today`, `7 Days`, `30 Days`, `This Month`, or select a custom date range.
-3. **Status Filter**: Tap to filter by `Completed` (Paid), `Pending` (Unpaid), or `Cancelled` (Voided).
+3. **Status Filter**: Tap to filter by `Completed` (Paid), `Pending` (Unpaid), or `Cancelled`.
 4. **Payment Method Filter**: Filter by `Cash`, `Bank`, or `ABA KHQR`.
 5. **Channel Filter**: Isolate orders originating from `In-Store POS`, `Telegram`, `Facebook`, etc.
 
@@ -537,15 +537,15 @@ When a customer pays for an order previously marked as `Pending (Pay Later)`:
 
 ---
 
-### 7.5 Order Cancellation / Void Policy & Permissions
+### 7.5 Order Cancellation Policy & Permissions
 
-> **Crucial Policy: Sellers Cannot Void Orders Directly**
+> **Crucial Policy: Sellers Cannot Cancel Orders Directly**
 
-- **The Void Button**: You will notice a **Void** button inside the **Order Receipt Modal**.
+- **The Cancel Button**: You will notice a **Cancel** button inside the **Order Receipt Modal**.
 - **Permission Restriction**: The backend API strictly guards the cancellation endpoint. Only users with `SUPER_ADMIN`, `ADMIN`, `MANAGER`, or an explicit `orders:cancel` permission override are authorized to cancel orders.
-- **What Happens If a Seller Taps Void?**:
-  - Tapping Void displays a confirmation prompt: *"Are you sure you want to cancel Order #...? This will restore all items back to stock."*
-  - If you tap **Yes, Cancel Order**, the server rejects the request with **HTTP 403 Forbidden**.
+- **What Happens If a Seller Taps Cancel?**:
+  - Tapping Cancel displays cancellation reason modal with pre-defined options and custom notes input.
+  - If you tap **Confirm Cancel**, the server rejects the request with **HTTP 403 Forbidden** if seller lack permission.
   - The mobile app displays an error toast:
     > *"Failed to cancel order: Unauthorized to cancel orders. Manager or orders:cancel permission required."*
 - **Required Procedure**: If an order was entered by mistake or a customer cancels:
@@ -559,8 +559,8 @@ When a customer pays for an order previously marked as `Pending (Pay Later)`:
 
 - **No Standalone Refund Screen**: There is no separate "Refund" button or partial item return module in the mobile app.
 - **How Returns/Refunds are Handled**:
-  - Refunds are processed exclusively via order **Cancellation / Void** by a Manager.
-  - When an authorized manager voids the transaction, the database automatically:
+  - Refunds are processed exclusively via order **Cancellation** by a Manager.
+  - When an authorized manager cancels the transaction, the database automatically:
     1. Reverses the customer's recorded lifetime spend and loyalty points.
     2. Generates an automated inventory movement record: `movement_type = 'CANCELLATION_REVERSAL'`.
     3. Returns all item quantities back to available stock.
@@ -776,7 +776,7 @@ Pay close attention to these on-screen indicators during network outages:
 | Alert / Error Message | Root Cause | Correct Resolution |
 | :--- | :--- | :--- |
 | `"Access Restricted: You do not have permission to access this module."` | Tapped a restricted tab (e.g. Products, Expenses, Reports, or Admin). | As a Seller, your access is focused on Sales, Transactions, Quotations, and Customers. Contact your manager if your responsibilities have changed. |
-| `"Failed to cancel order: Unauthorized to cancel orders. Manager or orders:cancel permission required."` | Attempted to void/cancel an order via the receipt modal. | Sellers cannot void completed sales. Note the order number and ask an Admin or Manager to cancel it. |
+| `"Failed to cancel order: Unauthorized to cancel orders. Manager or orders:cancel permission required."` | Attempted to cancel an order via the receipt modal. | Sellers cannot cancel completed sales. Note the order number and ask an Admin or Manager to cancel it. |
 | `"Resolve Stock Warnings to Proceed"` | A cart item exceeds available warehouse or shelf inventory. | Reduce the item quantity in Step 1 of checkout until it is within stock limits. |
 | `"Replace Active Register Cart?"` | Attempting to convert a quotation while items are already in the active register cart. | Tap `Replace Cart & Load` to overwrite the register, or tap `Cancel` to complete the active sale first. |
 | `"Session Expired"` | Account logged into from another phone, or token expired. | Tap OK and sign in again with your email and password. |

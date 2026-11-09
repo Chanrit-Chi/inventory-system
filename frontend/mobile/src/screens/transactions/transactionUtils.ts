@@ -1,7 +1,7 @@
 import type { Order } from '../../types'
 
 export type FilterStatus = 'ALL' | 'COMPLETED' | 'PENDING' | 'CANCELLED'
-export type DateRangeMode = 'all' | 'today' | '7d' | '30d' | 'year' | 'single' | 'custom'
+export type DateRangeMode = 'all' | 'today' | 'yesterday' | '7d' | '30d' | 'year' | 'single' | 'custom'
 export type TransactionSortOption =
   | 'DEFAULT'
   | 'OLDEST'
@@ -19,6 +19,10 @@ export function computeActiveDateBounds(
   const todayStr = new Date().toISOString().split('T')[0]
   if (dateRange === 'today') {
     return { from: todayStr, to: todayStr }
+  }
+  if (dateRange === 'yesterday') {
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+    return { from: yesterdayStr, to: yesterdayStr }
   }
   if (dateRange === '7d') {
     const fromStr = new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0]

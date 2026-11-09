@@ -38,6 +38,7 @@ export interface TransactionFilterBarProps {
   onResetChannel?: () => void
   paymentMethodFilter?: PaymentMethodFilter
   onResetPaymentMethod?: () => void
+  onSelectDateRange?: (mode: DateRangeMode) => void
 }
 
 export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
@@ -59,6 +60,7 @@ export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   onResetChannel,
   paymentMethodFilter = 'ALL',
   onResetPaymentMethod,
+  onSelectDateRange,
 }) => {
   const getSortLabel = (key: TransactionSortOption) => {
     switch (key) {
@@ -139,6 +141,47 @@ export const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Quick Date Filters */}
+        <TouchableOpacity
+          style={[
+            styles.quickFilterBtn,
+            dateRange === 'today' && styles.quickFilterBtnActive,
+          ]}
+          onPress={() => onSelectDateRange?.(dateRange === 'today' ? 'all' : 'today')}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Filter today's orders"
+        >
+          <Text
+            style={[
+              styles.quickFilterBtnText,
+              dateRange === 'today' && styles.quickFilterBtnTextActive,
+            ]}
+          >
+            Today
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.quickFilterBtn,
+            dateRange === 'yesterday' && styles.quickFilterBtnActive,
+          ]}
+          onPress={() => onSelectDateRange?.(dateRange === 'yesterday' ? 'all' : 'yesterday')}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Filter yesterday's orders"
+        >
+          <Text
+            style={[
+              styles.quickFilterBtnText,
+              dateRange === 'yesterday' && styles.quickFilterBtnTextActive,
+            ]}
+          >
+            Yesterday
+          </Text>
+        </TouchableOpacity>
 
         {/* Filter & Sort Trigger Button */}
         <TouchableOpacity
