@@ -14,11 +14,17 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://inventory-backend-api.fly.dev/api/v1"
       }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://inventory-backend-api.fly.dev/api/v1"
+      }
     }
   },
   "submit": {

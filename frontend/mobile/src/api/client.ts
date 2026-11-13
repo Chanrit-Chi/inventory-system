@@ -84,6 +84,8 @@ apiClient.interceptors.response.use(
 
     if (!error.response) {
       // No response at all — DNS failure, refused connection, timeout, etc.
+      const targetUrl = `${error.config?.baseURL || API_BASE}${error.config?.url || ''}`
+      console.warn(`[API Client Network Error] Unable to reach ${targetUrl}:`, error.message)
       errorMessage =
         'Cannot reach the server. Please check your network connection and ensure the backend is running.'
       const networkError = new Error(errorMessage)

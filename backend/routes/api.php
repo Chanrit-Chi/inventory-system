@@ -40,7 +40,15 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// Top-level health check (no auth required)
+// Top-level API status and health check (no auth required)
+Route::get('/', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'KC Shop POS and Inventory Management System API',
+        'version' => 'v1',
+    ]);
+});
+
 Route::get('/health', function () {
     return response()->json([
         'success' => true,
@@ -58,6 +66,13 @@ Route::prefix('v1')->group(function () {
     // ----------------------------------------------------------------
     // Public Endpoints (No Authentication Required)
     // ----------------------------------------------------------------
+    Route::get('/', function () {
+        return response()->json([
+            'success' => true,
+            'message' => 'KC Shop POS & Inventory API v1 is operational',
+            'health_check' => url('/api/v1/health'),
+        ]);
+    });
     Route::get('/health', [HealthController::class, 'check']);
     Route::get('/app/version', [AppVersionController::class, 'check']);
     Route::post('/auth/login', [AuthController::class, 'login']);

@@ -57,6 +57,8 @@ frontend/mobile/dist/
 frontend/mobile/web-build/
 frontend/mobile/ios/
 frontend/mobile/android/
+*.apk
+*.aab
 
 # ─── Test artifacts ─────────────────────────────────────────────
 .pytest_cache/
